@@ -147,7 +147,8 @@ export function calcCotizacion(cot) {
     let monto = 0;
     if      (f.base === '% sobre venta c/IVA') monto = ventaCIVA * val / 100;
     else if (f.base === '% sobre venta s/IVA') monto = ventaSIVA * val / 100;
-    else if (f.base === 'Monto fijo')          monto = val;
+    else if (f.base === 'Monto fijo total')      monto = val;
+    else if (f.base === 'Monto fijo por unidad') monto = val * unidades;
 
     totalFianzas += monto;
 

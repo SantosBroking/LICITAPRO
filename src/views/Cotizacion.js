@@ -8,7 +8,7 @@ import { NumInput } from '../ui/primitives.js';
 const TABS = ['partidas','equipo','extras','corrida','agente'];
 const TAB_LABELS = { partidas:'1 · Partidas', equipo:'2 · Equipo', extras:'3 · Retornos e ISR', corrida:'4 · Corrida financiera', agente:'5 · Agente Claude' };
 const BASES_RETORNO = ['% sobre venta c/IVA','% sobre venta s/IVA','Monto fijo total','Monto fijo por unidad'];
-const BASES_FIANZA  = ['% sobre venta c/IVA','% sobre venta s/IVA','Monto fijo'];
+const BASES_FIANZA  = ['% sobre venta c/IVA','% sobre venta s/IVA','Monto fijo total','Monto fijo por unidad'];
 const IVA = 0.16;
 
 export default function CotizacionTab({ project, onUpdate, activeTab, setActiveTab }) {
