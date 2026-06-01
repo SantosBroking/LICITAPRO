@@ -88,7 +88,7 @@ export default function App() {
   const handleSaveProject = useCallback(async (p, navigate) => {
     setProjects(prev => { const ex=prev.find(x=>x.id===p.id); return ex?prev.map(x=>x.id===p.id?p:x):[p,...prev]; });
     if (navigate) nav('project_detail', p.id);
-    try { await saveProject(p, user?.id); log(user,'guardó','proyecto',p.id,p.name); } catch(e){ console.error(e); }
+    try { const {data:{session}} = await sb.auth.getSession(); await saveProject(p, session?.user?.id || user?.id); log(user,'guardó','proyecto',p.id,p.name); } catch(e){ console.error('saveProject error:',e); }
   }, [user, nav, log]);
 
   const upProject = useCallback((updated) => {
