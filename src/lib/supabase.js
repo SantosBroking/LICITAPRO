@@ -1,107 +1,86 @@
-// supabase.js — Modo LOCAL (localStorage), sin Supabase
-// Guarda todo en el navegador. Sin cuenta, sin servidor.
+// supabase.js — Cliente Supabase real + fallback localStorage
+import { createClient } from '@supabase/supabase-js';
 
-const KEYS = {
-  user:     'lp_user',
-  projects: 'lp_projects',
-  vehicles: 'lp_vehicles',
-  companies:'lp_companies',
-  config:   'lp_config',
-  audit:    'lp_audit',
-};
+const SUPA_URL = 'https://hiofjttxnlfxbrogjske.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhpb2ZqdHR4bmxmeGJyb2dqc2tlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MjEwNDUsImV4cCI6MjA5NTQ5NzA0NX0.mShA6E8gXS45tdVX4r6x66DvGyJUeabOAUXBw112ptE';
 
-const load  = k => { try { return JSON.parse(localStorage.getItem(k)||'null'); } catch{ return null; } };
-const save  = (k,v) => localStorage.setItem(k, JSON.stringify(v));
+export const sb = createClient(SUPA_URL, SUPA_KEY);
 
-// ── Auth simulada ─────────────────────────────────────────────
-const DEFAULT_USER = { id:'local-user', email:'usuario@msms.com', name:'Usuario local' };
-
-let _authCb = null;
-
-export const sb = {
-  auth: {
-    onAuthStateChange: (cb) => {
-      _authCb = cb;
-      // Dispara inmediatamente si hay sesión guardada
-      const u = load(KEYS.user);
-      if (u) setTimeout(() => cb('SIGNED_IN', { user: u }), 50);
-      else    setTimeout(() => cb('SIGNED_OUT', null), 50);
-      return { data: { subscription: { unsubscribe: ()=>{} } } };
-    },
-    getSession: async () => {
-      const u = load(KEYS.user);
-      return { data: { session: u ? { user: u } : null }, error: null };
-    },
-  }
-};
-
+// ── Auth ──────────────────────────────────────────────────────
 export async function signIn(email, password) {
-  // En modo local cualquier email/password funciona
-  const user = { id:'local-user', email, name: email.split('@')[0] };
-  save(KEYS.user, user);
-  if (_authCb) _authCb('SIGNED_IN', { user });
-  return { user };
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return data;
 }
 
 export async function signUp(email, password, name) {
-  const user = { id:'local-user', email, name };
-  save(KEYS.user, user);
-  if (_authCb) _authCb('SIGNED_IN', { user });
-  return { user };
+  const { data, error } = await sb.auth.signUp({ email, password, options: { data: { name } } });
+  if (error) throw error;
+  return data;
 }
 
 export async function signOut() {
-  localStorage.removeItem(KEYS.user);
-  if (_authCb) _authCb('SIGNED_OUT', null);
+  await sb.auth.signOut();
 }
 
-// ── CRUD local ────────────────────────────────────────────────
+// ── Cargar todos los datos ────────────────────────────────────
 export async function dbLoad(userId) {
+  const [proj, veh, comp, cfg, aud] = await Promise.all([
+    sb.from('projects').select('data').eq('user_id', userId),
+    sb.from('vehicles').select('data').eq('user_id', userId),
+    sb.from('companies').select('data').eq('user_id', userId),
+    sb.from('config').select('data').eq('user_id', userId).maybeSingle(),
+    sb.from('audit_log').select('data').eq('user_id', userId).order('created_at', { ascending: false }).limit(500),
+  ]);
   return {
-    projects:  load(KEYS.projects)  || [],
-    vehicles:  load(KEYS.vehicles)  || [],
-    companies: load(KEYS.companies) || [],
-    config:    load(KEYS.config)    || null,
-    audit:     load(KEYS.audit)     || [],
+    projects:  (proj.data  || []).map(r => r.data),
+    vehicles:  (veh.data   || []).map(r => r.data),
+    companies: (comp.data  || []).map(r => r.data),
+    config:    cfg.data?.data || null,
+    audit:     (aud.data   || []).map(r => r.data),
   };
 }
 
+// ── CRUD ──────────────────────────────────────────────────────
 export async function saveProject(project, userId) {
-  const list = load(KEYS.projects) || [];
-  const idx  = list.findIndex(p => p.id === project.id);
-  if (idx >= 0) list[idx] = project; else list.unshift(project);
-  save(KEYS.projects, list);
+  const { error } = await sb.from('projects').upsert({
+    id: project.id, user_id: userId, data: project, updated_at: new Date().toISOString()
+  });
+  if (error) throw error;
 }
 
 export async function deleteProject(id) {
-  const list = (load(KEYS.projects) || []).filter(p => p.id !== id);
-  save(KEYS.projects, list);
+  await sb.from('projects').delete().eq('id', id);
+  await sb.from('vehicles').delete().eq('project_id', id);
 }
 
 export async function saveVehicle(vehicle, userId) {
-  const list = load(KEYS.vehicles) || [];
-  const idx  = list.findIndex(v => v.id === vehicle.id);
-  if (idx >= 0) list[idx] = vehicle; else list.push(vehicle);
-  save(KEYS.vehicles, list);
+  const { error } = await sb.from('vehicles').upsert({
+    id: vehicle.id, user_id: userId, project_id: vehicle.projectId, data: vehicle, updated_at: new Date().toISOString()
+  });
+  if (error) throw error;
 }
 
 export async function deleteVehicle(id) {
-  const list = (load(KEYS.vehicles) || []).filter(v => v.id !== id);
-  save(KEYS.vehicles, list);
+  await sb.from('vehicles').delete().eq('id', id);
 }
 
 export async function saveCompany(company, userId) {
-  const list = load(KEYS.companies) || [];
-  const idx  = list.findIndex(c => c.id === company.id);
-  if (idx >= 0) list[idx] = company; else list.push(company);
-  save(KEYS.companies, list);
+  const { error } = await sb.from('companies').upsert({
+    id: company.id, user_id: userId, data: company, updated_at: new Date().toISOString()
+  });
+  if (error) throw error;
 }
 
 export async function saveConfig(config, userId) {
-  save(KEYS.config, config);
+  const { error } = await sb.from('config').upsert({
+    user_id: userId, data: config, updated_at: new Date().toISOString()
+  });
+  if (error) throw error;
 }
 
 export async function saveAuditLog(entry, userId) {
-  const list = [entry, ...(load(KEYS.audit) || [])].slice(0, 500);
-  save(KEYS.audit, list);
+  await sb.from('audit_log').insert({
+    id: entry.id, user_id: userId, data: entry
+  });
 }

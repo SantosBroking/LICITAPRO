@@ -132,11 +132,11 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
     <tbody>
       <tr>
         <td>1</td>
-        <td><strong>Vehículo base</strong></td>
+        <td><strong>Vehículo base con equipamiento</strong></td>
         <td>${p.tipo||''} ${p.marca||''} ${p.modelo||''} ${p.version||''} ${p.ano||''}</td>
         <td style="text-align:center">${qty}</td>
-        <td style="text-align:right">${fmt((p.costoMSMS||0)/(1+IVA))}</td>
-        <td style="text-align:right">${fmt((p.costoMSMS||0)/(1+IVA)*qty)}</td>
+        <td style="text-align:right">${fmt(pvUnit)}</td>
+        <td style="text-align:right">${fmt(pvUnit * qty)}</td>
       </tr>
       ${eqItems.map((e,i) => `<tr>
         <td>${i+2}</td>
