@@ -46,7 +46,7 @@ export default function App() {
           setVehicles(d.vehicles);
           setCompanies(d.companies);
           setAudit(d.audit);
-          if (d.config) setConfig(d.config);
+          if (d.config) { setConfig(d.config); window._lpConfig = d.config; }
         } catch(e) { console.error('Error cargando datos:', e); }
         setLoading(false);
       } else if (event === 'SIGNED_OUT') {
@@ -114,7 +114,7 @@ export default function App() {
   }, [user]);
 
   const handleSaveConfig = useCallback(async (cfg) => {
-    setConfig(cfg);
+    setConfig(cfg); window._lpConfig = cfg;
     try { await saveConfig(cfg, user?.id); } catch(e){ console.error(e); throw e; }
   }, [user]);
 
