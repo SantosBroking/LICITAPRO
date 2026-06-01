@@ -1,4 +1,3 @@
-import { printCotizacionCliente, printResumenRetornos, printResumenInterno } from '../lib/pdf_export.js';
 // Cotizacion.js — Tab de cotización MSMS (5 sub-tabs, sin htm)
 import { h, useState, useEffect, useMemo, useCallback } from '../lib/core.js';
 import { CATALOG_PRODUCTS } from '../lib/catalog.js';
@@ -97,13 +96,6 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
         h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, k.label),
         h('div', { style:{ fontSize:14, fontWeight:500, color:k.color } }, k.val),
       ))
-    ),
-    // Botones PDF
-    h('div', { style:{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' } },
-      h('div', { style:{ fontSize:11, color:'var(--t2)', alignSelf:'center', marginRight:4 } }, 'Exportar:'),
-      h('button', { onClick:()=>printCotizacionCliente({project,cot,calc,config:window._lpConfig}), style:{ fontSize:11, padding:'5px 12px', border:'.5px solid var(--blue)44', color:'var(--blue)', background:'#3b6cf408' } }, '📄 Cotización cliente'),
-      h('button', { onClick:()=>printResumenRetornos({project,cot,calc}), style:{ fontSize:11, padding:'5px 12px', border:'.5px solid var(--amber)44', color:'var(--amber)', background:'#d9770608' } }, '📋 Resumen retornos'),
-      h('button', { onClick:()=>printResumenInterno({project,cot,calc}), style:{ fontSize:11, padding:'5px 12px', border:'.5px solid var(--t3)44', color:'var(--t2)' } }, '🔒 Resumen interno'),
     ),
     // Sub-tabs
     h('div', { style:{ display:'flex', gap:2, marginBottom:14, borderBottom:'.5px solid var(--b3)', overflowX:'auto', flexWrap:'nowrap' } },

@@ -1,3 +1,5 @@
+import { printCotizacionCliente, printResumenRetornos, printResumenInterno } from '../lib/pdf_export.js';
+import { calcCotizacion } from '../lib/calc.js';
 // Projects.js — Lista, formulario y detalle de proyecto
 import { h, useState, useMemo, useCallback } from '../lib/core.js';
 import { STATUSES, FINAL_STATUS, KANBAN_COLS, TIPOS_PROCEDIMIENTO, DEPENDENCIAS_COMUNES, TIPOS_PRODUCTO } from '../lib/constants.js';
@@ -264,7 +266,15 @@ export function ProjectDetail({ project, vehicles, companies, config, onUpdate, 
           ),
     ),
     // Cotización
-    tab==='cotizacion' && h(CotizacionTab, { project, onUpdate:updProject, activeTab:cotTab, setActiveTab:setCotTab }),
+    tab==='cotizacion' && h('div', null,
+      h('div', { style:{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap', paddingBottom:14, borderBottom:'.5px solid var(--b3)' } },
+        h('div', { style:{ fontSize:11, color:'var(--t2)', alignSelf:'center', marginRight:4 } }, 'Exportar PDF:'),
+        h('button', { onClick:()=>{ const c=project.cotizacion||{}; const cc=calcCotizacion(c); printCotizacionCliente({project,cot:c,calc:cc,config:window._lpConfig}); }, style:{ fontSize:11, padding:'5px 12px', border:'.5px solid var(--blue)44', color:'var(--blue)', background:'#3b6cf408' } }, '📄 Cotización cliente'),
+        h('button', { onClick:()=>{ const c=project.cotizacion||{}; const cc=calcCotizacion(c); printResumenRetornos({project,cot:c,calc:cc}); }, style:{ fontSize:11, padding:'5px 12px', border:'.5px solid var(--amber)44', color:'var(--amber)', background:'#d9770608' } }, '📋 Resumen retornos'),
+        h('button', { onClick:()=>{ const c=project.cotizacion||{}; const cc=calcCotizacion(c); printResumenInterno({project,cot:c,calc:cc}); }, style:{ fontSize:11, padding:'5px 12px', border:'.5px solid var(--t3)44', color:'var(--t2)' } }, '🔒 Resumen interno'),
+      ),
+      h(CotizacionTab, { project, onUpdate:updProject, activeTab:cotTab, setActiveTab:setCotTab }),
+    ),
     // Bases
     tab==='bases' && h(BasesPreparacion, { project, config, onUpdate:updProject, user, logFn }),
     // Vehículos
