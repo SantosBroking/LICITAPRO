@@ -39,6 +39,10 @@ export default function App() {
   useEffect(() => {
     const _t = setTimeout(() => setLoading(false), 2500);
     sb.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'INITIAL_SESSION') {
+        if (session?.user) { setUser(session.user); }
+        setLoading(false); return;
+      }
       if (event === 'SIGNED_IN' && session?.user) {
         setUser(session.user);
         try {
