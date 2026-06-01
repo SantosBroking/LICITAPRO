@@ -1,8 +1,8 @@
 // supabase.js — Cliente Supabase real + fallback localStorage
 import { createClient } from '@supabase/supabase-js';
 
-const SUPA_URL = 'https://hiofjttxnlfxbrogjske.supabase.co';
-const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhpb2ZqdHR4bmxmeGJyb2dqc2tlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MjEwNDUsImV4cCI6MjA5NTQ5NzA0NX0.mShA6E8gXS45tdVX4r6x66DvGyJUeabOAUXBw112ptE';
+const SUPA_URL = 'https://lzogvusabogzitwnlttb.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx6b2d2dXNhYm9neml0d25sdHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAyNjY0NDEsImV4cCI6MjA5NTg0MjQ0MX0.IbX6NCBOOMdl9CAjn82GlOlIpRgolLZf_kLso35UK58';
 
 export const sb = createClient(SUPA_URL, SUPA_KEY);
 
