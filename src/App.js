@@ -35,6 +35,7 @@ export default function App() {
   const _lastProjId = useRef(null);
   const _pending    = useRef(null);
   const _timer      = useRef(null);
+  const _userId     = useRef(null);
 
   useEffect(() => {
     const loadData = async (u) => {
@@ -54,11 +55,13 @@ export default function App() {
       if (event === 'INITIAL_SESSION') {
         if (session?.user) {
           setUser(session.user);
+          _userId.current = session.user.id;
           await loadData(session.user);
         }
         setLoading(false);
       } else if (event === 'SIGNED_IN') {
         setUser(session.user);
+        _userId.current = session.user.id;
         setLoading(true);
         await loadData(session.user);
         setLoading(false);
@@ -108,7 +111,8 @@ export default function App() {
     if (_timer.current) clearTimeout(_timer.current);
     _timer.current = setTimeout(async () => {
       const toSave = _pending.current;
-      if (toSave && user?.id) { try { await saveProject(toSave, user.id); } catch(e){ console.error(e); } }
+      const uid = _userId.current || user?.id;
+      if (toSave && uid) { try { await saveProject(toSave, uid); } catch(e){ console.error(e); } }
     }, 800);
   }, [user]);
 
