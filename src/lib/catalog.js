@@ -55,8 +55,7 @@ export const CATALOG_PRODUCTS = [
   {id:'03-023',cat:'03 Luces / Sirenas',sub:'Iluminación',   nom:'Luces estroboscópicas Torreta',          desc:'Luces estroboscópicas para torreta.',                                 prov:'CENTRA/Code3',vis:true},
   {id:'03-024',cat:'03 Luces / Sirenas',sub:'Iluminación',   nom:'Luces LED Viseras',                      desc:'Luces LED para viseras del parabrisas.',                              prov:'CENTRA/Code3',vis:true},
   {id:'03-025',cat:'03 Luces / Sirenas',sub:'Iluminación',   nom:'Luz LED circular',                       desc:'Luz LED circular de emergencia.',                                     prov:'CENTRA/Code3',vis:true},
-  {id:'03-026',cat:'03 Luces / Sirenas',sub:'Sonido',        nom:'Sirena policial',                        desc:'Sirena electrónica multitono.',                                       prov:'CENTRA/Code3',vis:true},
-  {id:'03-027',cat:'03 Luces / Sirenas',sub:'Sonido',        nom:'Bocina para sirena',                     desc:'Bocina de alta potencia para sirena.',                                prov:'CENTRA/Code3',vis:true},
+  {id:'03-026',cat:'03 Luces / Sirenas',sub:'Sonido',        nom:'Sirena policial con bocina',             desc:'Sirena electrónica multitono con bocina de alta potencia.',            prov:'CENTRA/Code3',vis:true},
   {id:'03-028',cat:'03 Luces / Sirenas',sub:'Control',       nom:'Controlador electrónico de luces y sirena', desc:'Controlador electrónico de luces y sirena.',                       prov:'CENTRA/Code3',vis:true},
   {id:'03-029',cat:'03 Luces / Sirenas',sub:'Control',       nom:'Mando para bocina',                      desc:'Mando de control para bocina.',                                       prov:'CENTRA/Code3',vis:true},
   {id:'03-030',cat:'03 Luces / Sirenas',sub:'Adaptación',    nom:'Adaptación especial luces',              desc:'Adaptación especial de sistema de luces según proyecto.',             prov:'CENTRA/Code3',vis:true},
@@ -65,12 +64,12 @@ export const CATALOG_PRODUCTS = [
   {id:'03-K1',cat:'03 Luces / Sirenas',sub:'Kit Patrulla Full', nom:'Kit Sistema integral Patrulla Full',
    desc:'Incluye: Torreta grande, Luz interior, Módulo LED flexible, Luces laterales, Estroboscópicas, LED Viseras, Sirena, Bocina, Controlador, Mando, Adaptación.',
    prov:'CENTRA/Code3',vis:true,
-   kitItems:['03-018','03-020','03-021','03-022','03-023','03-024','03-026','03-027','03-028','03-029','03-030']},
+   kitItems:['03-018','03-020','03-021','03-022','03-023','03-024','03-026','03-028','03-029','03-030']},
 
   {id:'03-K2',cat:'03 Luces / Sirenas',sub:'Kit Patrulla Leve', nom:'Kit Sistema integral Patrulla Leve',
    desc:'Incluye: Torreta grande, Módulo LED flexible, Sirena, Bocina, Controlador, Mando, Adaptación.',
    prov:'CENTRA/Code3',vis:true,
-   kitItems:['03-018','03-021','03-026','03-027','03-028','03-029','03-030']},
+   kitItems:['03-018','03-021','03-026','03-028','03-029','03-030']},
 
   // ── 04 VIDEO ─────────────────────────────────────────────────
   {id:'04-028',cat:'04 Video',sub:'Sistema',        nom:'Sistema videovigilancia Full',       desc:'Sistema completo de videovigilancia Dahua vehicular con todas las cámaras.',prov:'Dahua',vis:true},

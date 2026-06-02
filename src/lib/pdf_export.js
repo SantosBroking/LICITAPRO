@@ -10,7 +10,7 @@ const IVA = 0.16;
 // ── Estilos base compartidos ──────────────────────────────────
 const BASE_CSS = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #1a1917; background: white; padding: 32px 40px; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #1a1917; background: white; padding: 32px 72px; }
   h1 { font-size: 18px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
   h2 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
   table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
@@ -141,15 +141,17 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
         <td style="text-align:right">${fmt(pvUnit)}</td>
         <td style="text-align:right">${fmt(pvUnit * qty)}</td>
       </tr>
-      ${eqItems.map((e,i) => {
+      ${(() => {
+        let rowNum = 2;
+        return eqItems.map((e,i) => {
         const kitItems = KIT_MAP[e.productoId];
         if (kitItems && kitItems.length > 0) {
-          // Es un kit — solo listar productos sin encabezado de kit
           const comps = kitItems.map(kid => CATALOG_PRODUCTS.find(p => p.id === kid)).filter(Boolean);
           return comps.map((comp, ci) => {
             const img = CATALOG_IMAGES[comp.id];
+            const num = rowNum++;
             return `<tr>
-              <td style="text-align:center;color:#a0998f;font-size:10px">${ci===0?i+2:''}</td>
+              <td style="text-align:center;vertical-align:middle;font-size:11px;color:#6b6862">${num}</td>
               <td style="vertical-align:middle;padding:8px 10px">${img ? `<img src="${img}" style="width:40px;height:40px;object-fit:contain;vertical-align:middle;margin-right:10px;border-radius:3px;" />` : ''}<span style="vertical-align:middle;font-size:12px">${comp.nom}</span></td>
               <td style="vertical-align:middle;font-size:11px;color:#6b6862">${comp.desc||''}</td>
               <td style="text-align:center;vertical-align:middle">${ci===0?(e.cnts&&e.cnts[pi])||0:''}</td>
@@ -157,10 +159,10 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
             </tr>`;
           }).join('');
         } else {
-          // Producto individual
           const img = CATALOG_IMAGES[e.productoId];
+          const num = rowNum++;
           return `<tr>
-            <td style="vertical-align:middle;text-align:center">${i+2}</td>
+            <td style="vertical-align:middle;text-align:center;font-size:11px;color:#6b6862">${num}</td>
             <td style="vertical-align:middle;padding:8px 10px">${img ? `<img src="${img}" style="width:40px;height:40px;object-fit:contain;vertical-align:middle;margin-right:10px;border-radius:3px;" />` : ''}<strong style="vertical-align:middle">${e.nombre}</strong></td>
             <td style="vertical-align:middle;font-size:11px;color:#6b6862">${e.descripcion||''}</td>
             <td style="text-align:center;vertical-align:middle">${(e.cnts&&e.cnts[pi])||0}</td>
@@ -168,7 +170,8 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
             <td style="text-align:right;vertical-align:middle"></td>
           </tr>`;
         }
-      }).join('')}
+      }).join('');
+      })()}
     </tbody>
     <tfoot>
       <tr class="total-row"><td colspan="4"></td><td style="text-align:right">Subtotal:</td><td style="text-align:right">${fmt(subtotal)}</td></tr>
