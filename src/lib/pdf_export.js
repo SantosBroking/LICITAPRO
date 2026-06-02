@@ -2,6 +2,8 @@
 // Tres plantillas: Cotización Cliente, Resumen Retornos, Resumen Interno
 import { fmt, pctS } from './utils.js';
 import { calcCotizacion } from './calc.js';
+import { CATALOG_IMAGES } from './catalog_images.js';
+import { CATALOG_PRODUCTS, KIT_MAP } from './catalog.js';
 
 const IVA = 0.16;
 
@@ -138,14 +140,38 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
         <td style="text-align:right">${fmt(pvUnit)}</td>
         <td style="text-align:right">${fmt(pvUnit * qty)}</td>
       </tr>
-      ${eqItems.map((e,i) => `<tr>
-        <td>${i+2}</td>
-        <td>${e.nombre}</td>
-        <td>${e.descripcion||''}</td>
-        <td style="text-align:center">${(e.cnts&&e.cnts[pi])||0}</td>
-        <td style="text-align:right"></td>
-        <td style="text-align:right"></td>
-      </tr>`).join('')}
+      ${eqItems.map((e,i) => {
+        const kitItems = KIT_MAP[e.productoId];
+        if (kitItems && kitItems.length > 0) {
+          // Es un kit — mostrar encabezado del kit y desglosar componentes
+          const comps = kitItems.map(kid => CATALOG_PRODUCTS.find(p => p.id === kid)).filter(Boolean);
+          return `<tr style="background:#f6f6f4">
+            <td>${i+2}</td>
+            <td colspan="5"><strong>📦 ${e.nombre}</strong> <span style="font-size:10px;color:#6b6862">(kit — incluye ${comps.length} conceptos)</span></td>
+          </tr>
+          ${comps.map(comp => {
+            const img = CATALOG_IMAGES[comp.id];
+            return `<tr>
+              <td style="color:#a0998f;font-size:10px;padding-left:20px">—</td>
+              <td style="padding-left:24px">${img ? `<img src="${img}" style="width:38px;height:38px;object-fit:contain;vertical-align:middle;margin-right:8px;border-radius:3px;" />` : ''}<span style="vertical-align:middle;font-size:12px">${comp.nom}</span></td>
+              <td style="font-size:11px;color:#6b6862">${comp.desc||''}</td>
+              <td style="text-align:center">${(e.cnts&&e.cnts[pi])||0}</td>
+              <td></td><td></td>
+            </tr>`;
+          }).join('')}`;
+        } else {
+          // Producto individual
+          const img = CATALOG_IMAGES[e.productoId];
+          return `<tr>
+            <td>${i+2}</td>
+            <td>${img ? `<img src="${img}" style="width:44px;height:44px;object-fit:contain;vertical-align:middle;margin-right:8px;border-radius:3px;" />` : ''}<strong style="vertical-align:middle">${e.nombre}</strong></td>
+            <td>${e.descripcion||''}</td>
+            <td style="text-align:center">${(e.cnts&&e.cnts[pi])||0}</td>
+            <td style="text-align:right"></td>
+            <td style="text-align:right"></td>
+          </tr>`;
+        }
+      }).join('')}
     </tbody>
     <tfoot>
       <tr class="total-row"><td colspan="4"></td><td style="text-align:right">Subtotal:</td><td style="text-align:right">${fmt(subtotal)}</td></tr>
