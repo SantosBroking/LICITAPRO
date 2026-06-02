@@ -14,8 +14,8 @@ const BASE_CSS = `
   body { font-family: Arial, sans-serif; font-size: 10px; color: #1a1917; background: white; padding: 24px 32px; max-width: 900px; margin: 0 auto; }
   h1 { font-size: 18px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
   h2 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-  td { vertical-align: middle; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; table-layout: fixed; }
+  td { vertical-align: middle; overflow: hidden; }
   col.c-num  { width: 28px; }
   col.c-conc { width: 28%; }
   col.c-desc { width: 36%; }
@@ -132,18 +132,19 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
   <div class="partida-header">PARTIDA ${p.id}: ${p.marca} ${p.modelo} ${p.version||''} &nbsp;•&nbsp; ${qty} unidad(es)</div>
   <table>
     <colgroup>
-      <col class="c-num"/><col class="c-conc"/><col class="c-desc"/>
-      <col class="c-cant"/><col class="c-pu"/><col class="c-sub"/>
+      <col class="c-num"/><col class="c-img"/><col class="c-nom"/>
+      <col class="c-desc"/><col class="c-cant"/><col class="c-pu"/><col class="c-sub"/>
     </colgroup>
     <thead><tr>
-      <th>#</th><th>Concepto</th><th>Descripción</th>
+      <th>#</th><th></th><th>Concepto</th><th>Descripción</th>
       <th style="text-align:center">Cant.</th>
       <th style="text-align:right">P.Unit s/IVA</th>
       <th style="text-align:right">Subtotal</th>
     </tr></thead>
     <tbody>
       <tr>
-        <td>1</td>
+        <td style="text-align:center;color:#6b6862">1</td>
+        <td></td>
         <td><strong>Vehículo base con equipamiento</strong></td>
         <td>${p.tipo||''} ${p.marca||''} ${p.modelo||''} ${p.version||''} ${p.ano||''}</td>
         <td style="text-align:center">${qty}</td>
@@ -160,10 +161,11 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
             const img = CATALOG_IMAGES[comp.id];
             const num = rowNum++;
             return `<tr>
-              <td style="text-align:center;vertical-align:middle;font-size:11px;color:#6b6862;min-width:28px">${num}</td>
-              <td style="vertical-align:middle;padding:8px 6px">${img ? `<img src="${img}" style="width:64px;height:64px;object-fit:contain;vertical-align:middle;margin-right:8px;border-radius:3px;flex-shrink:0;display:inline-block" />` : `<span style="display:inline-block;width:64px;height:64px;margin-right:8px;flex-shrink:0"></span>`}<span style="vertical-align:middle;font-size:12px">${comp.nom}</span></td>
-              <td style="vertical-align:middle;font-size:10px;color:#6b6862;line-height:1.4">${comp.desc||''}</td>
-              <td style="text-align:center;vertical-align:middle">${(e.cnts&&e.cnts[pi])!=null?(e.cnts[pi]||0):1}</td>
+              <td style="text-align:center;color:#6b6862;font-size:10px">${num}</td>
+              <td style="text-align:center;padding:4px">${img ? `<img src="${img}" style="width:60px;height:60px;object-fit:contain;border-radius:3px;" />` : ''}</td>
+              <td style="font-weight:600;font-size:11px">${comp.nom}</td>
+              <td style="font-size:10px;color:#6b6862">${comp.desc||''}</td>
+              <td style="text-align:center">${(e.cnts&&e.cnts[pi])!=null?(e.cnts[pi]||0):1}</td>
               <td></td><td></td>
             </tr>`;
           }).join('');
@@ -171,21 +173,22 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
           const img = CATALOG_IMAGES[e.productoId];
           const num = rowNum++;
           return `<tr>
-            <td style="vertical-align:middle;text-align:center;font-size:11px;color:#6b6862;min-width:28px">${num}</td>
-            <td style="vertical-align:middle;padding:8px 6px">${img ? `<img src="${img}" style="width:64px;height:64px;object-fit:contain;vertical-align:middle;margin-right:8px;border-radius:3px;flex-shrink:0;display:inline-block" />` : `<span style="display:inline-block;width:64px;height:64px;margin-right:8px;flex-shrink:0"></span>`}<strong style="vertical-align:middle">${e.nombre}</strong></td>
-            <td style="vertical-align:middle;font-size:10px;color:#6b6862;line-height:1.4">${e.descripcion||''}</td>
-            <td style="text-align:center;vertical-align:middle">${(e.cnts&&e.cnts[pi])!=null?(e.cnts[pi]||0):1}</td>
-            <td style="text-align:right;vertical-align:middle"></td>
-            <td style="text-align:right;vertical-align:middle"></td>
+            <td style="text-align:center;color:#6b6862;font-size:10px">${num}</td>
+            <td style="text-align:center;padding:4px">${img ? `<img src="${img}" style="width:60px;height:60px;object-fit:contain;border-radius:3px;" />` : ''}</td>
+            <td style="font-weight:600;font-size:11px">${e.nombre}</td>
+            <td style="font-size:10px;color:#6b6862">${e.descripcion||''}</td>
+            <td style="text-align:center">${(e.cnts&&e.cnts[pi])!=null?(e.cnts[pi]||0):1}</td>
+            <td style="text-align:right"></td>
+            <td style="text-align:right"></td>
           </tr>`;
         }
       }).join('');
       })()}
     </tbody>
     <tfoot>
-      <tr class="total-row"><td colspan="4"></td><td style="text-align:right">Subtotal:</td><td style="text-align:right">${fmt(subtotal)}</td></tr>
-      <tr class="total-row"><td colspan="4"></td><td style="text-align:right">IVA (16%):</td><td style="text-align:right">${fmt(subtotal*IVA)}</td></tr>
-      <tr class="total-row"><td colspan="4"></td><td style="text-align:right"><strong>TOTAL c/IVA:</strong></td><td style="text-align:right"><strong style="color:#3b6cf4">${fmt(subtotal*(1+IVA))}</strong></td></tr>
+      <tr class="total-row"><td colspan="5"></td><td style="text-align:right">Subtotal:</td><td style="text-align:right">${fmt(subtotal)}</td></tr>
+      <tr class="total-row"><td colspan="5"></td><td style="text-align:right">IVA (16%):</td><td style="text-align:right">${fmt(subtotal*IVA)}</td></tr>
+      <tr class="total-row"><td colspan="5"></td><td style="text-align:right"><strong>TOTAL c/IVA:</strong></td><td style="text-align:right"><strong style="color:#3b6cf4">${fmt(subtotal*(1+IVA))}</strong></td></tr>
     </tfoot>
   </table>
 </div>
