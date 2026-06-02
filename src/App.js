@@ -171,7 +171,7 @@ export default function App() {
     projects:       h(ProjectsList,  { projects, vehicles, onNav:nav }),
     project_new:    h(ProjectForm,   { companies, config, onSave:handleSaveProject, onCancel:()=>nav('projects') }),
     project_detail: projDetailView,
-    companies:      h(Companies,     { companies, setCompanies, projects, onSave:async c=>{ const ex=companies.find(x=>x.id===c.id); setCompanies(ex?companies.map(x=>x.id===c.id?c:x):[...companies,c]); try{await saveCompany(c,user?.id);}catch(e){console.error(e);} }, user, logFn:log }),
+    companies:      h(Companies,     { companies, setCompanies, projects, config, onSave:async c=>{ const ex=companies.find(x=>x.id===c.id); setCompanies(ex?companies.map(x=>x.id===c.id?c:x):[...companies,c]); try{await saveCompany(c,user?.id);}catch(e){console.error(e);} }, user, logFn:log }),
     catalog:        h(CatalogView),
     reports:        h(Reports,       { projects, vehicles, companies, audit }),
     settings:       h(Settings,      { config, user, onSave:handleSaveConfig }),
