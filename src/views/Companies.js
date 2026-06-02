@@ -1,5 +1,6 @@
 // Companies.js — Empresas licitantes
 import { h, useState, useRef } from '../lib/core.js';
+import { AIAnalyzerButton } from '../ui/AIAnalyzerButton.js';
 import { EMPRESA_BASE_DOCS } from '../lib/constants.js';
 import { extractPdfText, parseActa, parseConstanciaFiscal } from '../lib/pdf.js';
 import { TODAY, uid, dlFile, fmtBytes } from '../lib/utils.js';
@@ -48,6 +49,15 @@ export function EmpresaDocsCard({ company, onUpdate }) {
 
 export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user, logFn }) {
   const [c, sC]       = useState(JSON.parse(JSON.stringify(company)));
+  const handleAIResult = (data) => {
+    if (data.razonSocial) sC(x=>({...x,razonSocial:data.razonSocial}));
+    if (data.nombreComercial) sC(x=>({...x,nombreComercial:data.nombreComercial}));
+    if (data.rfc) sC(x=>({...x,rfc:data.rfc}));
+    if (data.domicilioFiscal) sC(x=>({...x,domicilio:data.domicilioFiscal}));
+    if (data.representanteLegal) sC(x=>({...x,representanteLegal:data.representanteLegal}));
+    if (data.telefono) sC(x=>({...x,telefono:data.telefono}));
+    if (data.correo) sC(x=>({...x,correo:data.correo}));
+  };
   const [parsing, setParsing] = useState(false);
   const [parseMsg, setParseMsg] = useState('');
   const [newSocio, setNewSocio] = useState({ nombre:'', porcentaje:'' });
