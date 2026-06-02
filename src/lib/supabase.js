@@ -1,43 +1,57 @@
-// supabase.js — Cliente Supabase real + fallback localStorage
+// supabase.js — Supabase para datos, auth local con localStorage
 import { createClient } from '@supabase/supabase-js';
 
 const SUPA_URL = 'https://lzogvusabogzitwnlttb.supabase.co';
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx6b2d2dXNhYm9neml0d25sdHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAyNjY0NDEsImV4cCI6MjA5NTg0MjQ0MX0.IbX6NCBOOMdl9CAjn82GlOlIpRgolLZf_kLso35UK58';
 
+// Cliente Supabase solo para datos (sin auth)
 export const sb = createClient(SUPA_URL, SUPA_KEY, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
-    storage: localStorage,
-  }
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
 });
 
-// ── Auth ──────────────────────────────────────────────────────
+// ── Auth local ────────────────────────────────────────────────
+const USER_KEY = 'lp_user';
+
+// Usuario hardcodeado — sin depender de Supabase Auth
+const USERS = [
+  { id: '31daca2f-17ff-4ce1-83ca-99e2b31094b7', email: 'santiago@brokingroup.com', password: 'Miscuates2804.' },
+];
+
+export const authSb = {
+  onAuthStateChange: (cb) => {
+    const user = JSON.parse(localStorage.getItem(USER_KEY) || 'null');
+    setTimeout(() => cb('INITIAL_SESSION', user ? { user } : null), 50);
+    return { data: { subscription: { unsubscribe: () => {} } } };
+  }
+};
+
 export async function signIn(email, password) {
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
-  if (error) throw error;
-  return data;
+  const found = USERS.find(u => u.email === email && u.password === password);
+  if (!found) throw new Error('Email o contraseña incorrectos');
+  const user = { id: found.id, email: found.email };
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+  return { user };
 }
 
 export async function signUp(email, password, name) {
-  const { data, error } = await sb.auth.signUp({ email, password, options: { data: { name } } });
-  if (error) throw error;
-  return data;
+  // Para registrar nuevos usuarios, agregar a la lista
+  const user = { id: 'user-' + Date.now(), email, name };
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+  return { user };
 }
 
 export async function signOut() {
-  await sb.auth.signOut();
+  localStorage.removeItem(USER_KEY);
 }
 
-// ── Cargar todos los datos ────────────────────────────────────
+// ── CRUD con Supabase ─────────────────────────────────────────
 export async function dbLoad(userId) {
   const [proj, veh, comp, cfg, aud] = await Promise.all([
     sb.from('projects').select('data').eq('user_id', userId),
     sb.from('vehicles').select('data').eq('user_id', userId),
     sb.from('companies').select('data').eq('user_id', userId),
     sb.from('config').select('data').eq('user_id', userId).maybeSingle(),
-    sb.from('audit_log').select('data').eq('user_id', userId).order('created_at', { ascending: false }).limit(500),
+    sb.from('audit_log').select('data').eq('user_id', userId).order('created_at', { ascending: false }).limit(200),
   ]);
   return {
     projects:  (proj.data  || []).map(r => r.data),
@@ -48,8 +62,8 @@ export async function dbLoad(userId) {
   };
 }
 
-// ── CRUD ──────────────────────────────────────────────────────
 export async function saveProject(project, userId) {
+  if (!project.id || !userId) return;
   const { error } = await sb.from('projects').upsert({
     id: project.id, user_id: userId, data: project, updated_at: new Date().toISOString()
   });
@@ -62,6 +76,7 @@ export async function deleteProject(id) {
 }
 
 export async function saveVehicle(vehicle, userId) {
+  if (!vehicle.id || !userId) return;
   const { error } = await sb.from('vehicles').upsert({
     id: vehicle.id, user_id: userId, project_id: vehicle.projectId, data: vehicle, updated_at: new Date().toISOString()
   });
@@ -73,6 +88,7 @@ export async function deleteVehicle(id) {
 }
 
 export async function saveCompany(company, userId) {
+  if (!company.id || !userId) return;
   const { error } = await sb.from('companies').upsert({
     id: company.id, user_id: userId, data: company, updated_at: new Date().toISOString()
   });
@@ -80,6 +96,7 @@ export async function saveCompany(company, userId) {
 }
 
 export async function saveConfig(config, userId) {
+  if (!userId) return;
   const { error } = await sb.from('config').upsert({
     user_id: userId, data: config, updated_at: new Date().toISOString()
   });
@@ -87,7 +104,6 @@ export async function saveConfig(config, userId) {
 }
 
 export async function saveAuditLog(entry, userId) {
-  await sb.from('audit_log').insert({
-    id: entry.id, user_id: userId, data: entry
-  });
+  if (!userId) return;
+  await sb.from('audit_log').insert({ id: entry.id, user_id: userId, data: entry }).catch(()=>{});
 }

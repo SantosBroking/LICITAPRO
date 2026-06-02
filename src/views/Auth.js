@@ -2,7 +2,7 @@
 import { h, useState } from '../lib/core.js';
 import { signIn, signUp } from '../lib/supabase.js';
 
-export default function AuthScreen() {
+export default function AuthScreen({ onLogin }) {
   const [mode, setMode]       = useState('login');
   const [email, setEmail]     = useState('');
   const [pwd, setPwd]         = useState('');
@@ -15,13 +15,13 @@ export default function AuthScreen() {
     setLoading(true); setErr('');
     try {
       if (mode === 'login') {
-        await signIn(email, pwd);
+        const { user } = await signIn(email, pwd);
+        if (onLogin) onLogin(user);
       } else {
         if (!name) { setErr('El nombre es obligatorio'); setLoading(false); return; }
         if (pwd.length < 6) { setErr('Contraseña mínimo 6 caracteres'); setLoading(false); return; }
-        await signUp(email, pwd, name);
-        setErr('✅ Cuenta creada. Revisa tu email para confirmar.');
-        setLoading(false); return;
+        const { user } = await signUp(email, pwd, name);
+        if (onLogin) onLogin(user);
       }
     } catch (e) { setErr(e.message || 'Error de autenticación'); }
     setLoading(false);

@@ -1,7 +1,7 @@
 // App.js — Estado global, navegación y CRUD
 import { h, useState, useEffect, useRef, useCallback } from './lib/core.js';
 import { DEFAULT_CONFIG } from './lib/constants.js';
-import { sb, signOut, dbLoad, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveAuditLog } from './lib/supabase.js';
+import { sb, authSb, signOut, dbLoad, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveAuditLog } from './lib/supabase.js';
 import { uid, NOW } from './lib/utils.js';
 
 import AuthScreen  from './views/Auth.js';
@@ -146,7 +146,20 @@ export default function App() {
   if (loading)
     return h('div', { style:{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--t2)', fontSize:13 } }, 'Cargando LicitaPro…');
 
-  if (!user) return h(AuthScreen);
+  const handleLogin = async (u) => {
+    setUser(u);
+    setLoading(true);
+    try {
+      const d = await dbLoad(u.id);
+      setProjects(d.projects || []);
+      setVehicles(d.vehicles || []);
+      setCompanies(d.companies || []);
+      setAudit(d.audit || []);
+      if (d.config) { setConfig(d.config); window._lpConfig = d.config; }
+    } catch(e) { console.error(e); }
+    setLoading(false);
+  };
+  if (!user) return h(AuthScreen, { onLogin: handleLogin });
 
   const currentProject = projects.find(p=>p.id===projId);
   const projDetailView = currentProject
