@@ -17,8 +17,8 @@ const BASE_CSS = `
   table { width: 100%; border-collapse: collapse; margin-bottom: 20px; table-layout: fixed; }
   td { vertical-align: middle; overflow: hidden; }
   col.c-num  { width: 28px; }
-  col.c-conc { width: 28%; }
-  col.c-desc { width: 36%; }
+  col.c-conc { width: 30%; }
+  col.c-desc { width: 30%; }
   col.c-cant { width: 44px; }
   col.c-pu   { width: 80px; }
   col.c-sub  { width: 90px; }
