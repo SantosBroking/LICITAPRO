@@ -14,8 +14,8 @@ const BASE_CSS = `
   body { font-family: Arial, sans-serif; font-size: 10px; color: #1a1917; background: white; padding: 24px 32px; max-width: 900px; margin: 0 auto; }
   h1 { font-size: 18px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
   h2 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; table-layout: fixed; }
-  td { vertical-align: middle; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+  td { vertical-align: middle; }
   col.c-num  { width: 28px; }
   col.c-conc { width: 28%; }
   col.c-desc { width: 36%; }
