@@ -14,8 +14,14 @@ const BASE_CSS = `
   body { font-family: Arial, sans-serif; font-size: 10px; color: #1a1917; background: white; padding: 24px 32px; max-width: 900px; margin: 0 auto; }
   h1 { font-size: 18px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
   h2 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-  td { vertical-align: middle; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; table-layout: fixed; }
+  td { vertical-align: middle; overflow: hidden; }
+  col.c-num  { width: 28px; }
+  col.c-conc { width: 28%; }
+  col.c-desc { width: 36%; }
+  col.c-cant { width: 44px; }
+  col.c-pu   { width: 80px; }
+  col.c-sub  { width: 90px; }
   th { background: #1a1917; color: white; padding: 7px 10px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
   td { padding: 7px 10px; border-bottom: .5px solid #e0ddd8; vertical-align: top; }
   tr:last-child td { border-bottom: none; }
@@ -125,13 +131,15 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
 <div class="section">
   <div class="partida-header">PARTIDA ${p.id}: ${p.marca} ${p.modelo} ${p.version||''} &nbsp;•&nbsp; ${qty} unidad(es)</div>
   <table>
+    <colgroup>
+      <col class="c-num"/><col class="c-conc"/><col class="c-desc"/>
+      <col class="c-cant"/><col class="c-pu"/><col class="c-sub"/>
+    </colgroup>
     <thead><tr>
-      <th style="width:30px">#</th>
-      <th style="width:36%">Concepto</th>
-      <th style="width:36%">Descripción</th>
-      <th style="width:48px;text-align:center">Cant.</th>
-      <th style="width:80px;text-align:right">P.Unit s/IVA</th>
-      <th style="width:90px;text-align:right">Subtotal</th>
+      <th>#</th><th>Concepto</th><th>Descripción</th>
+      <th style="text-align:center">Cant.</th>
+      <th style="text-align:right">P.Unit s/IVA</th>
+      <th style="text-align:right">Subtotal</th>
     </tr></thead>
     <tbody>
       <tr>
@@ -153,7 +161,7 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
             const num = rowNum++;
             return `<tr>
               <td style="text-align:center;vertical-align:middle;font-size:11px;color:#6b6862;min-width:28px">${num}</td>
-              <td style="vertical-align:middle;padding:8px 6px;white-space:nowrap">${img ? `<img src="${img}" style="width:64px;height:64px;object-fit:contain;vertical-align:middle;margin-right:8px;border-radius:3px;flex-shrink:0;display:inline-block" />` : `<span style="display:inline-block;width:64px;height:64px;margin-right:8px;flex-shrink:0"></span>`}<span style="vertical-align:middle;font-size:12px">${comp.nom}</span></td>
+              <td style="vertical-align:middle;padding:8px 6px">${img ? `<img src="${img}" style="width:64px;height:64px;object-fit:contain;vertical-align:middle;margin-right:8px;border-radius:3px;flex-shrink:0;display:inline-block" />` : `<span style="display:inline-block;width:64px;height:64px;margin-right:8px;flex-shrink:0"></span>`}<span style="vertical-align:middle;font-size:12px">${comp.nom}</span></td>
               <td style="vertical-align:middle;font-size:10px;color:#6b6862;line-height:1.4">${comp.desc||''}</td>
               <td style="text-align:center;vertical-align:middle">${(e.cnts&&e.cnts[pi])!=null?(e.cnts[pi]||0):1}</td>
               <td></td><td></td>
@@ -164,7 +172,7 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
           const num = rowNum++;
           return `<tr>
             <td style="vertical-align:middle;text-align:center;font-size:11px;color:#6b6862;min-width:28px">${num}</td>
-            <td style="vertical-align:middle;padding:8px 6px;white-space:nowrap">${img ? `<img src="${img}" style="width:64px;height:64px;object-fit:contain;vertical-align:middle;margin-right:8px;border-radius:3px;flex-shrink:0;display:inline-block" />` : `<span style="display:inline-block;width:64px;height:64px;margin-right:8px;flex-shrink:0"></span>`}<strong style="vertical-align:middle">${e.nombre}</strong></td>
+            <td style="vertical-align:middle;padding:8px 6px">${img ? `<img src="${img}" style="width:64px;height:64px;object-fit:contain;vertical-align:middle;margin-right:8px;border-radius:3px;flex-shrink:0;display:inline-block" />` : `<span style="display:inline-block;width:64px;height:64px;margin-right:8px;flex-shrink:0"></span>`}<strong style="vertical-align:middle">${e.nombre}</strong></td>
             <td style="vertical-align:middle;font-size:10px;color:#6b6862;line-height:1.4">${e.descripcion||''}</td>
             <td style="text-align:center;vertical-align:middle">${(e.cnts&&e.cnts[pi])!=null?(e.cnts[pi]||0):1}</td>
             <td style="text-align:right;vertical-align:middle"></td>
