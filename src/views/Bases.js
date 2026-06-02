@@ -16,11 +16,32 @@ export function ChecklistItem({ item, onChange, onRemove }) {
   );
 }
 
-export function BasesDetalle({ project, onUpdate }) {
+export function BasesDetalle({ project, onUpdate, config }) {
   const prep = project.preparation || {};
   const setP = (k, v) => onUpdate({ ...project, preparation: { ...prep, [k]:v } });
+  const handleAIResult = (data) => {
+    const prep2 = { ...prep };
+    if (data.urlConvocatoria) prep2.urlConvocatoria = data.urlConvocatoria;
+    if (data.numeroLicitacion) prep2.numeroLicitacion = data.numeroLicitacion;
+    if (data.fechaPublicacion) prep2.fechaPublicacion = data.fechaPublicacion;
+    if (data.fechaJuntaAclaraciones) prep2.fechaJuntaAclaraciones = data.fechaJuntaAclaraciones;
+    if (data.fechaPresentacion) prep2.fechaPresentacion = data.fechaPresentacion;
+    if (data.fechaFallo) prep2.fechaFallo = data.fechaFallo;
+    onUpdate({ ...project, preparation: prep2,
+      dependencia: data.dependencia || project.dependencia,
+      name: project.name || data.numeroLicitacion || project.name,
+    });
+  };
+
   return h('div', { className:'card' },
     h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:16 } }, 'Datos de las bases'),
+    h('div', { style:{ marginBottom:16, padding:'12px 14px', background:'var(--bg2)', borderRadius:'var(--r)', display:'flex', alignItems:'center', gap:12 } },
+      h('div', { style:{ flex:1 } },
+        h('div', { style:{ fontSize:12, fontWeight:500, marginBottom:2 } }, '📄 Analizar bases con IA'),
+        h('div', { style:{ fontSize:11, color:'var(--t2)' } }, 'Sube el PDF de bases y IA extraerá fechas, número de licitación y datos clave')
+      ),
+      h(AIAnalyzerButton, { config, tipo:'bases', label:'Subir y analizar', onResult: handleAIResult })
+    ),
     h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 } },
       h(Inp, { label:'URL de la convocatoria', value:prep.urlConvocatoria||'', onChange:v=>setP('urlConvocatoria',v), placeholder:'https://compranet...' }),
       h(Inp, { label:'No. de partidas en las bases', value:prep.numPartidas||'', onChange:v=>setP('numPartidas',v), type:'number' }),

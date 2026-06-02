@@ -101,6 +101,12 @@ export function Settings({ config, user, onSave }) {
           h(Inp, { label:'Cargo', value:(cfg.empresa||{}).cargo||'', onChange:v=>set('empresa',{...(cfg.empresa||{}),cargo:v}) }),
         ),
         h(Inp, { label:'Dirección fiscal', value:(cfg.empresa||{}).direccion||'', onChange:v=>set('empresa',{...(cfg.empresa||{}),direccion:v}) }),
+      h('div', { style:{ marginTop:24, paddingTop:20, borderTop:'1px solid var(--b2)' } },
+        h('div', { style:{ fontSize:13, fontWeight:600, marginBottom:12 } }, '🤖 Inteligencia Artificial'),
+        h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:12 } }, 'API Key de OpenAI para análisis automático de bases de licitación y documentos.'),
+        h(Inp, { label:'OpenAI API Key', value:(cfg.ia||{}).openaiKey||'', type:'password', onChange:v=>setCfg(c=>({...c,ia:{...(c.ia||{}),openaiKey:v}})) }),
+        h('div', { style:{ fontSize:10, color:'var(--t3)', marginTop:4 } }, '🔒 Tu API key se guarda encriptada en tu cuenta. Nunca se comparte.')
+      ),
       ),
       h('div', { className:'card' },
         h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:10 } }, 'Dependencias personalizadas'),
