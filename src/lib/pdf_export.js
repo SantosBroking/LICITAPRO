@@ -151,10 +151,10 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
             const img = CATALOG_IMAGES[comp.id];
             const num = rowNum++;
             return `<tr>
-              <td style="text-align:center;vertical-align:middle;font-size:11px;color:#6b6862">${num}</td>
-              <td style="vertical-align:middle;padding:8px 10px">${img ? `<img src="${img}" style="width:40px;height:40px;object-fit:contain;vertical-align:middle;margin-right:10px;border-radius:3px;" />` : ''}<span style="vertical-align:middle;font-size:12px">${comp.nom}</span></td>
+              <td style="text-align:center;vertical-align:middle;font-size:11px;color:#6b6862;min-width:28px">${num}</td>
+              <td style="vertical-align:middle;padding:12px 10px;min-height:100px">${img ? `<img src="${img}" style="width:80px;height:80px;object-fit:contain;vertical-align:middle;margin-right:10px;border-radius:4px;" />` : `<span style="display:inline-block;width:80px;height:80px;margin-right:10px;flex-shrink:0"></span>`}<span style="vertical-align:middle;font-size:12px">${comp.nom}</span></td>
               <td style="vertical-align:middle;font-size:11px;color:#6b6862">${comp.desc||''}</td>
-              <td style="text-align:center;vertical-align:middle">${ci===0?(e.cnts&&e.cnts[pi])||0:''}</td>
+              <td style="text-align:center;vertical-align:middle">${(e.cnts&&e.cnts[pi])!=null?(e.cnts[pi]||0):1}</td>
               <td></td><td></td>
             </tr>`;
           }).join('');
@@ -162,10 +162,10 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
           const img = CATALOG_IMAGES[e.productoId];
           const num = rowNum++;
           return `<tr>
-            <td style="vertical-align:middle;text-align:center;font-size:11px;color:#6b6862">${num}</td>
-            <td style="vertical-align:middle;padding:8px 10px">${img ? `<img src="${img}" style="width:40px;height:40px;object-fit:contain;vertical-align:middle;margin-right:10px;border-radius:3px;" />` : ''}<strong style="vertical-align:middle">${e.nombre}</strong></td>
+            <td style="vertical-align:middle;text-align:center;font-size:11px;color:#6b6862;min-width:28px">${num}</td>
+            <td style="vertical-align:middle;padding:12px 10px;min-height:100px">${img ? `<img src="${img}" style="width:80px;height:80px;object-fit:contain;vertical-align:middle;margin-right:10px;border-radius:4px;" />` : `<span style="display:inline-block;width:80px;height:80px;margin-right:10px;flex-shrink:0"></span>`}<strong style="vertical-align:middle">${e.nombre}</strong></td>
             <td style="vertical-align:middle;font-size:11px;color:#6b6862">${e.descripcion||''}</td>
-            <td style="text-align:center;vertical-align:middle">${(e.cnts&&e.cnts[pi])||0}</td>
+            <td style="text-align:center;vertical-align:middle">${(e.cnts&&e.cnts[pi])!=null?(e.cnts[pi]||0):1}</td>
             <td style="text-align:right;vertical-align:middle"></td>
             <td style="text-align:right;vertical-align:middle"></td>
           </tr>`;
