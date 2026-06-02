@@ -108,12 +108,7 @@ export default function App() {
     if (_timer.current) clearTimeout(_timer.current);
     _timer.current = setTimeout(async () => {
       const toSave = _pending.current;
-      if (!toSave) return;
-      try {
-        const { data: { session } } = await sb.auth.getSession();
-        const uid = session?.user?.id || user?.id;
-        if (uid) await saveProject(toSave, uid);
-      } catch(e){ console.error('upProject error:', e); }
+      if (toSave && user?.id) { try { await saveProject(toSave, user.id); } catch(e){ console.error(e); } }
     }, 800);
   }, [user]);
 
