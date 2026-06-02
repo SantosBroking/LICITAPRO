@@ -1,4 +1,4 @@
-// App.js — Estado global, navegación y CRUD (localStorage, sin Supabase)
+// App.js — Estado global, navegación y CRUD
 import { h, useState, useEffect, useRef, useCallback } from './lib/core.js';
 import { DEFAULT_CONFIG } from './lib/constants.js';
 import { sb, signOut, dbLoad, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveAuditLog } from './lib/supabase.js';
@@ -37,28 +37,39 @@ export default function App() {
   const _timer      = useRef(null);
 
   useEffect(() => {
-    const _t = setTimeout(() => setLoading(false), 2500);
-    sb.auth.onAuthStateChange(async (event, session) => {
+    const loadData = async (u) => {
+      try {
+        const d = await dbLoad(u.id);
+        setProjects(d.projects || []);
+        setVehicles(d.vehicles || []);
+        setCompanies(d.companies || []);
+        setAudit(d.audit || []);
+        if (d.config) { setConfig(d.config); window._lpConfig = d.config; }
+      } catch(e) { console.error('Error cargando datos:', e); }
+    };
+
+    const { data: { subscription } } = sb.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth event:', event, session?.user?.email);
+      
       if (event === 'INITIAL_SESSION') {
-        if (session?.user) { setUser(session.user); }
-        setLoading(false); return;
-      }
-      if (event === 'SIGNED_IN' && session?.user) {
+        if (session?.user) {
+          setUser(session.user);
+          await loadData(session.user);
+        }
+        setLoading(false);
+      } else if (event === 'SIGNED_IN') {
         setUser(session.user);
-        try {
-          const d = await dbLoad(session.user.id);
-          setProjects(d.projects);
-          setVehicles(d.vehicles);
-          setCompanies(d.companies);
-          setAudit(d.audit);
-          if (d.config) { setConfig(d.config); window._lpConfig = d.config; }
-        } catch(e) { console.error('Error cargando datos:', e); }
+        setLoading(true);
+        await loadData(session.user);
         setLoading(false);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
+        setProjects([]); setVehicles([]); setCompanies([]); setAudit([]);
         setLoading(false);
       }
     });
+
+    return () => subscription?.unsubscribe();
   }, []);
 
   const log = useCallback((u, action, entity, entityId, details='') => {
@@ -88,7 +99,7 @@ export default function App() {
   const handleSaveProject = useCallback(async (p, navigate) => {
     setProjects(prev => { const ex=prev.find(x=>x.id===p.id); return ex?prev.map(x=>x.id===p.id?p:x):[p,...prev]; });
     if (navigate) nav('project_detail', p.id);
-    try { const {data:{session}} = await sb.auth.getSession(); await saveProject(p, session?.user?.id || user?.id); log(user,'guardó','proyecto',p.id,p.name); } catch(e){ console.error('saveProject error:',e); }
+    try { await saveProject(p, user?.id); log(user,'guardó','proyecto',p.id,p.name); } catch(e){ console.error(e); }
   }, [user, nav, log]);
 
   const upProject = useCallback((updated) => {
@@ -97,7 +108,12 @@ export default function App() {
     if (_timer.current) clearTimeout(_timer.current);
     _timer.current = setTimeout(async () => {
       const toSave = _pending.current;
-      if (toSave) { try { await saveProject(toSave, user?.id); } catch(e){ console.error(e); } }
+      if (!toSave) return;
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        const uid = session?.user?.id || user?.id;
+        if (uid) await saveProject(toSave, uid);
+      } catch(e){ console.error('upProject error:', e); }
     }, 800);
   }, [user]);
 
