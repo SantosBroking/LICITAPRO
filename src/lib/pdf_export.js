@@ -10,7 +10,8 @@ const IVA = 0.16;
 // ── Estilos base compartidos ──────────────────────────────────
 const BASE_CSS = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #1a1917; background: white; padding: 32px 72px; }
+  @page { size: A4 portrait; margin: 20mm 18mm; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #1a1917; background: white; padding: 32px 40px; max-width: 800px; margin: 0 auto; }
   h1 { font-size: 18px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
   h2 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
   table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
