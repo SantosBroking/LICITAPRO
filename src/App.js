@@ -32,9 +32,10 @@ export default function App() {
   const [view,      setView]      = useState('dashboard');
   const [projId,    setProjId]    = useState(null);
   const [projTab,   setProjTab]   = useState('info');
-  const _lastProjId = useRef(null);
-  const _pending    = useRef(null);
-  const _timer      = useRef(null);
+  const _lastProjId    = useRef(null);
+  const _pending       = useRef(null);
+  const _timer         = useRef(null);
+  const _intentionalSignOut = useRef(false);
   const _userId     = useRef(null);
 
   useEffect(() => {
@@ -66,9 +67,13 @@ export default function App() {
         await loadData(session.user);
         setLoading(false);
       } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setProjects([]); setVehicles([]); setCompanies([]); setAudit([]);
-        setLoading(false);
+        if (_intentionalSignOut.current) {
+          _intentionalSignOut.current = false;
+          setUser(null);
+          setProjects([]); setVehicles([]); setCompanies([]); setAudit([]);
+          setLoading(false);
+        }
+        // Si no fue intencional, ignorar (refresco de token, cambio de pestaña)
       }
     });
 
@@ -176,7 +181,7 @@ export default function App() {
       ),
       h('div', { style:{ padding:'12px 16px', borderTop:'.5px solid var(--b3)' } },
         h('div', { style:{ fontSize:11, color:'var(--t3)', marginBottom:8, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, user.email),
-        h('button', { onClick:signOut, style:{ fontSize:12, padding:'6px 12px', width:'100%', color:'var(--t2)' } }, 'Cerrar sesión'),
+        h('button', { onClick:()=>{ _intentionalSignOut.current=true; signOut(); }, style:{ fontSize:12, padding:'6px 12px', width:'100%', color:'var(--t2)' } }, 'Cerrar sesión'),
       ),
     ),
     h('main', { style:{ flex:1, marginLeft:200, padding:28, maxWidth:'calc(100vw - 200px)', overflow:'hidden' } }, content),
