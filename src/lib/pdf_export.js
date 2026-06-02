@@ -11,7 +11,7 @@ const IVA = 0.16;
 const BASE_CSS = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
   @page { size: A4 portrait; margin: 20mm 18mm; }
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #1a1917; background: white; padding: 32px 40px; max-width: 800px; margin: 0 auto; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #1a1917; background: white; padding: 24px 32px; max-width: 900px; margin: 0 auto; }
   h1 { font-size: 18px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
   h2 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
   table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
@@ -126,12 +126,12 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
   <div class="partida-header">PARTIDA ${p.id}: ${p.marca} ${p.modelo} ${p.version||''} &nbsp;•&nbsp; ${qty} unidad(es)</div>
   <table>
     <thead><tr>
-      <th style="width:30px">#</th>
-      <th>Concepto</th>
-      <th>Descripción</th>
-      <th style="width:70px;text-align:center">Cantidad</th>
-      <th style="width:120px;text-align:right">Precio unit. s/IVA</th>
-      <th style="width:130px;text-align:right">Subtotal s/IVA</th>
+      <th style="width:36px">#</th>
+      <th style="width:32%">Concepto</th>
+      <th style="width:40%">Descripción</th>
+      <th style="width:56px;text-align:center">Cant.</th>
+      <th style="width:90px;text-align:right">P.Unit s/IVA</th>
+      <th style="width:100px;text-align:right">Subtotal</th>
     </tr></thead>
     <tbody>
       <tr>
@@ -153,8 +153,8 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
             const num = rowNum++;
             return `<tr>
               <td style="text-align:center;vertical-align:middle;font-size:11px;color:#6b6862;min-width:28px">${num}</td>
-              <td style="vertical-align:middle;padding:12px 10px;min-height:100px">${img ? `<img src="${img}" style="width:80px;height:80px;object-fit:contain;vertical-align:middle;margin-right:10px;border-radius:4px;" />` : `<span style="display:inline-block;width:80px;height:80px;margin-right:10px;flex-shrink:0"></span>`}<span style="vertical-align:middle;font-size:12px">${comp.nom}</span></td>
-              <td style="vertical-align:middle;font-size:11px;color:#6b6862">${comp.desc||''}</td>
+              <td style="vertical-align:middle;padding:8px 10px">${img ? `<img src="${img}" style="width:80px;height:80px;object-fit:contain;vertical-align:middle;margin-right:10px;border-radius:4px;flex-shrink:0" />` : `<span style="display:inline-block;width:80px;height:80px;margin-right:10px;flex-shrink:0"></span>`}<span style="vertical-align:middle;font-size:12px">${comp.nom}</span></td>
+              <td style="vertical-align:middle;font-size:10px;color:#6b6862;line-height:1.4">${comp.desc||''}</td>
               <td style="text-align:center;vertical-align:middle">${(e.cnts&&e.cnts[pi])!=null?(e.cnts[pi]||0):1}</td>
               <td></td><td></td>
             </tr>`;
@@ -164,8 +164,8 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
           const num = rowNum++;
           return `<tr>
             <td style="vertical-align:middle;text-align:center;font-size:11px;color:#6b6862;min-width:28px">${num}</td>
-            <td style="vertical-align:middle;padding:12px 10px;min-height:100px">${img ? `<img src="${img}" style="width:80px;height:80px;object-fit:contain;vertical-align:middle;margin-right:10px;border-radius:4px;" />` : `<span style="display:inline-block;width:80px;height:80px;margin-right:10px;flex-shrink:0"></span>`}<strong style="vertical-align:middle">${e.nombre}</strong></td>
-            <td style="vertical-align:middle;font-size:11px;color:#6b6862">${e.descripcion||''}</td>
+            <td style="vertical-align:middle;padding:8px 10px">${img ? `<img src="${img}" style="width:80px;height:80px;object-fit:contain;vertical-align:middle;margin-right:10px;border-radius:4px;flex-shrink:0" />` : `<span style="display:inline-block;width:80px;height:80px;margin-right:10px;flex-shrink:0"></span>`}<strong style="vertical-align:middle">${e.nombre}</strong></td>
+            <td style="vertical-align:middle;font-size:10px;color:#6b6862;line-height:1.4">${e.descripcion||''}</td>
             <td style="text-align:center;vertical-align:middle">${(e.cnts&&e.cnts[pi])!=null?(e.cnts[pi]||0):1}</td>
             <td style="text-align:right;vertical-align:middle"></td>
             <td style="text-align:right;vertical-align:middle"></td>
