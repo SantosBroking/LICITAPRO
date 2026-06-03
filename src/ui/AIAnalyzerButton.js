@@ -6,7 +6,7 @@ export function AIAnalyzerButton({ config, tipo, onResult, label }) {
   const [status, setStatus] = useState('idle');
   const [error, setError]   = useState('');
 
-  const apiKey = config?.ia?.openaiKey;
+  const apiKey = config?.ia?.openaiKey || window._lpConfig?.ia?.openaiKey;
 
   const handleClick = () => {
     if (status === 'loading') return;
