@@ -2,7 +2,7 @@
 // Soporta PDFs nativamente, incluyendo actas con múltiples reformas
 
 const CLAUDE_API = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-haiku-4-5';
+const MODEL = 'claude-sonnet-4-6';
 
 const PROMPTS = {
   bases: `Eres experto en licitaciones públicas mexicanas. Analiza este documento y extrae ÚNICAMENTE el siguiente JSON sin texto adicional, sin markdown, sin backticks:
