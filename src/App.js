@@ -37,6 +37,8 @@ export default function App() {
   const _timer         = useRef(null);
   const _intentionalSignOut = useRef(false);
   const _userId     = useRef(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const MOBILE_NAV = NAV_ITEMS.slice(0, 5);
 
   useEffect(() => {
     const loadData = async (u) => {
@@ -177,9 +179,6 @@ export default function App() {
     settings:       h(Settings,      { config, user, onSave:handleSaveConfig }),
     audit:          h(AuditLogView,  { audit }),
   })[view] || h(Dashboard, { projects, vehicles, companies, onNav:nav });
-
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const MOBILE_NAV = NAV_ITEMS.slice(0, 5);
 
   return h('div', { style:{ display:'flex', minHeight:'100vh', background:'var(--bg3)' } },
 
