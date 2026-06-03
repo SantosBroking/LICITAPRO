@@ -47,7 +47,7 @@ export function EmpresaDocsCard({ company, onUpdate }) {
   );
 }
 
-export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user, logFn }) {
+export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user, logFn, config }) {
   const [c, sC]       = useState(JSON.parse(JSON.stringify(company)));
   const handleAIResult = (data) => {
     if (data.razonSocial) sC(x=>({...x,razonSocial:data.razonSocial}));
