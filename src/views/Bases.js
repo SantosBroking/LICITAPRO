@@ -1,5 +1,6 @@
 // Bases.js — Checklist y datos de las bases
 import { h, useState } from '../lib/core.js';
+import { AIAnalyzerButton } from '../ui/AIAnalyzerButton.js';
 import { TODAY, uid } from '../lib/utils.js';
 import { Inp, EmptyState } from '../ui/primitives.js';
 
