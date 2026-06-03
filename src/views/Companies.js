@@ -1,5 +1,6 @@
 // Companies.js — Empresas licitantes
 import { h, useState, useRef } from '../lib/core.js';
+import { AIAnalyzerButton } from '../ui/AIAnalyzerButton.js';
 import { EMPRESA_BASE_DOCS } from '../lib/constants.js';
 import { extractPdfText, parseActa, parseConstanciaFiscal } from '../lib/pdf.js';
 import { TODAY, uid, dlFile, fmtBytes } from '../lib/utils.js';
