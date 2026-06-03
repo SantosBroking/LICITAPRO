@@ -1,0 +1,9 @@
+{
+  "name": "LicitaPro · MSMS CORP",
+  "short_name": "LicitaPro",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#18181b",
+  "icons": [{"src": "/icon-192.png","sizes": "192x192","type": "image/png"}]
+}
