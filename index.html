@@ -5,6 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>LicitaPro · MSMS CORP</title>
 
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#18181b" />
+
+  <!-- Apple PWA -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="LicitaPro" />
+  <link rel="apple-touch-icon" href="/icon-192.png" />
+
   <script type="importmap">
   {
     "imports": {
@@ -397,6 +407,15 @@
     @media (max-width: 480px) {
       .grid-5 { grid-template-columns: 1fr !important; }
       .grid-4 { grid-template-columns: 1fr !important; }
+    }
+
+    /* Ocultar scrollbar de tabs en mobile */
+    @media (max-width: 768px) {
+      .tab-scroll::-webkit-scrollbar { display: none; }
+      .metric { padding: 12px 14px; }
+      .card { padding: 14px 16px; border-radius: var(--r); }
+      button.tab { padding: 8px 10px; font-size: 12px; }
+      .page-title { font-size: 17px; }
     }
   </style>
 </head>

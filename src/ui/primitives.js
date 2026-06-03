@@ -18,7 +18,7 @@ export function AlertChip({ level, text }) {
 export function Metric({ label, value, sub, sc, icon }) {
   return h('div', { className:'metric' },
     h('div', { style:{ fontSize:11, color:'var(--t3)', marginBottom:6, display:'flex', alignItems:'center', gap:5, fontWeight:500, letterSpacing:'.3px', textTransform:'uppercase' } }, icon && h('span', null, icon), label),
-    h('div', { style:{ fontSize:22, fontWeight:600, color:'var(--t1)', letterSpacing:'-0.5px', lineHeight:1.2 } }, value),
+    h('div', { style:{ fontSize:18, fontWeight:600, color:'var(--t1)', letterSpacing:'-0.3px', lineHeight:1.25, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, value),
     sub && h('div', { style:{ fontSize:11, color:sc||'var(--t2)', marginTop:5, fontWeight:400 } }, sub),
   );
 }

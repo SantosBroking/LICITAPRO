@@ -194,7 +194,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onUpdate, 
     // Header
     h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16, flexWrap:'wrap', gap:12 } },
       h('div', null,
-        h('div', { style:{ fontSize:20, fontWeight:500, marginBottom:4 } }, project.name),
+        h('div', { style:{ fontSize:20, fontWeight:600, marginBottom:4, lineHeight:1.3, letterSpacing:'-0.3px' } }, project.name),
         h('div', { style:{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' } },
           h(Badge, { statusId:project.status }),
           project.dependencia && h('span', { style:{ fontSize:12, color:'var(--t2)' } }, project.dependencia),
@@ -208,7 +208,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onUpdate, 
       ),
     ),
     // KPIs
-    h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:12, marginBottom:20 } },
+    h('div', { className:'grid-5', style:{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:12, marginBottom:20 } },
       h(Metric, { label:'Monto estimado', value:fmt(project.montoEstimado) }),
       h(Metric, { label:'Probabilidad', value:project.probability+'%' }),
       h(Metric, { label:'Empresa', value:project.company||'—' }),
@@ -216,11 +216,11 @@ export function ProjectDetail({ project, vehicles, companies, config, onUpdate, 
       h(Metric, { label:'Responsable', value:project.responsable||'—' }),
     ),
     // Tabs
-    h('div', { style:{ display:'flex', gap:2, marginBottom:20, borderBottom:'.5px solid var(--b3)', overflowX:'auto', flexWrap:'nowrap' } },
+    h('div', { style:{ display:'flex', gap:0, marginBottom:20, borderBottom:'1px solid var(--b1)', overflowX:'auto', flexWrap:'nowrap', WebkitOverflowScrolling:'touch', scrollbarWidth:'none', msOverflowStyle:'none' } },
       PROJ_TABS.map(t=>h('button',{key:t.id,className:'tab'+(tab===t.id?' active':''),onClick:()=>setTab(t.id),style:{flexShrink:0,whiteSpace:'nowrap'}},t.l))
     ),
     // Info
-    tab==='info' && h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 } },
+    tab==='info' && h('div', { className:'grid-2', style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 } },
       h('div', { className:'card' },
         h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:14 } }, 'Datos del proyecto'),
         [['Tipo procedimiento',project.tipoProcedimiento],['Tipo producto',project.productType],['Empresa',project.company],['Responsable',project.responsable]].map(([l,v],i)=>
@@ -234,11 +234,11 @@ export function ProjectDetail({ project, vehicles, companies, config, onUpdate, 
         h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:14 } }, 'Fechas clave'),
         [['Publicación',project.fechaPublicacion],['Junta aclaraciones',project.fechaAclaraciones],['Presentación propuesta',project.fechaPropuesta],['Fallo',project.fechaFallo],['Firma de contrato',project.fechaContrato]].map(([l,d],i)=>{
           const lv=alertLevel(d), days=daysUntil(d);
-          return h('div', { key:i, style:{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'9px 0', borderBottom:'.5px solid var(--b3)', fontSize:13 } },
-            h('span', { style:{ color:'var(--t2)' } }, l),
-            h('span', { style:{ display:'flex', alignItems:'center', gap:6 } },
-              d ? h('span', { style:{ color:lv==='r'?'var(--red)':lv==='y'?'var(--amber)':'var(--t1)' } }, d) : h('span', { style:{ color:'var(--t3)' } }, '—'),
-              lv && h(AlertChip, { level:lv, text:days<0?'Vencido':days===0?'HOY':'En '+days+'d' }),
+          return h('div', { key:i, style:{ display:'flex', flexDirection:'column', padding:'9px 0', borderBottom:'.5px solid var(--b3)', fontSize:13, gap:3 } },
+            h('span', { style:{ color:'var(--t2)', fontSize:11 } }, l),
+            h('span', { style:{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' } },
+              d ? h('span', { style:{ color:lv==='r'?'var(--red)':lv==='y'?'var(--amber)':'var(--t1)', fontWeight:500 } }, d) : h('span', { style:{ color:'var(--t3)' } }, '—'),
+              lv && h('span', { style:{ fontSize:10, padding:'2px 7px', borderRadius:10, fontWeight:600, background:lv==='r'?'var(--red-bg)':'var(--amber-bg)', color:lv==='r'?'#7f1d1d':'#78350f' } }, days<0?'Vencido':days===0?'HOY':'En '+days+'d'),
             ),
           );
         })
