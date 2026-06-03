@@ -88,10 +88,7 @@ export async function analyzeDocument(file, tipo, apiKey) {
     const err = await response.json().catch(() => ({}));
     const msg = err.error?.message || `Error ${response.status}`;
     if (response.status === 401) throw new Error('API key inválida. Ve a Configuración → Inteligencia Artificial y verifica tu key de Anthropic (console.anthropic.com).');
-    if (response.status === 429) {
-      await new Promise(r => setTimeout(r, 6000));
-      return await callClaude(contentBlock, prompt, apiKey);
-    }
+    if (response.status === 429) throw new Error('Demasiadas solicitudes. Espera un momento e intenta de nuevo.');
     if (response.status === 413) throw new Error('El archivo es demasiado grande. Intenta con un PDF de menos páginas.');
     throw new Error('Error de Claude API: ' + msg);
   }
