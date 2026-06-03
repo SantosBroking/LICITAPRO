@@ -52,7 +52,7 @@ export default function App() {
       } catch(e) { console.error('Error cargando datos:', e); }
     };
 
-    const { data: { subscription } } = sb.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = authSb.onAuthStateChange(async (event, session) => {
       console.log('Auth event:', event, session?.user?.email);
       
       if (event === 'INITIAL_SESSION') {
