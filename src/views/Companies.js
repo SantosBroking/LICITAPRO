@@ -1,6 +1,5 @@
 // Companies.js — Empresas licitantes
 import { h, useState, useRef } from '../lib/core.js';
-import { AIAnalyzerButton } from '../ui/AIAnalyzerButton.js';
 import { EMPRESA_BASE_DOCS } from '../lib/constants.js';
 import { extractPdfText, parseActa, parseConstanciaFiscal } from '../lib/pdf.js';
 import { TODAY, uid, dlFile, fmtBytes } from '../lib/utils.js';
@@ -47,17 +46,8 @@ export function EmpresaDocsCard({ company, onUpdate }) {
   );
 }
 
-export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user, logFn, config }) {
+export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user, logFn }) {
   const [c, sC]       = useState(JSON.parse(JSON.stringify(company)));
-  const handleAIResult = (data) => {
-    if (data.razonSocial) sC(x=>({...x,razonSocial:data.razonSocial}));
-    if (data.nombreComercial) sC(x=>({...x,nombreComercial:data.nombreComercial}));
-    if (data.rfc) sC(x=>({...x,rfc:data.rfc}));
-    if (data.domicilioFiscal) sC(x=>({...x,domicilio:data.domicilioFiscal}));
-    if (data.representanteLegal) sC(x=>({...x,representanteLegal:data.representanteLegal}));
-    if (data.telefono) sC(x=>({...x,telefono:data.telefono}));
-    if (data.correo) sC(x=>({...x,correo:data.correo}));
-  };
   const [parsing, setParsing] = useState(false);
   const [parseMsg, setParseMsg] = useState('');
   const [newSocio, setNewSocio] = useState({ nombre:'', porcentaje:'' });
@@ -139,12 +129,12 @@ export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user,
     ),
     parseMsg && h('pre', { style:{ fontSize:12, background:'var(--bg2)', padding:12, borderRadius:'var(--r)', whiteSpace:'pre-wrap', lineHeight:1.6, marginBottom:16 } }, parseMsg),
     h('div', { style:{ marginBottom:16, padding:'12px 14px', background:'var(--bg2)', borderRadius:'var(--r)', display:'flex', alignItems:'center', gap:12, border:'.5px solid var(--b3)' } },
-      h('span', { style:{ fontSize:20 } }, String.fromCodePoint(0x1F916)),
+      h('span', { style:{ fontSize:20 } }, '🤖'),
       h('div', { style:{ flex:1 } },
         h('div', { style:{ fontSize:12, fontWeight:600 } }, 'Analizar documento con IA'),
-        h('div', { style:{ fontSize:11, color:'var(--t2)' } }, 'Sube el acta constitutiva o CSF y GPT-4 llenara los campos automaticamente')
+        h('div', { style:{ fontSize:11, color:'var(--t2)' } }, 'Sube el acta constitutiva o CSF y GPT-4 llenará los campos automáticamente')
       ),
-      h(AIAnalyzerButton, { config, tipo:'empresa', label:'Subir y analizar', onResult:handleAIResult })
+      h(AIAnalyzerButton, { config, tipo:'empresa', label:'Subir y analizar', onResult: handleAIResult })
     ),
     h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:16 } },
       h('div', { className:'card' },
@@ -196,7 +186,7 @@ export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user,
   );
 }
 
-export default function Companies({ companies, setCompanies, projects, user, logFn }) {
+export default function Companies({ companies, setCompanies, projects, onSave, user, logFn, config }) {
   const [sel, setSel]             = useState(null);
   const [deleteState, setDeleteState] = useState(null);
   const requestDelete = c => setDeleteState({ company:c, relatedProjects:projects.filter(p=>p.company===c.name) });
@@ -208,7 +198,7 @@ export default function Companies({ companies, setCompanies, projects, user, log
       : companies.find(c=>c.id===sel);
     if (!co) { setSel(null); return null; }
     return h('div', null,
-      h(CompanyProfile, { company:co, onSave:c=>{ const ex=companies.find(x=>x.id===c.id); setCompanies(ex?companies.map(x=>x.id===c.id?c:x):[...companies,c]); }, onBack:()=>setSel(null), onRequestDelete:sel==='new'?null:()=>requestDelete(co), user, logFn }),
+      h(CompanyProfile, { company:co, config, onSave:c=>{ const ex=companies.find(x=>x.id===c.id); setCompanies(ex?companies.map(x=>x.id===c.id?c:x):[...companies,c]); }, onBack:()=>setSel(null), onRequestDelete:sel==='new'?null:()=>requestDelete(co), user, logFn }),
       deleteState && renderDeleteModal(deleteState,setDeleteState,confirmDelete),
     );
   }

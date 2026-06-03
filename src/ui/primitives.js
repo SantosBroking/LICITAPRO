@@ -17,15 +17,15 @@ export function AlertChip({ level, text }) {
 
 export function Metric({ label, value, sub, sc, icon }) {
   return h('div', { className:'metric' },
-    h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:4, display:'flex', alignItems:'center', gap:6 } }, icon && h('span', null, icon), label),
-    h('div', { style:{ fontSize:20, fontWeight:500 } }, value),
-    sub && h('div', { style:{ fontSize:11, color:sc||'var(--t2)', marginTop:4 } }, sub),
+    h('div', { style:{ fontSize:11, color:'var(--t3)', marginBottom:6, display:'flex', alignItems:'center', gap:5, fontWeight:500, letterSpacing:'.3px', textTransform:'uppercase' } }, icon && h('span', null, icon), label),
+    h('div', { style:{ fontSize:22, fontWeight:600, color:'var(--t1)', letterSpacing:'-0.5px', lineHeight:1.2 } }, value),
+    sub && h('div', { style:{ fontSize:11, color:sc||'var(--t2)', marginTop:5, fontWeight:400 } }, sub),
   );
 }
 
 export function Inp({ label, value, onChange, type, placeholder, options, textarea, hint }) {
   return h('div', { style:{ marginBottom:14 } },
-    label && h('label', { style:{ display:'block', fontSize:12, color:'var(--t2)', marginBottom:4 } }, label),
+    label && h('label', { style:{ display:'block', fontSize:12, color:'var(--t2)', marginBottom:5, fontWeight:500 } }, label),
     options
       ? h('select', { value:value||'', onChange:e=>onChange(e.target.value) },
           h('option', { value:'' }, '— Seleccionar —'),

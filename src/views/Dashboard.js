@@ -27,16 +27,16 @@ export default function Dashboard({ projects, vehicles, companies, onNav }) {
 
   if (projects.length === 0)
     return h('div', null,
-      h('div', { style:{ fontSize:20, fontWeight:500, marginBottom:20 } }, 'Panel de control'),
+      h('div', { className:'page-title', style:{ marginBottom:20 } }, 'Panel de control'),
       h(EmptyState, { icon:'◻', title:'Aún no tienes proyectos', description:'Empieza registrando tu primer proyecto de licitación.', actionLabel:'+ Crear primer proyecto', onAction:()=>onNav('project_new') }),
     );
 
   return h('div', null,
     h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 } },
-      h('div', { style:{ fontSize:20, fontWeight:500 } }, 'Panel de control'),
+      h('div', { className:'page-title' }, 'Panel de control'),
       h('button', { className:'bp', onClick:()=>onNav('project_new') }, '+ Nuevo proyecto'),
     ),
-    h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:12, marginBottom:20 } },
+    h('div', { className:'grid-5', style:{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:12, marginBottom:20 } },
       h(Metric, { label:'Pipeline activo', value:fmt(pipeline), sub:ac.length+' proyectos' }),
       h(Metric, { label:'Ganado / contratado', value:fmt(wonTotal), sub:won.length+' proyectos', sc:'var(--green)' }),
       h(Metric, { label:'Total vehículos', value:fmtNum(totalVeh), sub:vehUnfact+' sin facturar', sc:vehUnfact>0?'var(--amber)':'var(--green)' }),
@@ -61,7 +61,7 @@ export default function Dashboard({ projects, vehicles, companies, onNav }) {
         h('table', { style:{ fontSize:13 } },
           h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b3)' } },
             ['PROYECTO','DEPENDENCIA','EMPRESA','MONTO','ESTADO','FALLO'].map(hd =>
-              h('td', { key:hd, style:{ padding:'8px 6px', color:'var(--t2)', fontSize:11 } }, hd)
+              h('th', { key:hd, style:{ padding:'10px 8px', color:'var(--t3)', fontSize:11, fontWeight:600, letterSpacing:'.4px', textAlign:'left', borderBottom:'1px solid var(--b1)' } }, hd)
             )
           )),
           h('tbody', null, projects.map(p => {

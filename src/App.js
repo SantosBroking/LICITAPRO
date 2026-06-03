@@ -171,32 +171,82 @@ export default function App() {
     projects:       h(ProjectsList,  { projects, vehicles, onNav:nav }),
     project_new:    h(ProjectForm,   { companies, config, onSave:handleSaveProject, onCancel:()=>nav('projects') }),
     project_detail: projDetailView,
-    companies:      h(Companies,     { companies, setCompanies, projects, config, onSave:async c=>{ const ex=companies.find(x=>x.id===c.id); setCompanies(ex?companies.map(x=>x.id===c.id?c:x):[...companies,c]); try{await saveCompany(c,user?.id);}catch(e){console.error(e);} }, user, logFn:log }),
+    companies:      h(Companies,     { companies, setCompanies, projects, onSave:async c=>{ const ex=companies.find(x=>x.id===c.id); setCompanies(ex?companies.map(x=>x.id===c.id?c:x):[...companies,c]); try{await saveCompany(c,user?.id);}catch(e){console.error(e);} }, user, logFn:log }),
     catalog:        h(CatalogView),
     reports:        h(Reports,       { projects, vehicles, companies, audit }),
     settings:       h(Settings,      { config, user, onSave:handleSaveConfig }),
     audit:          h(AuditLogView,  { audit }),
   })[view] || h(Dashboard, { projects, vehicles, companies, onNav:nav });
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const MOBILE_NAV = NAV_ITEMS.slice(0, 5);
+
   return h('div', { style:{ display:'flex', minHeight:'100vh', background:'var(--bg3)' } },
-    h('aside', { style:{ width:200, background:'var(--bg1)', borderRight:'.5px solid var(--b3)', display:'flex', flexDirection:'column', position:'fixed', top:0, bottom:0, left:0, zIndex:100 } },
-      h('div', { style:{ padding:'20px 16px 14px' } },
-        h('div', { style:{ fontSize:10, letterSpacing:2, color:'var(--t2)', textTransform:'uppercase', marginBottom:2 } }, 'MSMS CORP'),
-        h('div', { style:{ fontSize:16, fontWeight:500 } }, 'LicitaPro'),
+
+    // Sidebar desktop
+    h('aside', { className:'sidebar' },
+      h('div', { className:'sidebar-logo' },
+        h('div', { className:'sidebar-brand' }, 'MSMS CORP'),
+        h('div', { className:'sidebar-name' }, 'LicitaPro'),
       ),
-      h('nav', { style:{ flex:1, padding:'0 8px', overflowY:'auto' } },
+      h('nav', { style:{ flex:1, padding:'10px 8px', overflowY:'auto' } },
         NAV_ITEMS.map(item => {
           const active = view===item.id || (item.id==='projects' && view.startsWith('project'));
-          return h('button', { key:item.id, onClick:()=>nav(item.id), style:{ display:'flex', alignItems:'center', gap:10, width:'100%', padding:'9px 12px', background:active?'var(--bg2)':'transparent', color:active?'var(--t1)':'var(--t2)', fontWeight:active?500:400, borderRadius:'var(--r)', marginBottom:2, fontSize:13, border:'none', cursor:'pointer', textAlign:'left' } },
-            h('span', { style:{ opacity:.7 } }, item.icon), item.label,
+          return h('button', { key:item.id, onClick:()=>nav(item.id), className:'nav-item' + (active?' active':'') },
+            h('span', { className:'nav-icon' }, item.icon),
+            item.label,
           );
         })
       ),
-      h('div', { style:{ padding:'12px 16px', borderTop:'.5px solid var(--b3)' } },
-        h('div', { style:{ fontSize:11, color:'var(--t3)', marginBottom:8, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, user.email),
-        h('button', { onClick:()=>{ _intentionalSignOut.current=true; signOut(); }, style:{ fontSize:12, padding:'6px 12px', width:'100%', color:'var(--t2)' } }, 'Cerrar sesión'),
+      h('div', { className:'sidebar-footer' },
+        h('div', { className:'sidebar-email' }, user.email),
+        h('button', { onClick:()=>{ _intentionalSignOut.current=true; signOut(); }, style:{ fontSize:12, padding:'6px 12px', width:'100%', color:'var(--t2)', textAlign:'left' } }, 'Cerrar sesión'),
       ),
     ),
-    h('main', { style:{ flex:1, marginLeft:200, padding:28, maxWidth:'calc(100vw - 200px)', overflow:'hidden' } }, content),
+
+    // Header móvil
+    h('div', { className:'mobile-header' },
+      h('button', { onClick:()=>setMobileMenuOpen(true), style:{ border:'none', background:'transparent', fontSize:22, cursor:'pointer', padding:'4px 6px' } }, '☰'),
+      h('div', { className:'mobile-header-title' }, 'LicitaPro'),
+      h('button', { className:'bp', onClick:()=>nav('project_new'), style:{ fontSize:12, padding:'6px 12px' } }, '+ Nuevo'),
+    ),
+
+    // Drawer móvil
+    mobileMenuOpen && h('div', { className:'mobile-drawer open' },
+      h('div', { className:'mobile-drawer-overlay', onClick:()=>setMobileMenuOpen(false) }),
+      h('div', { className:'mobile-drawer-panel' },
+        h('div', { style:{ marginBottom:20 } },
+          h('div', { className:'sidebar-brand' }, 'MSMS CORP'),
+          h('div', { className:'sidebar-name' }, 'LicitaPro'),
+        ),
+        NAV_ITEMS.map(item => {
+          const active = view===item.id || (item.id==='projects' && view.startsWith('project'));
+          return h('button', { key:item.id, onClick:()=>{ nav(item.id); setMobileMenuOpen(false); }, className:'nav-item' + (active?' active':''), style:{ marginBottom:2 } },
+            h('span', { className:'nav-icon' }, item.icon),
+            item.label,
+          );
+        }),
+        h('div', { style:{ marginTop:20, paddingTop:16, borderTop:'1px solid var(--b1)' } },
+          h('div', { style:{ fontSize:11, color:'var(--t3)', marginBottom:8 } }, user.email),
+          h('button', { onClick:()=>{ _intentionalSignOut.current=true; signOut(); }, style:{ fontSize:12, padding:'6px 12px', width:'100%', color:'var(--t2)', textAlign:'left' } }, 'Cerrar sesión'),
+        ),
+      ),
+    ),
+
+    // Nav inferior móvil
+    h('div', { className:'mobile-nav' },
+      h('div', { className:'mobile-nav-inner' },
+        MOBILE_NAV.map(item => {
+          const active = view===item.id || (item.id==='projects' && view.startsWith('project'));
+          return h('button', { key:item.id, onClick:()=>nav(item.id), className:'mobile-nav-btn' + (active?' active':'') },
+            h('span', { className:'nav-dot' }, item.icon),
+            item.label,
+          );
+        })
+      ),
+    ),
+
+    // Contenido principal
+    h('main', { className:'main-content' }, content),
   );
 }

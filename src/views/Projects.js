@@ -28,7 +28,7 @@ export function ProjectsList({ projects, vehicles, onNav }) {
 
   if(projects.length===0) return h('div', null,
     h('div', { style:{ display:'flex', justifyContent:'space-between', marginBottom:20 } },
-      h('div', { style:{ fontSize:20, fontWeight:500 } }, 'Proyectos'),
+      h('div', { className:'page-title' }, 'Proyectos'),
       h('button', { className:'bp', onClick:()=>onNav('project_new') }, '+ Nuevo proyecto'),
     ),
     h(EmptyState, { icon:'◈', title:'Sin proyectos', description:'Crea tu primer proyecto de licitación.', actionLabel:'+ Crear primer proyecto', onAction:()=>onNav('project_new') }),
@@ -36,7 +36,7 @@ export function ProjectsList({ projects, vehicles, onNav }) {
 
   return h('div', null,
     h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 } },
-      h('div', { style:{ fontSize:20, fontWeight:500 } }, 'Proyectos (',projects.length,')'),
+      h('div', { className:'page-title' }, 'Proyectos (',projects.length,')'),
       h('button', { className:'bp', onClick:()=>onNav('project_new') }, '+ Nuevo proyecto'),
     ),
     h('div', { style:{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' } },
@@ -57,7 +57,7 @@ export function ProjectsList({ projects, vehicles, onNav }) {
       h('div', { style:{ overflowX:'auto' } },
         h('table', { style:{ fontSize:13 } },
           h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b3)' } },
-            ['PROYECTO','DEPENDENCIA','EMPRESA','MONTO','ESTADO','FALLO',''].map(hd=>h('td',{key:hd,style:{padding:'8px 6px',color:'var(--t2)',fontSize:11}},hd))
+            ['PROYECTO','DEPENDENCIA','EMPRESA','MONTO','ESTADO','FALLO',''].map(hd=>h('th',{key:hd,style:{padding:'10px 8px',color:'var(--t3)',fontSize:11,fontWeight:600,letterSpacing:'.4px',textAlign:'left',borderBottom:'1px solid var(--b1)'}},hd))
           )),
           h('tbody', null, visible.map(p => {
             const alF=alertLevel(p.fechaFallo);
@@ -103,13 +103,13 @@ export function ProjectForm({ project, companies, config, onSave, onCancel }) {
   const doSave = async () => { if(!p.name.trim()){alert('El nombre del proyecto es obligatorio');return;} await onSave(p,true); };
   return h('div', null,
     h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 } },
-      h('div', { style:{ fontSize:20, fontWeight:500 } }, isE?'Editar proyecto':'Nuevo proyecto'),
+      h('div', { className:'page-title' }, isE?'Editar proyecto':'Nuevo proyecto'),
       h('div', { style:{ display:'flex', gap:8 } },
         h('button', { onClick:onCancel }, 'Cancelar'),
         h('button', { className:'bp', onClick:doSave }, 'Guardar proyecto'),
       ),
     ),
-    h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 } },
+    h('div', { className:'grid-2', style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 } },
       h('div', { className:'card' },
         h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:14 } }, 'Datos principales'),
         h(Inp, { label:'Nombre del proyecto *', value:p.name, onChange:v=>set('name',v), placeholder:'Equipamiento patrullas SSP' }),

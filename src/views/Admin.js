@@ -30,8 +30,8 @@ export function Reports({ projects, vehicles, companies, audit }) {
   const won=projects.filter(p=>['ganada','contrato','entrega','facturado','cobrado'].includes(p.status));
   const lost=projects.filter(p=>p.status==='perdida');
   return h('div', null,
-    h('div', { style:{ fontSize:20, fontWeight:500, marginBottom:16 } }, 'Reportes y exportación'),
-    h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:20 } },
+    h('div', { className:'page-title', style:{ marginBottom:16 } }, 'Reportes y exportación'),
+    h('div', { className:'grid-4', style:{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:20 } },
       h(Metric, { label:'Proyectos totales', value:projects.length }),
       h(Metric, { label:'Pipeline activo', value:fmt(ac.reduce((s,p)=>s+(p.montoEstimado||0),0)), sub:ac.length+' proyectos' }),
       h(Metric, { label:'Ganado', value:fmt(won.reduce((s,p)=>s+(p.montoEstimado||0),0)), sub:won.length+' proyectos', sc:'var(--green)' }),
@@ -39,7 +39,7 @@ export function Reports({ projects, vehicles, companies, audit }) {
     ),
     h('div', { className:'card', style:{ marginBottom:16 } },
       h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:14 } }, 'Filtros del reporte'),
-      h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 } },
+      h('div', { className:'grid-3', style:{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 } },
         h(Inp, { label:'Estado', value:status, onChange:v=>setStatus(v), options:['all',...STATUSES.map(s=>s.id)] }),
         h(Inp, { label:'Desde', value:dateFrom, onChange:v=>setDateFrom(v), type:'date' }),
         h(Inp, { label:'Hasta', value:dateTo, onChange:v=>setDateTo(v), type:'date' }),
@@ -103,9 +103,9 @@ export function Settings({ config, user, onSave }) {
         h(Inp, { label:'Dirección fiscal', value:(cfg.empresa||{}).direccion||'', onChange:v=>set('empresa',{...(cfg.empresa||{}),direccion:v}) }),
       h('div', { style:{ marginTop:24, paddingTop:20, borderTop:'1px solid var(--b2)' } },
         h('div', { style:{ fontSize:13, fontWeight:600, marginBottom:12 } }, '🤖 Inteligencia Artificial'),
-        h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:12 } }, 'API Key de OpenAI para análisis automático de bases de licitación y documentos.'),
-        h(Inp, { label:'OpenAI API Key', value:(cfg.ia||{}).openaiKey||'', type:'password', onChange:v=>setCfg(c=>({...c,ia:{...(c.ia||{}),openaiKey:v}})) }),
-        h('div', { style:{ fontSize:10, color:'var(--t3)', marginTop:4 } }, '🔒 Tu API key se guarda encriptada en tu cuenta. Nunca se comparte.')
+        h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:12 } }, 'API Key de Anthropic (Claude) para análisis automático de bases de licitación y documentos. Obtén tu key en console.anthropic.com'),
+        h(Inp, { label:'Anthropic API Key', value:(cfg.ia||{}).openaiKey||'', type:'password', onChange:v=>setCfg(c=>({...c,ia:{...(c.ia||{}),openaiKey:v}})) }),
+        h('div', { style:{ fontSize:10, color:'var(--t3)', marginTop:4 } }, '🔒 Tu API key se guarda en tu cuenta. Obtén créditos en console.anthropic.com/settings/billing')
       ),
       ),
       h('div', { className:'card' },
