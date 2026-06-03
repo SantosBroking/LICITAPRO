@@ -22,7 +22,7 @@ const NAV_ITEMS = [
 ];
 
 export default function App() {
-  const [user,      setUser]      = useState(null);
+  const [user,      setUser]      = useState({ id: "31daca2f-17ff-4ce1-83ca-99e2b31094b7", email: "santiago@brokingroup.com" });
   const [loading,   setLoading]   = useState(true);
   const [projects,  setProjects]  = useState([]);
   const [vehicles,  setVehicles]  = useState([]);
