@@ -39,6 +39,7 @@ export default function App() {
   const _userId     = useRef(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const MOBILE_NAV = NAV_ITEMS.slice(0, 5);
+  const getUID = () => user?.id || JSON.parse(localStorage.getItem("lp_user")||"null")?.id || "31daca2f-17ff-4ce1-83ca-99e2b31094b7";
 
   useEffect(() => {
     const loadData = async (u) => {
@@ -118,7 +119,7 @@ export default function App() {
     if (_timer.current) clearTimeout(_timer.current);
     _timer.current = setTimeout(async () => {
       const toSave = _pending.current;
-      const uid = _userId.current || user?.id;
+      const uid = _userId.current || user?.id || JSON.parse(localStorage.getItem("lp_user")||"null")?.id || "31daca2f-17ff-4ce1-83ca-99e2b31094b7";
       if (toSave && uid) { try { await saveProject(toSave, uid); } catch(e){ console.error(e); } }
     }, 800);
   }, [user]);
@@ -173,7 +174,7 @@ export default function App() {
     projects:       h(ProjectsList,  { projects, vehicles, onNav:nav }),
     project_new:    h(ProjectForm,   { companies, config, onSave:handleSaveProject, onCancel:()=>nav('projects') }),
     project_detail: projDetailView,
-    companies:      h(Companies,     { companies, setCompanies, projects, onSave:async c=>{ const ex=companies.find(x=>x.id===c.id); setCompanies(ex?companies.map(x=>x.id===c.id?c:x):[...companies,c]); try{await saveCompany(c,user?.id||"31daca2f-17ff-4ce1-83ca-99e2b31094b7");}catch(e){console.error(e);} }, user, logFn:log }),
+    companies:      h(Companies,     { companies, setCompanies, projects, onSave:async c=>{ const ex=companies.find(x=>x.id===c.id); setCompanies(ex?companies.map(x=>x.id===c.id?c:x):[...companies,c]); try{await saveCompany(c,getUID());}catch(e){console.error(e);} }, user, logFn:log }),
     catalog:        h(CatalogView),
     reports:        h(Reports,       { projects, vehicles, companies, audit }),
     settings:       h(Settings,      { config, user, onSave:handleSaveConfig }),
