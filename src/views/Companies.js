@@ -48,6 +48,14 @@ export function EmpresaDocsCard({ company, onUpdate }) {
 }
 
 export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user, logFn, config }) {
+  const handleAIResult = (data) => {
+    if (data.razonSocial) sC(x=>({...x,name:data.razonSocial}));
+    if (data.rfc) sC(x=>({...x,rfc:data.rfc}));
+    if (data.domicilioFiscal) sC(x=>({...x,domicilio:data.domicilioFiscal}));
+    if (data.representanteLegal) sC(x=>({...x,representanteLegal:data.representanteLegal}));
+    if (data.telefono) sC(x=>({...x,telefono:data.telefono}));
+    if (data.correo) sC(x=>({...x,correo:data.correo}));
+  };
   const [c, sC]       = useState(JSON.parse(JSON.stringify(company)));
   const [parsing, setParsing] = useState(false);
   const [parseMsg, setParseMsg] = useState('');
