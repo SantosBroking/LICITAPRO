@@ -134,7 +134,7 @@ export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user,
         h('div', { style:{ fontSize:12, fontWeight:600 } }, 'Analizar documento con IA'),
         h('div', { style:{ fontSize:11, color:'var(--t2)' } }, 'Sube el acta constitutiva o CSF y GPT-4 llenará los campos automáticamente')
       ),
-      h(AIAnalyzerButton, { config, tipo:'empresa', label:'Subir y analizar', onResult: handleAIResult })
+      h(AIAnalyzerButton, { config, tipo:'empresa', label:'Subir acta / CSF', onResult: handleAIResult, multiple: true })
     ),
     h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:16 } },
       h('div', { className:'card' },
