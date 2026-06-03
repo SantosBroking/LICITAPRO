@@ -19,8 +19,10 @@ const USERS = [
 
 export const authSb = {
   onAuthStateChange: (cb) => {
-    const user = JSON.parse(localStorage.getItem(USER_KEY) || 'null');
-    setTimeout(() => cb('INITIAL_SESSION', user ? { user } : null), 50);
+    // Auto-login durante desarrollo
+    const AUTO_USER = { id: '31daca2f-17ff-4ce1-83ca-99e2b31094b7', email: 'santiago@brokingroup.com' };
+    localStorage.setItem(USER_KEY, JSON.stringify(AUTO_USER));
+    setTimeout(() => cb('INITIAL_SESSION', { user: AUTO_USER }), 50);
     return { data: { subscription: { unsubscribe: () => {} } } };
   }
 };
