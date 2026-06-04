@@ -143,6 +143,9 @@ export default function App() {
 
   const handleDeleteProject = useCallback(async (id) => {
     const p = projects.find(x=>x.id===id);
+    // CANCELAR cualquier guardado pendiente para este proyecto antes de borrarlo
+    if (_timer.current) { clearTimeout(_timer.current); _timer.current = null; }
+    if (_pending.current?.id === id) { _pending.current = null; }
     setProjects(prev=>prev.filter(x=>x.id!==id));
     setVehicles(prev=>prev.filter(v=>v.projectId!==id));
     try {
@@ -150,7 +153,6 @@ export default function App() {
       log(user,'eliminó','proyecto',id,p?.name||'');
     } catch(e) {
       console.error('Error al eliminar proyecto:', e);
-      // Recargar los proyectos desde Supabase para mostrar el estado real
       try {
         const d = await dbLoad(getUID());
         setProjects(d.projects || []);
