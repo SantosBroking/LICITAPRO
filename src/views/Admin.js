@@ -78,7 +78,7 @@ export function Settings({ config, user, onSave }) {
         h('button', { className:'bp', onClick:doSave, disabled:saving }, saving?'Guardando…':'Guardar cambios'),
       ),
     ),
-    h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 } },
+    h('div', { className:'mob-1col', style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 } },
       h('div', { className:'card' },
         h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:14 } }, 'Organización'),
         h(Inp, { label:'Nombre del grupo', value:cfg.groupName||'', onChange:v=>set('groupName',v) }),

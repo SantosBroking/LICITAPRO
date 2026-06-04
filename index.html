@@ -303,7 +303,9 @@
       margin-left: var(--sidebar-w);
       padding: 28px 28px;
       max-width: calc(100vw - var(--sidebar-w));
-      overflow: hidden;
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
     }
 
     /* ── Badge ─────────────────────────────────────────────── */
@@ -430,6 +432,11 @@
       /* Alertas en columna */
       .alert-row { flex-direction: column !important; align-items: flex-start !important; gap: 4px !important; }
       .alert-badge { align-self: flex-start !important; }
+
+      /* Grids inline sin clase — forzar 1 columna en mobile */
+      .mob-1col  { grid-template-columns: 1fr !important; }
+      .mob-2col  { grid-template-columns: repeat(2, 1fr) !important; }
+      .show-mobile { display: flex !important; flex-direction: column; }
 
       /* Botones un poco más altos para tocar mejor */
       button { padding: 9px 14px; }

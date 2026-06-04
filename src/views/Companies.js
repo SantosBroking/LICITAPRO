@@ -166,14 +166,14 @@ export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user,
       ),
     ),
     parseMsg && h('pre', { style:{ fontSize:12, background:'var(--bg2)', padding:12, borderRadius:'var(--r)', whiteSpace:'pre-wrap', lineHeight:1.6, marginBottom:16 } }, parseMsg),
-    h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:16 } },
+    h('div', { className:'mob-1col', style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:16 } },
       h('div', { className:'card' },
         h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:14 } }, 'Datos generales'),
         h(Inp, { label:'Razón social', value:c.name||'', onChange:v=>set('name',v) }),
         h(Inp, { label:'RFC', value:c.rfc||'', onChange:v=>set('rfc',v) }),
         h(Inp, { label:'Régimen fiscal', value:c.regimen||'', onChange:v=>set('regimen',v) }),
         h(Inp, { label:'Domicilio fiscal', value:c.address||'', onChange:v=>set('address',v), textarea:true }),
-        h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 } },
+        h('div', { className:'mob-1col', style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 } },
           h(Inp, { label:'CP', value:c.cp||'', onChange:v=>set('cp',v) }),
           h(Inp, { label:'Estado', value:c.estado||'', onChange:v=>set('estado',v) }),
         ),
@@ -254,7 +254,7 @@ export default function Companies({ companies, setCompanies, projects, onSave, u
     ),
     companies.length===0
       ? h(EmptyState, { icon:'◈', title:'No tienes empresas registradas', description:'Sube el acta constitutiva para llenar los datos automáticamente.', actionLabel:'+ Crear primera empresa', onAction:()=>setSel('new') })
-      : h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(380px,1fr))', gap:16 } },
+      : h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(min(320px,100%),1fr))', gap:16 } },
           companies.map(c => {
             const related=projects.filter(p=>p.company===c.name);
             return h('div', { key:c.id, className:'card', style:{ cursor:'pointer', position:'relative' }, onClick:()=>setSel(c.id) },

@@ -57,7 +57,9 @@ export default function Dashboard({ projects, vehicles, companies, onNav }) {
     ),
     h('div', { className:'card' },
       h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:14 } }, 'Proyectos'),
-      h('div', { style:{ overflowX:'auto' } },
+
+      /* Tabla para desktop */
+      h('div', { className:'hide-mobile', style:{ overflowX:'auto' } },
         h('table', { style:{ fontSize:13 } },
           h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b3)' } },
             ['PROYECTO','DEPENDENCIA','EMPRESA','MONTO','ESTADO','FALLO'].map(hd =>
@@ -76,7 +78,25 @@ export default function Dashboard({ projects, vehicles, companies, onNav }) {
             );
           }))
         )
-      )
+      ),
+
+      /* Tarjetas para mobile */
+      h('div', { className:'show-mobile', style:{ display:'none' } },
+        projects.map(p => {
+          const alF = alertLevel(p.fechaFallo);
+          return h('div', { key:p.id, onClick:()=>onNav('project_detail',p.id),
+            style:{ padding:'12px 0', borderBottom:'.5px solid var(--b3)', cursor:'pointer' } },
+            h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8, marginBottom:4 } },
+              h('div', { style:{ fontWeight:500, fontSize:13, flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, p.name),
+              h(Badge, { statusId:p.status }),
+            ),
+            h('div', { style:{ display:'flex', justifyContent:'space-between', fontSize:11, color:'var(--t2)' } },
+              h('span', null, p.dependencia||p.company||'—'),
+              h('span', { style:{ color:alF==='r'?'var(--red)':alF==='y'?'var(--amber)':'var(--t2)', fontWeight:alF?500:400 } }, p.fechaFallo||fmt(p.montoEstimado)||'—'),
+            ),
+          );
+        })
+      ),
     ),
   );
 }
