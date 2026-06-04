@@ -175,7 +175,7 @@ export default function App() {
     project_new:    h(ProjectForm,   { companies, config, onSave:handleSaveProject, onCancel:()=>nav('projects') }),
     project_detail: projDetailView,
     companies:      h(Companies,     { companies, setCompanies, projects, config, onSave:async c=>{ const ex=companies.find(x=>x.id===c.id); setCompanies(ex?companies.map(x=>x.id===c.id?c:x):[...companies,c]); try{ await saveCompany(c, getUID()); log(user, ex?'actualizó':'creó', 'empresa', c.id, c.name); }catch(e){ console.error('Error guardando empresa:', e); } }, user, logFn:log }),
-    catalog:        h(CatalogView),
+    catalog:        h(CatalogView, { config, onSaveConfig:handleSaveConfig }),
     reports:        h(Reports,       { projects, vehicles, companies, audit }),
     settings:       h(Settings,      { config, user, onSave:handleSaveConfig }),
     audit:          h(AuditLogView,  { audit }),
