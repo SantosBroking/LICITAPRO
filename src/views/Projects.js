@@ -8,6 +8,7 @@ import { Badge, AlertChip, Metric, Inp, EmptyState, ConfirmAction, NumInput, Del
 import CotizacionTab from './Cotizacion.js';
 import BasesPreparacion from './Bases.js';
 import { VehiclesTab, VehicleDetail, BillingTab, DocsTab } from './Vehicles.js';
+import { AIAnalyzerButton } from '../ui/AIAnalyzerButton.js';
 
 const PROJ_TABS = [{id:'info',l:'Información'},{id:'activity',l:'Actividad'},{id:'cotizacion',l:'Cotización MSMS'},{id:'bases',l:'Bases'},{id:'vehiculos',l:'Vehículos'},{id:'facturacion',l:'Facturación'},{id:'docs',l:'Documentos'},{id:'preguntas',l:'Preguntas'}];
 
@@ -175,6 +176,33 @@ export function ProjectDetail({ project, vehicles, companies, config, onUpdate, 
   };
   const updRespuesta = (id,r) => updProject({...project,preguntas:(project.preguntas||[]).map(q=>q.id===id?{...q,respuesta:r}:q)});
 
+  const [basesAiMsg, setBasesAiMsg] = useState('');
+  const handleBasesAI = (data) => {
+    const upd = { ...project };
+    if (data.numeroLicitacion)        upd.numLicitacion     = data.numeroLicitacion;
+    if (data.dependencia)             upd.dependencia       = data.dependencia;
+    if (data.tipoProcedimiento)       upd.tipoProcedimiento = data.tipoProcedimiento;
+    if (data.tipoProducto)            upd.productType       = data.tipoProducto;
+    if (data.descripcion)             upd.description       = data.descripcion;
+    if (data.fechaPublicacion)        upd.fechaPublicacion  = data.fechaPublicacion;
+    if (data.fechaJuntaAclaraciones)  upd.fechaAclaraciones = data.fechaJuntaAclaraciones;
+    if (data.fechaPresentacion)       upd.fechaPropuesta    = data.fechaPresentacion;
+    if (data.fechaFallo)              upd.fechaFallo        = data.fechaFallo;
+    if (data.fechaContrato)           upd.fechaContrato     = data.fechaContrato;
+    updProject(upd);
+    const campos = [
+      data.numeroLicitacion && 'No. licitación',
+      data.dependencia && 'dependencia',
+      data.tipoProcedimiento && 'tipo procedimiento',
+      data.fechaPublicacion && 'publicación',
+      data.fechaJuntaAclaraciones && 'aclaraciones',
+      data.fechaPresentacion && 'presentación',
+      data.fechaFallo && 'fallo',
+      data.fechaContrato && 'contrato',
+    ].filter(Boolean);
+    setBasesAiMsg(campos.length ? '✅ Datos extraídos de las bases: ' + campos.join(', ') : 'No se detectaron datos en el PDF.');
+  };
+
   if(showEdit) return h(ProjectForm, { project, companies, config, onSave:async(updated)=>{ await onSave(updated); setShowEdit(false); }, onCancel:()=>setShowEdit(false) });
   if(selVehicle) return h(VehicleDetail, {
     vehicle:vehicles.find(v=>v.id===selVehicle), project, company,
@@ -220,7 +248,17 @@ export function ProjectDetail({ project, vehicles, companies, config, onUpdate, 
       PROJ_TABS.map(t=>h('button',{key:t.id,className:'tab'+(tab===t.id?' active':''),onClick:()=>setTab(t.id),style:{flexShrink:0,whiteSpace:'nowrap'}},t.l))
     ),
     // Info
-    tab==='info' && h('div', { className:'grid-2', style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 } },
+    tab==='info' && h('div', null,
+      h('div', { style:{ marginBottom:16, padding:'14px 16px', background:'var(--blue-bg)', border:'1px solid var(--blue-border)', borderRadius:'var(--rl)', display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' } },
+        h('span', { style:{ fontSize:22 } }, '🤖'),
+        h('div', { style:{ flex:1, minWidth:180 } },
+          h('div', { style:{ fontSize:13, fontWeight:600, color:'var(--blue)' } }, 'Analizar bases de licitación con Claude'),
+          h('div', { style:{ fontSize:11, color:'var(--t2)', marginTop:2 } }, 'Sube el PDF de las bases y se llenarán automáticamente los datos del proyecto y las fechas clave.'),
+        ),
+        h(AIAnalyzerButton, { config, tipo:'bases', label:'Subir bases', onResult: handleBasesAI }),
+      ),
+      basesAiMsg && h('div', { style:{ marginBottom:16, padding:'10px 12px', background:'var(--green-bg)', border:'1px solid var(--green-border)', borderRadius:'var(--r)', fontSize:12, color:'#14532d' } }, basesAiMsg),
+      h('div', { className:'grid-2', style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 } },
       h('div', { className:'card' },
         h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:14 } }, 'Datos del proyecto'),
         [['Tipo procedimiento',project.tipoProcedimiento],['Tipo producto',project.productType],['Empresa',project.company],['Responsable',project.responsable]].map(([l,v],i)=>
@@ -243,7 +281,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onUpdate, 
           );
         })
       ),
-    ),
+    )),
     // Actividad
     tab==='activity' && h('div', null,
       h('div', { className:'card', style:{ marginBottom:16 } },
