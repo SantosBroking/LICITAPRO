@@ -1,6 +1,7 @@
 // Catalog.js — Catálogo de equipo MSMS con productos personalizados
 import { h, useState, useRef } from '../lib/core.js';
 import { CATALOG_PRODUCTS } from '../lib/catalog.js';
+import { CATALOG_IMAGES } from '../lib/catalog_images.js';
 import { uid } from '../lib/utils.js';
 import { Inp } from '../ui/primitives.js';
 
@@ -143,7 +144,7 @@ export default function CatalogView({ config, onSaveConfig }) {
             h('button', { onClick:()=>setForm(prod), style:{ fontSize:11, padding:'3px 8px', color:'var(--blue)', background:'transparent', border:'.5px solid var(--blue-border)' } }, 'Editar'),
             h('button', { onClick:()=>deleteProduct(prod.id), style:{ fontSize:11, padding:'3px 8px', color:'var(--red)', background:'transparent', border:'.5px solid #E24B4A55' } }, 'Eliminar'),
           ),
-          prod.photo && h('img', { src:prod.photo, style:{ width:'100%', height:120, objectFit:'cover', borderRadius:'var(--r)', marginBottom:10, border:'1px solid var(--b1)' } }),
+          (prod.photo || CATALOG_IMAGES[prod.id]) && h('img', { src:prod.photo || CATALOG_IMAGES[prod.id], style:{ width:'100%', height:120, objectFit:'cover', borderRadius:'var(--r)', marginBottom:10, border:'1px solid var(--b1)' } }),
           h('div', { style:{ fontSize:13, fontWeight:500, marginBottom:3 } }, prod.nom),
           h('div', { style:{ fontSize:11, color:'var(--blue)', marginBottom:4 } }, prod.sub, prod.sub?' · ':'', prod.prov, ' · ID: ', prod.id),
           h('div', { style:{ fontSize:12, color:'var(--t2)', lineHeight:1.5, marginBottom:6 } }, prod.desc),
