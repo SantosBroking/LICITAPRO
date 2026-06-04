@@ -1,8 +1,8 @@
 // Companies.js — Empresas licitantes
 import { h, useState, useRef } from '../lib/core.js';
 import { AIAnalyzerButton } from '../ui/AIAnalyzerButton.js';
+import { analyzeDocument } from '../lib/ai_analyzer.js';
 import { EMPRESA_BASE_DOCS } from '../lib/constants.js';
-import { extractPdfText, parseActa, parseConstanciaFiscal } from '../lib/pdf.js';
 import { TODAY, uid, dlFile, fmtBytes } from '../lib/utils.js';
 import { Inp, EmptyState, DeleteConfirmModal, InfoModal } from '../ui/primitives.js';
 
@@ -73,39 +73,41 @@ export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user,
   const actaRef = useRef(null), csfRef = useRef(null);
   const set = (k,v) => sC(p=>({...p,[k]:v}));
 
+  const getApiKey = () => (config?.ia?.openaiKey) || (window._lpConfig?.ia?.openaiKey) || '';
+
   const handleActa = async file => {
-    setParsing(true); setParseMsg('Analizando acta constitutiva...');
+    const apiKey = getApiKey();
+    if (!apiKey) { setParseMsg('Agrega tu API Key de Anthropic en Configuración → 🤖 Inteligencia Artificial para analizar documentos.'); return; }
+    setParsing(true); setParseMsg('🤖 Analizando acta constitutiva con Claude...');
     try {
-      const text=await extractPdfText(file), found=parseActa(text);
-      const updated={...c}; let msg='Acta constitutiva — campos detectados:\n',n=0;
-      if(found.name&&!c.name){updated.name=found.name;msg+='• Razón social\n';n++;}
-      if(found.rfc&&!c.rfc){updated.rfc=found.rfc;msg+='• RFC: '+found.rfc+'\n';n++;}
-      if(found.notario){updated.notario=found.notario;msg+='• Notario\n';n++;}
-      if(found.notaria){updated.notaria=found.notaria;msg+='• Notaría\n';n++;}
-      if(found.escritura){updated.escritura=found.escritura;msg+='• Escritura\n';n++;}
-      if(found.estado){updated.estado=found.estado;msg+='• Estado\n';n++;}
-      if(found.objetoSocial){updated.objetoSocial=found.objetoSocial;msg+='• Objeto social\n';n++;}
-      if(found.socios?.length){updated.socios=found.socios;msg+='• '+found.socios.length+' socio(s)\n';n++;}
-      if(n===0)msg='No se detectó información automáticamente.';
-      else msg+='\n'+n+' campo(s) llenados.';
-      sC(updated); setParseMsg(msg);
+      const data = await analyzeDocument(file, 'empresa', apiKey);
+      applyAIData(data, 'Acta constitutiva');
     } catch(e){ setParseMsg('Error: '+e.message); }
     setParsing(false);
   };
 
+  const applyAIData = (data, label) => {
+    const map = {
+      razonSocial:'name', rfc:'rfc', regimenFiscal:'regimen', domicilioFiscal:'address',
+      codigoPostal:'cp', estado:'estado', ciudad:'ciudad', estatus:'situacion',
+      notario:'notario', numeroEscritura:'escritura', objetoSocial:'objetoSocial',
+    };
+    const updated = {...c}; let n=0; let msg = label+' — campos detectados:\n';
+    Object.entries(map).forEach(([from,to]) => {
+      if (data[from]) { updated[to]=data[from]; msg+='• '+to+'\n'; n++; }
+    });
+    if (n===0) msg='No se detectaron datos. Revisa que el PDF tenga texto legible.';
+    else msg+='\n'+n+' campo(s) llenados con IA.';
+    sC(updated); setParseMsg(msg);
+  };
+
   const handleCSF = async file => {
-    setParsing(true); setParseMsg('Analizando constancia fiscal...');
+    const apiKey = getApiKey();
+    if (!apiKey) { setParseMsg('Agrega tu API Key de Anthropic en Configuración → 🤖 Inteligencia Artificial para analizar documentos.'); return; }
+    setParsing(true); setParseMsg('🤖 Analizando constancia fiscal con Claude...');
     try {
-      const text=await extractPdfText(file), found=parseConstanciaFiscal(text);
-      const updated={...c}; let msg='Constancia fiscal — campos detectados:\n',n=0;
-      if(found.rfc){updated.rfc=found.rfc;msg+='• RFC: '+found.rfc+'\n';n++;}
-      if(found.name&&!c.name){updated.name=found.name;msg+='• Razón social\n';n++;}
-      if(found.regimen){updated.regimen=found.regimen;msg+='• Régimen\n';n++;}
-      if(found.situacion){updated.situacion=found.situacion;msg+='• Situación\n';n++;}
-      if(found.cp){updated.cp=found.cp;msg+='• CP: '+found.cp+'\n';n++;}
-      if(found.address&&!c.address){updated.address=found.address;msg+='• Domicilio\n';n++;}
-      if(n===0)msg='No se detectó información automáticamente.';
-      sC(updated); setParseMsg(msg);
+      const data = await analyzeDocument(file, 'constancia', apiKey);
+      applyAIData(data, 'Constancia fiscal');
     } catch(e){ setParseMsg('Error: '+e.message); }
     setParsing(false);
   };
@@ -150,8 +152,8 @@ export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user,
     h('div', { style:{ marginBottom:16, padding:'12px 14px', background:'var(--bg2)', borderRadius:'var(--r)', display:'flex', alignItems:'center', gap:12, border:'.5px solid var(--b3)' } },
       h('span', { style:{ fontSize:20 } }, '🤖'),
       h('div', { style:{ flex:1 } },
-        h('div', { style:{ fontSize:12, fontWeight:600 } }, 'Analizar documento con IA'),
-        h('div', { style:{ fontSize:11, color:'var(--t2)' } }, 'Sube el acta constitutiva o CSF y GPT-4 llenará los campos automáticamente')
+        h('div', { style:{ fontSize:12, fontWeight:600 } }, '🤖 Analizar con Claude AI'),
+        h('div', { style:{ fontSize:11, color:'var(--t2)' } }, 'Sube el acta, sus reformas o la CSF (puedes seleccionar varios). Claude extrae los datos automáticamente.')
       ),
       h(AIAnalyzerButton, { config, tipo:'empresa', label:'Subir acta / CSF', onResult: handleAIResult, multiple: true })
     ),
@@ -217,7 +219,7 @@ export default function Companies({ companies, setCompanies, projects, onSave, u
       : companies.find(c=>c.id===sel);
     if (!co) { setSel(null); return null; }
     return h('div', null,
-      h(CompanyProfile, { company:co, config, onSave:c=>{ const ex=companies.find(x=>x.id===c.id); setCompanies(ex?companies.map(x=>x.id===c.id?c:x):[...companies,c]); }, onBack:()=>setSel(null), onRequestDelete:sel==='new'?null:()=>requestDelete(co), user, logFn }),
+      h(CompanyProfile, { company:co, config, onSave:c=>{ onSave(c); }, onBack:()=>setSel(null), onRequestDelete:sel==='new'?null:()=>requestDelete(co), user, logFn }),
       deleteState && renderDeleteModal(deleteState,setDeleteState,confirmDelete),
     );
   }

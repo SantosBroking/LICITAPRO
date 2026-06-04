@@ -19,19 +19,31 @@ export function ChecklistItem({ item, onChange, onRemove }) {
 
 export function BasesDetalle({ project, onUpdate, config }) {
   const prep = project.preparation || {};
+  const [aiMsg, setAiMsg] = useState('');
   const setP = (k, v) => onUpdate({ ...project, preparation: { ...prep, [k]:v } });
   const handleAIResult = (data) => {
-    const prep2 = { ...prep };
-    if (data.urlConvocatoria) prep2.urlConvocatoria = data.urlConvocatoria;
-    if (data.numeroLicitacion) prep2.numeroLicitacion = data.numeroLicitacion;
-    if (data.fechaPublicacion) prep2.fechaPublicacion = data.fechaPublicacion;
-    if (data.fechaJuntaAclaraciones) prep2.fechaJuntaAclaraciones = data.fechaJuntaAclaraciones;
-    if (data.fechaPresentacion) prep2.fechaPresentacion = data.fechaPresentacion;
-    if (data.fechaFallo) prep2.fechaFallo = data.fechaFallo;
-    onUpdate({ ...project, preparation: prep2,
-      dependencia: data.dependencia || project.dependencia,
-      name: project.name || data.numeroLicitacion || project.name,
-    });
+    const upd = { ...project, preparation: { ...prep } };
+    // Mapear a los campos reales del proyecto (los que se muestran en Información y Fechas clave)
+    if (data.numeroLicitacion)        upd.numLicitacion     = data.numeroLicitacion;
+    if (data.dependencia)             upd.dependencia       = data.dependencia;
+    if (data.tipoProcedimiento)       upd.tipoProcedimiento = data.tipoProcedimiento;
+    if (data.tipoProducto)            upd.productType       = data.tipoProducto;
+    if (data.descripcion)             upd.description       = data.descripcion;
+    if (data.fechaPublicacion)        upd.fechaPublicacion  = data.fechaPublicacion;
+    if (data.fechaJuntaAclaraciones)  upd.fechaAclaraciones = data.fechaJuntaAclaraciones;
+    if (data.fechaPresentacion)       upd.fechaPropuesta    = data.fechaPresentacion;
+    if (data.fechaFallo)              upd.fechaFallo        = data.fechaFallo;
+    if (data.fechaContrato)           upd.fechaContrato     = data.fechaContrato;
+    if (data.notas)                   upd.preparation.obsBasesLicit = data.notas;
+    onUpdate(upd);
+    setAiMsg('✅ Datos extraídos: ' + [
+      data.numeroLicitacion && 'No. licitación',
+      data.dependencia && 'dependencia',
+      data.fechaPublicacion && 'publicación',
+      data.fechaJuntaAclaraciones && 'aclaraciones',
+      data.fechaPresentacion && 'presentación',
+      data.fechaFallo && 'fallo',
+    ].filter(Boolean).join(', '));
   };
 
   return h('div', { className:'card' },
@@ -43,6 +55,7 @@ export function BasesDetalle({ project, onUpdate, config }) {
       ),
       h(AIAnalyzerButton, { config, tipo:'bases', label:'Subir y analizar', onResult: handleAIResult })
     ),
+    aiMsg && h('div', { style:{ marginBottom:16, padding:'10px 12px', background:'var(--green-bg)', border:'1px solid var(--green-border)', borderRadius:'var(--r)', fontSize:12, color:'#14532d' } }, aiMsg),
     h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 } },
       h(Inp, { label:'URL de la convocatoria', value:prep.urlConvocatoria||'', onChange:v=>setP('urlConvocatoria',v), placeholder:'https://compranet...' }),
       h(Inp, { label:'No. de partidas en las bases', value:prep.numPartidas||'', onChange:v=>setP('numPartidas',v), type:'number' }),
@@ -101,7 +114,7 @@ export default function BasesPreparacion({ project, config, onUpdate, user, logF
     ),
     h('div', { style:{ marginTop:20 } },
       h('div', { style:{ fontSize:16, fontWeight:500, marginBottom:14 } }, 'Datos de las bases'),
-      h(BasesDetalle, { project, onUpdate }),
+      h(BasesDetalle, { project, onUpdate, config }),
     ),
   );
 }

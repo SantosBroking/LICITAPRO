@@ -1,71 +1,38 @@
 // ai_analyzer.js — Análisis de documentos con Claude (Anthropic)
-// Soporta PDFs nativamente, incluyendo actas con múltiples reformas
+// Claude acepta PDFs nativamente. Soporta acta, reformas y CSF.
 
 const CLAUDE_API = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-sonnet-4-6';
 
 const PROMPTS = {
-  bases: `Eres experto en licitaciones públicas mexicanas. Analiza este documento y extrae ÚNICAMENTE el siguiente JSON sin texto adicional, sin markdown, sin backticks:
-{
-  "tipoProcedimiento": "Licitación Pública Nacional / Internacional / Invitación a cuando menos 3 personas / Adjudicación directa",
-  "numeroLicitacion": "número exacto de licitación o convocatoria",
-  "dependencia": "nombre completo de la dependencia convocante",
-  "descripcion": "descripción del objeto de la licitación",
-  "tipoProducto": "tipo de vehículos o productos solicitados",
-  "ubicacion": "estado o municipio donde se entregan",
-  "presupuestoEstimado": null,
-  "partidas": [{"id":"P1","descripcion":"descripción detallada","cantidad":0,"marca":"","modelo":"","especificaciones":""}],
-  "fechaPublicacion": "YYYY-MM-DD o null",
-  "fechaJuntaAclaraciones": "YYYY-MM-DD o null",
-  "fechaPresentacion": "YYYY-MM-DD o null",
-  "fechaFallo": "YYYY-MM-DD o null",
-  "notas": "información relevante adicional como garantías, requisitos especiales, etc."
-}`,
+  bases: `Eres experto en licitaciones públicas mexicanas. Analiza este documento y responde ÚNICAMENTE con JSON válido, sin texto adicional ni backticks:
+{"tipoProcedimiento":"Licitación Pública Nacional/Internacional/Invitación/Adjudicación directa","numeroLicitacion":"","dependencia":"","descripcion":"","tipoProducto":"","ubicacion":"","presupuestoEstimado":null,"partidas":[{"id":"P1","descripcion":"","cantidad":0}],"fechaPublicacion":null,"fechaJuntaAclaraciones":null,"fechaPresentacion":null,"fechaFallo":null,"fechaContrato":null,"notas":""}
+Las fechas en formato YYYY-MM-DD o null si no aparecen.`,
 
-  empresa: `Eres experto en documentos legales mexicanos, especialmente en actas constitutivas y sus reformas.
+  empresa: `Eres experto en documentos legales mexicanos (actas constitutivas y reformas). Si hay reformas, usa los datos MÁS RECIENTES.
 
-IMPORTANTE: Este documento puede ser una acta constitutiva con UNA O VARIAS REFORMAS. Si hay reformas, extrae la información MÁS RECIENTE (última reforma). Los datos que más frecuentemente cambian entre reformas son: razón social, socios, representante legal, domicilio y capital social.
+IMPORTANTE: "razonSocial" es el NOMBRE de la empresa (ejemplo: SATHRI, GRUPO SURMAN). NUNCA pongas el tipo de sociedad (S.A. de C.V., S.A.P.I. de C.V.) en razonSocial — eso va en regimenCapital.
 
-Analiza el documento completo y extrae ÚNICAMENTE el siguiente JSON sin texto adicional, sin markdown, sin backticks:
-{
-  "razonSocial": "razón social completa y vigente (de la última reforma si existe)",
-  "nombreComercial": "nombre comercial si existe",
-  "rfc": "RFC con homoclave (del CSF si está disponible)",
-  "regimenFiscal": "régimen fiscal",
-  "domicilioFiscal": "domicilio fiscal completo vigente",
-  "codigoPostal": "CP",
-  "ciudad": "ciudad",
-  "estado": "estado",
-  "representanteLegal": "nombre completo del representante legal vigente",
-  "cargoRepresentante": "cargo del representante (Administrador Único, Director General, etc.)",
-  "telefono": "",
-  "correo": "",
-  "notario": "nombre del notario del acta constitutiva o última reforma",
-  "numeroEscritura": "número de escritura del acta o última reforma",
-  "fechaConstitucion": "YYYY-MM-DD de constitución original o null",
-  "fechaUltimaReforma": "YYYY-MM-DD de la última reforma o null",
-  "numeroDereformas": 0,
-  "objetoSocial": "primeras 200 caracteres del objeto social"
-}`
+Responde ÚNICAMENTE con JSON válido, sin texto adicional ni backticks:
+{"razonSocial":"","nombreComercial":"","rfc":"","regimenFiscal":"","regimenCapital":"","domicilioFiscal":"","codigoPostal":"","ciudad":"","estado":"","representanteLegal":"","cargoRepresentante":"","telefono":"","correo":"","notario":"","numeroEscritura":"","fechaConstitucion":null,"fechaUltimaReforma":null,"objetoSocial":""}`,
+
+  constancia: `Analiza esta Constancia de Situación Fiscal (CSF) del SAT mexicano.
+
+LEE CON CUIDADO LOS CAMPOS:
+- "razonSocial" = el valor del campo "Denominación/Razón Social" (el nombre corto, ejemplo: SATHRI, GRUPO SURMAN). NUNCA pongas aquí el "Régimen Capital".
+- "regimenCapital" = el valor del campo "Régimen Capital" (ejemplo: SOCIEDAD ANONIMA PROMOTORA DE INVERSION DE CAPITAL VARIABLE)
+- "domicilioFiscal" = combina: [Tipo Vialidad] [Nombre Vialidad] [Núm Ext], [Núm Int], COL. [Colonia]. Ejemplo: "CALLE AMORES 1722, TORRE B 202, COL. DEL VALLE CENTRO"
+- "ciudad" = campo "Municipio o Demarcación Territorial"
+- "estado" = campo "Entidad Federativa"
+- "regimenFiscal" = el régimen de la sección "Regímenes" (ejemplo: Régimen General de Ley Personas Morales)
+- fechas en formato YYYY-MM-DD
+
+Responde ÚNICAMENTE con JSON válido, sin texto adicional ni backticks:
+{"razonSocial":"","nombreComercial":"","rfc":"","regimenFiscal":"","regimenCapital":"","domicilioFiscal":"","codigoPostal":"","ciudad":"","estado":"","telefono":"","correo":"","fechaInicioOperaciones":null,"estatus":""}`
 };
 
-export async function analyzeDocument(file, tipo, apiKey) {
-  if (!apiKey) throw new Error('API key no configurada. Ve a Configuración → Inteligencia Artificial y agrega tu key de Anthropic.');
-
-  const base64 = await fileToBase64(file);
-  const dataB64 = base64.split(',')[1];
-
-  let mediaType = 'application/pdf';
-  if (file.type.startsWith('image/')) mediaType = file.type;
-  else if (file.name.toLowerCase().endsWith('.png')) mediaType = 'image/png';
-  else if (file.name.toLowerCase().endsWith('.jpg') || file.name.toLowerCase().endsWith('.jpeg')) mediaType = 'image/jpeg';
-
-  const prompt = PROMPTS[tipo] || PROMPTS.bases;
-
-  const contentBlock = (mediaType === 'application/pdf')
-    ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: dataB64 } }
-    : { type: 'image',    source: { type: 'base64', media_type: mediaType,          data: dataB64 } };
-
+// Llamada a Claude con reintento automático en 429
+async function callClaudeAPI(contentBlock, prompt, apiKey, retries = 2) {
   const response = await fetch(CLAUDE_API, {
     method: 'POST',
     headers: {
@@ -76,55 +43,76 @@ export async function analyzeDocument(file, tipo, apiKey) {
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 2000,
-      messages: [{
-        role: 'user',
-        content: [ contentBlock, { type: 'text', text: prompt } ]
-      }]
+      max_tokens: 1500,
+      messages: [{ role: 'user', content: [contentBlock, { type: 'text', text: prompt }] }]
     })
   });
 
+  if (response.status === 429 && retries > 0) {
+    await new Promise(r => setTimeout(r, 6000));
+    return callClaudeAPI(contentBlock, prompt, apiKey, retries - 1);
+  }
+
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    const msg = err.error?.message || `Error ${response.status}`;
-    if (response.status === 401) throw new Error('API key inválida. Ve a Configuración → Inteligencia Artificial y verifica tu key de Anthropic (console.anthropic.com).');
-    if (response.status === 429) throw new Error('Demasiadas solicitudes. Espera un momento e intenta de nuevo.');
-    if (response.status === 413) throw new Error('El archivo es demasiado grande. Intenta con un PDF de menos páginas.');
-    throw new Error('Error de Claude API: ' + msg);
+    const msg = err.error?.message || ('Error ' + response.status);
+    if (response.status === 401) throw new Error('API key inválida. Revisa tu key de Anthropic en Configuración → 🤖 Inteligencia Artificial.');
+    if (response.status === 429) throw new Error('Límite de solicitudes alcanzado. Espera 1 minuto e intenta de nuevo.');
+    if (response.status === 413) throw new Error('El archivo es muy grande. Usa un PDF con menos páginas.');
+    throw new Error('Error de Claude: ' + msg);
   }
 
   const data = await response.json();
   const text = data.content?.[0]?.text?.trim() || '';
-
   try {
-    const clean = text.replace(/```json\n?|```/g, '').trim();
-    return JSON.parse(clean);
+    return JSON.parse(text.replace(/```json\n?|```/g, '').trim());
   } catch {
-    throw new Error('Claude no pudo extraer datos estructurados. El documento puede estar escaneado sin OCR o ser ilegible. Detalle: ' + text.substring(0, 300));
+    throw new Error('Claude no devolvió datos válidos. El PDF puede estar escaneado sin texto legible.');
   }
 }
 
-// Múltiples archivos: analiza cada uno y combina los resultados
+// Detecta el tipo real del documento por nombre de archivo
+function detectTipo(file, tipo) {
+  if (tipo !== 'empresa') return tipo;
+  const n = file.name.toLowerCase();
+  if (n.includes('constancia') || n.includes('csf') || n.includes('fiscal') || n.includes('sat'))
+    return 'constancia';
+  return 'empresa';
+}
+
+export async function analyzeDocument(file, tipo, apiKey) {
+  if (!apiKey) throw new Error('Agrega tu API Key de Anthropic en Configuración → 🤖 Inteligencia Artificial.');
+
+  const base64 = await fileToBase64(file);
+  const dataB64 = base64.split(',')[1];
+
+  let mediaType = 'application/pdf';
+  if (file.type.startsWith('image/')) mediaType = file.type;
+  else if (file.name.toLowerCase().endsWith('.png')) mediaType = 'image/png';
+  else if (file.name.toLowerCase().endsWith('.jpg') || file.name.toLowerCase().endsWith('.jpeg')) mediaType = 'image/jpeg';
+
+  const tipoFinal = detectTipo(file, tipo);
+  const prompt = PROMPTS[tipoFinal] || PROMPTS.empresa;
+
+  const contentBlock = (mediaType === 'application/pdf')
+    ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: dataB64 } }
+    : { type: 'image',    source: { type: 'base64', media_type: mediaType,          data: dataB64 } };
+
+  return await callClaudeAPI(contentBlock, prompt, apiKey);
+}
+
+// Múltiples documentos (acta + reformas): analiza cada uno, combina lo más reciente
 export async function analyzeMultipleDocuments(files, tipo, apiKey) {
   const results = [];
   for (const file of files) {
-    const result = await analyzeDocument(file, tipo, apiKey);
-    results.push(result);
+    results.push(await analyzeDocument(file, tipo, apiKey));
+    if (files.length > 1) await new Promise(r => setTimeout(r, 2000));
   }
-
   if (results.length === 1) return results[0];
 
-  // Combinar: el último archivo tiene prioridad (asumiendo orden cronológico)
   const merged = { ...results[0] };
   for (let i = 1; i < results.length; i++) {
-    const r = results[i];
-    if (r.razonSocial)         merged.razonSocial = r.razonSocial;
-    if (r.representanteLegal)  merged.representanteLegal = r.representanteLegal;
-    if (r.domicilioFiscal)     merged.domicilioFiscal = r.domicilioFiscal;
-    if (r.fechaUltimaReforma)  merged.fechaUltimaReforma = r.fechaUltimaReforma;
-    if (r.notario)             merged.notario = r.notario;
-    if (r.numeroEscritura)     merged.numeroEscritura = r.numeroEscritura;
-    merged.numeroDereformas = (merged.numeroDereformas || 0) + 1;
+    Object.keys(results[i]).forEach(k => { if (results[i][k]) merged[k] = results[i][k]; });
   }
   return merged;
 }
@@ -132,8 +120,8 @@ export async function analyzeMultipleDocuments(files, tipo, apiKey) {
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload  = (e) => resolve(e.target.result);
-    reader.onerror = ()  => reject(new Error('Error al leer el archivo'));
+    reader.onload  = e => resolve(e.target.result);
+    reader.onerror = () => reject(new Error('Error al leer el archivo'));
     reader.readAsDataURL(file);
   });
 }
