@@ -73,8 +73,6 @@ export default function App() {
     };
 
     const { data: { subscription } } = authSb.onAuthStateChange(async (event, session) => {
-      console.log('Auth event:', event, session?.user?.email);
-      
       if (event === 'INITIAL_SESSION') {
         if (session?.user) {
           setUser(session.user);
