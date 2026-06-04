@@ -48,24 +48,25 @@ export async function signOut() {
 
 // ── CRUD con Supabase ─────────────────────────────────────────
 export async function dbLoad(userId) {
-  // Cargar config por separado para que un timeout no bloquee proyectos y empresas
-  const [proj, veh, comp, aud] = await Promise.all([
+  // allSettled: si una tabla falla, las demás siguen cargando
+  const [proj, veh, comp, aud] = await Promise.allSettled([
     sb.from('projects').select('data').eq('user_id', userId),
     sb.from('vehicles').select('data').eq('user_id', userId),
     sb.from('companies').select('data').eq('user_id', userId),
     sb.from('audit_log').select('data').eq('user_id', userId).order('created_at', { ascending: false }).limit(200),
   ]);
+  const get = (r) => r.status === 'fulfilled' ? (r.value?.data || []) : [];
   let cfgData = null;
   try {
     const cfg = await sb.from('config').select('data').eq('user_id', userId).maybeSingle();
     cfgData = cfg.data?.data || null;
-  } catch(e) { console.warn('Config no disponible:', e.message); }
+  } catch(e) { console.warn('Config timeout:', e.message); }
   return {
-    projects:  (proj.data  || []).map(r => r.data),
-    vehicles:  (veh.data   || []).map(r => r.data),
-    companies: (comp.data  || []).map(r => r.data),
+    projects:  get(proj).map(r => r.data),
+    vehicles:  get(veh).map(r => r.data),
+    companies: get(comp).map(r => r.data),
     config:    cfgData,
-    audit:     (aud.data   || []).map(r => r.data),
+    audit:     get(aud).map(r => r.data),
   };
 }
 
