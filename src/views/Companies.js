@@ -1,7 +1,6 @@
 // Companies.js — Empresas licitantes
 import { h, useState, useRef } from '../lib/core.js';
 import { AIAnalyzerButton } from '../ui/AIAnalyzerButton.js';
-import { analyzeDocument, analyzeMultipleDocuments } from '../lib/ai_analyzer.js';
 import { EMPRESA_BASE_DOCS } from '../lib/constants.js';
 import { TODAY, uid, dlFile, fmtBytes } from '../lib/utils.js';
 import { Inp, EmptyState, DeleteConfirmModal, InfoModal } from '../ui/primitives.js';
@@ -12,7 +11,7 @@ export function EmpresaDocsCard({ company, onUpdate }) {
   const handleUpload = async (def, file) => {
     let fileData = null;
     if (def.storeFile) {
-      if (file.size>4*1024*1024){alert('Archivo muy grande (máx. 4MB)');return;}
+      if (file.size>10*1024*1024){alert('Archivo muy grande (máx. 10MB). Para archivos grandes, comprime el PDF.');return;}
       try{fileData=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file);});}catch(e){alert('Error: '+e.message);return;}
     }
     const newDoc={id:def.id,name:def.name,category:def.category,status:'guardado',uploadDate:TODAY(),fileName:file.name,fileSize:file.size,fileData,expirationDate:'',notes:''};
@@ -21,6 +20,17 @@ export function EmpresaDocsCard({ company, onUpdate }) {
   };
   const rmDoc  = id   => onUpdate({...company,baseDocs:docs.filter(d=>d.id!==id)});
   const setExp = (id,date) => onUpdate({...company,baseDocs:docs.map(d=>d.id===id?{...d,expirationDate:date}:d)});
+
+  // Reformas (almacenamiento dinámico, sin análisis)
+  const reformas = company.reformas || [];
+  const addReforma = async (file) => {
+    if (file.size>10*1024*1024){alert('Archivo muy grande (máx. 10MB). Comprime el PDF.');return;}
+    let fileData=null;
+    try{ fileData=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file);}); }catch(e){ alert('Error: '+e.message); return; }
+    const nueva={ id:'ref-'+Date.now(), name:file.name, fileData, fileSize:file.size, uploadDate:TODAY() };
+    onUpdate({...company, reformas:[...reformas, nueva]});
+  };
+  const rmReforma = id => onUpdate({...company, reformas:reformas.filter(r=>r.id!==id)});
   return h('div', { className:'card', style:{ marginBottom:20 } },
     h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:6 } }, 'Documentos base de la empresa'),
     h('div', { style:{ fontSize:12, color:'var(--t2)', marginBottom:14 } }, 'El acta constitutiva y la CSF se guardan en el sistema.'),
@@ -44,81 +54,62 @@ export function EmpresaDocsCard({ company, onUpdate }) {
         );
       })
     ),
+
+    // Reformas del acta (almacenamiento)
+    h('div', { style:{ marginTop:16, paddingTop:16, borderTop:'1px solid var(--b1)' } },
+      h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 } },
+        h('div', null,
+          h('div', { style:{ fontSize:13, fontWeight:500 } }, 'Reformas del acta', reformas.length>0?(' ('+reformas.length+')'):''),
+          h('div', { style:{ fontSize:11, color:'var(--t2)' } }, 'Guarda cada reforma posterior al acta constitutiva.'),
+        ),
+        h('label', { style:{ fontSize:11, padding:'5px 12px', background:'var(--t1)', color:'var(--bg1)', borderRadius:'var(--r)', cursor:'pointer', fontWeight:500, flexShrink:0 } }, '+ Subir reforma',
+          h('input', { type:'file', accept:'.pdf', style:{ display:'none' }, onChange:e=>{ if(e.target.files[0])addReforma(e.target.files[0]); e.target.value=''; } })
+        ),
+      ),
+      reformas.length>0 && h('div', { style:{ display:'flex', flexDirection:'column', gap:6 } },
+        reformas.map((r,i) => h('div', { key:r.id, style:{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', background:'var(--bg2)', borderRadius:'var(--r)', border:'.5px solid var(--b3)' } },
+          h('span', { style:{ fontSize:11, color:'var(--t3)', flexShrink:0 } }, (i+1)+'.'),
+          h('div', { style:{ flex:1, minWidth:0 } },
+            h('div', { style:{ fontSize:12, fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, r.name),
+            h('div', { style:{ fontSize:10, color:'var(--t2)' } }, fmtBytes(r.fileSize), ' · ', r.uploadDate),
+          ),
+          r.fileData && h('button', { onClick:()=>dlFile(r.fileData,r.name), style:{ fontSize:11, padding:'4px 10px', color:'var(--blue)', flexShrink:0 } }, '⬇'),
+          h('button', { onClick:()=>rmReforma(r.id), style:{ fontSize:11, padding:'4px 10px', color:'var(--red)', background:'transparent', border:'.5px solid #E24B4A55', flexShrink:0 } }, 'Quitar'),
+        ))
+      ),
+    ),
   );
 }
 
 export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user, logFn, config }) {
-  const handleAIResult = (data) => {
-    sC(x => ({
-      ...x,
-      ...(data.razonSocial        && { name: data.razonSocial }),
-      ...(data.nombreComercial    && { nombreComercial: data.nombreComercial }),
-      ...(data.rfc                && { rfc: data.rfc }),
-      ...(data.regimenFiscal      && { regimen: data.regimenFiscal }),
-      ...(data.domicilioFiscal    && { address: data.domicilioFiscal }),
-      ...(data.codigoPostal       && { cp: data.codigoPostal }),
-      ...(data.ciudad             && { ciudad: data.ciudad }),
-      ...(data.estado             && { estado: data.estado }),
-      ...(data.representanteLegal && { representanteLegal: data.representanteLegal }),
-      ...(data.cargoRepresentante && { cargoRepresentante: data.cargoRepresentante }),
-      ...(data.telefono           && { telefono: data.telefono }),
-      ...(data.correo             && { correo: data.correo }),
-      ...(data.estatus            && { estatus: data.estatus }),
-    }));
-  };
   const [c, sC]       = useState(JSON.parse(JSON.stringify(company)));
   const [parsing, setParsing] = useState(false);
   const [parseMsg, setParseMsg] = useState('');
   const [newSocio, setNewSocio] = useState({ nombre:'', porcentaje:'' });
-  const actaRef = useRef(null), csfRef = useRef(null), reformaRef = useRef(null);
-  const [actaFile, setActaFile] = useState(null);   // { name, file }
-  const [reformas, setReformas] = useState([]);       // [{ name, file }]
   const set = (k,v) => sC(p=>({...p,[k]:v}));
 
-  const addReforma = (file) => { if(file) setReformas(prev => [...prev, { name:file.name, file }]); };
-  const rmReforma  = (i) => setReformas(prev => prev.filter((_,j)=>j!==i));
-
-  const analyzeActaYReformas = async () => {
-    const apiKey = getApiKey();
-    if (!apiKey) { setParseMsg('Agrega tu API Key de Anthropic en Configuración → 🤖 Inteligencia Artificial.'); return; }
-    const files = [actaFile, ...reformas].filter(Boolean).map(x => x.file);
-    if (!files.length) { setParseMsg('Primero sube el acta constitutiva (y sus reformas si las tiene).'); return; }
-    setParsing(true);
-    setParseMsg('🤖 Analizando ' + files.length + ' documento(s) con Claude... ' + (files.length>1 ? 'Esto puede tardar un poco.' : ''));
-    try {
-      const data = await analyzeMultipleDocuments(files, 'empresa', apiKey);
-      const label = files.length>1 ? ('Acta + ' + reformas.length + ' reforma(s)') : 'Acta constitutiva';
-      applyAIData(data, label);
-    } catch(e){ setParseMsg('Error: '+e.message); }
-    setParsing(false);
+  const FIELD_LABELS = {
+    name:'Razón social', nombreComercial:'Nombre comercial', rfc:'RFC', regimen:'Régimen fiscal',
+    address:'Domicilio fiscal', cp:'CP', ciudad:'Ciudad', estado:'Estado',
+    representanteLegal:'Representante legal', cargoRepresentante:'Cargo', telefono:'Teléfono',
+    correo:'Correo', situacion:'Situación',
   };
-
-  const getApiKey = () => (config?.ia?.openaiKey) || (window._lpConfig?.ia?.openaiKey) || '';
-
-  const applyAIData = (data, label) => {
+  const handleAIResult = (data) => {
     const map = {
-      razonSocial:'name', rfc:'rfc', regimenFiscal:'regimen', domicilioFiscal:'address',
-      codigoPostal:'cp', estado:'estado', ciudad:'ciudad', estatus:'situacion',
+      razonSocial:'name', nombreComercial:'nombreComercial', rfc:'rfc', regimenFiscal:'regimen',
+      domicilioFiscal:'address', codigoPostal:'cp', ciudad:'ciudad', estado:'estado',
+      representanteLegal:'representanteLegal', cargoRepresentante:'cargoRepresentante',
+      telefono:'telefono', correo:'correo', estatus:'situacion',
       notario:'notario', numeroEscritura:'escritura', objetoSocial:'objetoSocial',
     };
-    const updated = {...c}; let n=0; let msg = label+' — campos detectados:\n';
+    const updated = {...c}; const llenados = [];
     Object.entries(map).forEach(([from,to]) => {
-      if (data[from]) { updated[to]=data[from]; msg+='• '+to+'\n'; n++; }
+      if (data[from]) { updated[to] = data[from]; if (FIELD_LABELS[to]) llenados.push(FIELD_LABELS[to]); }
     });
-    if (n===0) msg='No se detectaron datos. Revisa que el PDF tenga texto legible.';
-    else msg+='\n'+n+' campo(s) llenados con IA.';
-    sC(updated); setParseMsg(msg);
-  };
-
-  const handleCSF = async file => {
-    const apiKey = getApiKey();
-    if (!apiKey) { setParseMsg('Agrega tu API Key de Anthropic en Configuración → 🤖 Inteligencia Artificial para analizar documentos.'); return; }
-    setParsing(true); setParseMsg('🤖 Analizando constancia fiscal con Claude...');
-    try {
-      const data = await analyzeDocument(file, 'constancia', apiKey);
-      applyAIData(data, 'Constancia fiscal');
-    } catch(e){ setParseMsg('Error: '+e.message); }
-    setParsing(false);
+    sC(updated);
+    setParseMsg(llenados.length
+      ? '✅ Datos extraídos: ' + llenados.join(', ') + '. Revísalos y guarda la empresa.'
+      : 'No se detectaron datos. Revisa que el PDF tenga texto legible (no escaneado).');
   };
 
   const addSocio = () => { if(!newSocio.nombre)return; sC(p=>({...p,socios:[...(p.socios||[]),{nombre:newSocio.nombre,porcentaje:parseFloat(newSocio.porcentaje)||0}]})); setNewSocio({nombre:'',porcentaje:''}); };
@@ -139,63 +130,17 @@ export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user,
         h('button', { className:'bp', onClick:save }, 'Guardar empresa'),
       ),
     ),
-    h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:16 } },
-      h('div', { className:'card' },
-        h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:4 } }, '📄 Acta constitutiva y reformas'),
-        h('div', { style:{ fontSize:11, color:'var(--t3)', marginBottom:12 } }, 'Sube el acta original y todas sus reformas. Claude usará los datos más recientes.'),
-
-        // Acta original
-        h('div', { style:{ fontSize:11, fontWeight:600, color:'var(--t2)', marginBottom:6 } }, 'Acta constitutiva original'),
-        actaFile
-          ? h('div', { style:{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', background:'var(--green-bg)', border:'1px solid var(--green-border)', borderRadius:'var(--r)', marginBottom:12 } },
-              h('span', { style:{ fontSize:13 } }, '📎'),
-              h('span', { style:{ fontSize:12, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, actaFile.name),
-              h('span', { onClick:()=>setActaFile(null), style:{ fontSize:12, color:'var(--red)', cursor:'pointer', padding:'0 4px' } }, '✕'),
-            )
-          : h('div', { className:'drop', style:{ marginBottom:12, padding:14 }, onClick:()=>actaRef.current&&actaRef.current.click(), onDragOver:e=>{e.preventDefault();e.currentTarget.classList.add('over');}, onDragLeave:e=>e.currentTarget.classList.remove('over'), onDrop:e=>{e.preventDefault();e.currentTarget.classList.remove('over');if(e.dataTransfer.files[0])setActaFile({name:e.dataTransfer.files[0].name,file:e.dataTransfer.files[0]});} },
-              h('input', { ref:actaRef, type:'file', accept:'.pdf', style:{ display:'none' }, onChange:e=>{ if(e.target.files[0])setActaFile({name:e.target.files[0].name,file:e.target.files[0]}); e.target.value=''; } }),
-              h('div', { style:{ fontSize:12, color:'var(--t2)' } }, 'Arrastra el acta o haz clic'),
-            ),
-
-        // Reformas
-        h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 } },
-          h('span', { style:{ fontSize:11, fontWeight:600, color:'var(--t2)' } }, 'Reformas', reformas.length>0?(' ('+reformas.length+')'):''),
-          h('button', { onClick:()=>reformaRef.current&&reformaRef.current.click(), style:{ fontSize:11, padding:'4px 10px', border:'1px dashed var(--b2)', borderRadius:'var(--r)', background:'transparent', color:'var(--blue)', cursor:'pointer' } }, '+ Agregar reforma'),
+    h('div', { className:'card', style:{ marginBottom:16, background:'var(--blue-bg)', border:'1px solid var(--blue-border)' } },
+      h('div', { style:{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' } },
+        h('span', { style:{ fontSize:22 } }, '\ud83e\udd16'),
+        h('div', { style:{ flex:1, minWidth:200 } },
+          h('div', { style:{ fontSize:13, fontWeight:600, color:'var(--blue)' } }, 'Extraer datos con Claude'),
+          h('div', { style:{ fontSize:11, color:'var(--t2)', marginTop:2 } }, 'Sube la \u00faltima reforma del acta o la Constancia de Situaci\u00f3n Fiscal. Claude detecta el tipo y llena los campos. (Para guardar los documentos usa el Banco de documentos m\u00e1s abajo.)'),
         ),
-        h('input', { ref:reformaRef, type:'file', accept:'.pdf', style:{ display:'none' }, onChange:e=>{ if(e.target.files[0])addReforma(e.target.files[0]); e.target.value=''; } }),
-        reformas.length===0
-          ? h('div', { style:{ fontSize:11, color:'var(--t3)', padding:'6px 0', marginBottom:8 } }, 'Sin reformas. Agrégalas en orden cronológico (la más nueva al final).')
-          : h('div', { style:{ display:'flex', flexDirection:'column', gap:4, marginBottom:8 } },
-              reformas.map((r,i)=>h('div', { key:i, style:{ display:'flex', alignItems:'center', gap:6, padding:'6px 8px', background:'var(--bg2)', borderRadius:'var(--r)', border:'1px solid var(--b1)' } },
-                h('span', { style:{ fontSize:10, color:'var(--t3)', flexShrink:0 } }, (i+1)+'.'),
-                h('span', { style:{ fontSize:11, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, r.name),
-                h('span', { onClick:()=>rmReforma(i), style:{ fontSize:11, color:'var(--red)', cursor:'pointer', padding:'0 4px', flexShrink:0 } }, '✕'),
-              ))
-            ),
-
-        // Botón analizar todo
-        h('button', { onClick:analyzeActaYReformas, disabled:parsing||(!actaFile&&reformas.length===0), className:'bp', style:{ width:'100%', marginTop:4, opacity:(parsing||(!actaFile&&reformas.length===0))?.5:1 } },
-          parsing ? '⏳ Analizando...' : ('🤖 Analizar acta' + (reformas.length>0?(' + '+reformas.length+' reforma(s)'):'') + ' con Claude')
-        ),
-      ),
-      h('div', { className:'card' },
-        h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:8 } }, 'Cargar constancia fiscal (PDF)'),
-        h('div', { style:{ fontSize:12, color:'var(--t2)', marginBottom:12 } }, 'Detecta: RFC, régimen, situación, CP, domicilio.'),
-        h('div', { className:'drop', onClick:()=>csfRef.current&&csfRef.current.click(), onDragOver:e=>{e.preventDefault();e.currentTarget.classList.add('over');}, onDragLeave:e=>e.currentTarget.classList.remove('over'), onDrop:e=>{e.preventDefault();e.currentTarget.classList.remove('over');if(e.dataTransfer.files[0])handleCSF(e.dataTransfer.files[0]);} },
-          h('input', { ref:csfRef, type:'file', accept:'.pdf', style:{ display:'none' }, onChange:e=>e.target.files[0]&&handleCSF(e.target.files[0]) }),
-          h('div', { style:{ fontSize:12, color:'var(--t2)' } }, parsing?'Procesando...':'Arrastra la CSF o haz clic'),
-        ),
+        h(AIAnalyzerButton, { config, tipo:'empresa', label:'Subir y analizar', onResult: handleAIResult }),
       ),
     ),
     parseMsg && h('pre', { style:{ fontSize:12, background:'var(--bg2)', padding:12, borderRadius:'var(--r)', whiteSpace:'pre-wrap', lineHeight:1.6, marginBottom:16 } }, parseMsg),
-    h('div', { style:{ marginBottom:16, padding:'12px 14px', background:'var(--bg2)', borderRadius:'var(--r)', display:'flex', alignItems:'center', gap:12, border:'.5px solid var(--b3)' } },
-      h('span', { style:{ fontSize:20 } }, '🤖'),
-      h('div', { style:{ flex:1 } },
-        h('div', { style:{ fontSize:12, fontWeight:600 } }, '🤖 Analizar con Claude AI'),
-        h('div', { style:{ fontSize:11, color:'var(--t2)' } }, 'Sube el acta, sus reformas o la CSF (puedes seleccionar varios). Claude extrae los datos automáticamente.')
-      ),
-      h(AIAnalyzerButton, { config, tipo:'empresa', label:'Subir acta / CSF', onResult: handleAIResult, multiple: true })
-    ),
     h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:16 } },
       h('div', { className:'card' },
         h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:14 } }, 'Datos generales'),
