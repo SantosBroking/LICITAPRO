@@ -29,7 +29,7 @@ export function Inp({ label, value, onChange, type, placeholder, options, textar
     options
       ? h('select', { value:value||'', onChange:e=>onChange(e.target.value) },
           h('option', { value:'' }, '— Seleccionar —'),
-          options.map(o => h('option', { key:o, value:o }, o))
+          (value && !options.includes(value) ? [value, ...options] : options).map(o => h('option', { key:o, value:o }, o))
         )
       : textarea
       ? h('textarea', { value:value||'', onChange:e=>onChange(e.target.value), placeholder:placeholder||'', rows:3, style:{ resize:'vertical' } })
