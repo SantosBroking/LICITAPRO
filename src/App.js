@@ -147,7 +147,19 @@ export default function App() {
     const p = projects.find(x=>x.id===id);
     setProjects(prev=>prev.filter(x=>x.id!==id));
     setVehicles(prev=>prev.filter(v=>v.projectId!==id));
-    try { await deleteProject(id); log(user,'eliminó','proyecto',id,p?.name||''); } catch(e){ console.error(e); }
+    try {
+      await deleteProject(id);
+      log(user,'eliminó','proyecto',id,p?.name||'');
+    } catch(e) {
+      console.error('Error al eliminar proyecto:', e);
+      // Recargar los proyectos desde Supabase para mostrar el estado real
+      try {
+        const d = await dbLoad(getUID());
+        setProjects(d.projects || []);
+        setVehicles(d.vehicles || []);
+      } catch(_) {}
+      alert('Error al eliminar: ' + e.message);
+    }
   }, [projects, user, log]);
 
   const handleSaveVehicle = useCallback(async (v) => {
