@@ -5,9 +5,20 @@ const CLAUDE_API = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-sonnet-4-6';
 
 const PROMPTS = {
-  bases: `Eres experto en licitaciones públicas mexicanas. Analiza este documento y responde ÚNICAMENTE con JSON válido, sin texto adicional ni backticks:
-{"tipoProcedimiento":"Licitación Pública Nacional/Internacional/Invitación/Adjudicación directa","numeroLicitacion":"","dependencia":"","descripcion":"","tipoProducto":"","ubicacion":"","presupuestoEstimado":null,"partidas":[{"id":"P1","descripcion":"","cantidad":0}],"fechaPublicacion":null,"fechaJuntaAclaraciones":null,"fechaPresentacion":null,"fechaFallo":null,"fechaContrato":null,"notas":""}
-Las fechas en formato YYYY-MM-DD o null si no aparecen.`,
+  bases: `Eres experto en licitaciones públicas mexicanas. Lee el documento con atención.
+
+En las bases suele venir una frase como: "Licitación Pública Nacional ... número LPN-038-26, referente a la adquisición de CAMIÓN DE VOLTEO DE 7M3 NUEVO, MV 4X2, MODELO 2026, solicitado por la DIRECCIÓN DE DESARROLLO URBANO Y MEDIO AMBIENTE".
+
+De ahí extrae:
+- "objetoLicitacion" = lo que se va a adquirir (lo que va DESPUÉS de "adquisición de" o "referente a" y ANTES de "solicitado por"). Ej: "CAMIÓN DE VOLTEO DE 7M3 NUEVO, MV 4X2, MODELO 2026". Este es el nombre principal del proyecto.
+- "dependencia" = la unidad que solicita (lo que va DESPUÉS de "solicitado por la/el"). Ej: "DIRECCIÓN DE DESARROLLO URBANO Y MEDIO AMBIENTE".
+- "nivelGobierno" = uno de: "Gobierno Federal", "Gobierno Estatal", "Gobierno Municipal", "Paraestatal" — según quién convoca. Si no es claro, déjalo en "".
+- "tipoProcedimiento" = ej. "Licitación Pública Nacional", "Invitación a cuando menos 3 personas", "Adjudicación directa".
+- "numeroLicitacion" = el número/clave exacto. Ej: "LPN-038-26".
+
+Responde ÚNICAMENTE con JSON válido, sin texto adicional ni backticks:
+{"objetoLicitacion":"","numeroLicitacion":"","dependencia":"","nivelGobierno":"","tipoProcedimiento":"","tipoProducto":"","ubicacion":"","presupuestoEstimado":null,"fechaPublicacion":null,"fechaJuntaAclaraciones":null,"fechaPresentacion":null,"fechaFallo":null,"fechaContrato":null,"notas":""}
+Las fechas en formato YYYY-MM-DD o null.`,
 
   empresa: `Eres experto en documentos legales mexicanos (actas constitutivas y reformas). Si hay reformas, usa los datos MÁS RECIENTES.
 
