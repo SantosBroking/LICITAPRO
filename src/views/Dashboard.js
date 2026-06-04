@@ -4,7 +4,7 @@ import { STATUSES, FINAL_STATUS } from '../lib/constants.js';
 import { fmt, fmtNum, daysUntil, alertLevel } from '../lib/utils.js';
 import { Metric, Badge, AlertChip, EmptyState } from '../ui/primitives.js';
 
-export default function Dashboard({ projects, vehicles, companies, onNav }) {
+export default function Dashboard({ projects, vehicles, companies, onNav, onUpdate }) {
   const ac   = projects.filter(p => !FINAL_STATUS.includes(p.status));
   const won  = projects.filter(p => ['ganada','contrato','entrega','facturado','cobrado'].includes(p.status));
   const lost = projects.filter(p => p.status === 'perdida');
@@ -23,7 +23,17 @@ export default function Dashboard({ projects, vehicles, companies, onNav }) {
         if (lvl) upcomingAlerts.push({ label, date, level:lvl, days:daysUntil(date), project:p });
       });
   });
-  upcomingAlerts.sort((a,b) => a.days - b.days);
+  const filtered = upcomingAlerts.filter(a => {
+    const key = a.label + '|' + a.date;
+    return !(a.project.alertasDismissed || []).includes(key);
+  });
+
+  const dismissAlert = (a) => {
+    if (!onUpdate) return;
+    const key = a.label + '|' + a.date;
+    const dismissed = [...(a.project.alertasDismissed || []), key];
+    onUpdate({ ...a.project, alertasDismissed: dismissed });
+  };
 
   if (projects.length === 0)
     return h('div', null,
@@ -43,14 +53,18 @@ export default function Dashboard({ projects, vehicles, companies, onNav }) {
       h(Metric, { label:'Tasa conversión', value:conv+'%', sub:decided+' decididos' }),
       h(Metric, { label:'Proyectos activos', value:ac.length }),
     ),
-    upcomingAlerts.length > 0 && h('div', { className:'card', style:{ marginBottom:20 } },
+    filtered.length > 0 && h('div', { className:'card', style:{ marginBottom:20 } },
       h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:12 } }, '⚠ Alertas y vencimientos próximos'),
       h('div', { style:{ display:'flex', flexDirection:'column', gap:6 } },
-        upcomingAlerts.slice(0,8).map((a,i) =>
+        filtered.slice(0,8).map((a,i) =>
           h('div', { key:i, onClick:()=>onNav('project_detail',a.project.id), className:(a.level==='r'?'alert-r':'alert-y')+' alert-row',
             style:{ padding:'8px 12px', borderRadius:'var(--r)', fontSize:12, cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 } },
             h('div', { style:{ flex:1, minWidth:0 } }, h('strong', null, a.project.name), ' — ', a.label, ': ', a.date),
-            h('div', { className:'alert-badge', style:{ fontWeight:600, flexShrink:0, fontSize:11, padding:'2px 8px', borderRadius:8, background:'rgba(0,0,0,.06)' } }, a.days<0?'Vencido hace '+(-a.days)+'d':a.days===0?'HOY':'En '+a.days+'d'),
+            h('div', { style:{ display:'flex', alignItems:'center', gap:6, flexShrink:0 } },
+              h('div', { className:'alert-badge', style:{ fontWeight:600, fontSize:11, padding:'2px 8px', borderRadius:8, background:'rgba(0,0,0,.06)' } }, a.days<0?'Vencido hace '+(-a.days)+'d':a.days===0?'HOY':'En '+a.days+'d'),
+              h('button', { onClick:e=>{ e.stopPropagation(); dismissAlert(a); }, title:'Descartar alerta',
+                style:{ padding:'2px 6px', fontSize:13, lineHeight:1, background:'transparent', border:'none', color:'inherit', opacity:.6, cursor:'pointer', borderRadius:4 } }, '✕'),
+            ),
           )
         )
       ),
