@@ -1,7 +1,7 @@
 // Companies.js — Empresas licitantes
 import { h, useState, useRef } from '../lib/core.js';
 import { AIAnalyzerButton } from '../ui/AIAnalyzerButton.js';
-import { analyzeDocument } from '../lib/ai_analyzer.js';
+import { analyzeDocument, analyzeMultipleDocuments } from '../lib/ai_analyzer.js';
 import { EMPRESA_BASE_DOCS } from '../lib/constants.js';
 import { TODAY, uid, dlFile, fmtBytes } from '../lib/utils.js';
 import { Inp, EmptyState, DeleteConfirmModal, InfoModal } from '../ui/primitives.js';
@@ -70,21 +70,30 @@ export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user,
   const [parsing, setParsing] = useState(false);
   const [parseMsg, setParseMsg] = useState('');
   const [newSocio, setNewSocio] = useState({ nombre:'', porcentaje:'' });
-  const actaRef = useRef(null), csfRef = useRef(null);
+  const actaRef = useRef(null), csfRef = useRef(null), reformaRef = useRef(null);
+  const [actaFile, setActaFile] = useState(null);   // { name, file }
+  const [reformas, setReformas] = useState([]);       // [{ name, file }]
   const set = (k,v) => sC(p=>({...p,[k]:v}));
 
-  const getApiKey = () => (config?.ia?.openaiKey) || (window._lpConfig?.ia?.openaiKey) || '';
+  const addReforma = (file) => { if(file) setReformas(prev => [...prev, { name:file.name, file }]); };
+  const rmReforma  = (i) => setReformas(prev => prev.filter((_,j)=>j!==i));
 
-  const handleActa = async file => {
+  const analyzeActaYReformas = async () => {
     const apiKey = getApiKey();
-    if (!apiKey) { setParseMsg('Agrega tu API Key de Anthropic en Configuración → 🤖 Inteligencia Artificial para analizar documentos.'); return; }
-    setParsing(true); setParseMsg('🤖 Analizando acta constitutiva con Claude...');
+    if (!apiKey) { setParseMsg('Agrega tu API Key de Anthropic en Configuración → 🤖 Inteligencia Artificial.'); return; }
+    const files = [actaFile, ...reformas].filter(Boolean).map(x => x.file);
+    if (!files.length) { setParseMsg('Primero sube el acta constitutiva (y sus reformas si las tiene).'); return; }
+    setParsing(true);
+    setParseMsg('🤖 Analizando ' + files.length + ' documento(s) con Claude... ' + (files.length>1 ? 'Esto puede tardar un poco.' : ''));
     try {
-      const data = await analyzeDocument(file, 'empresa', apiKey);
-      applyAIData(data, 'Acta constitutiva');
+      const data = await analyzeMultipleDocuments(files, 'empresa', apiKey);
+      const label = files.length>1 ? ('Acta + ' + reformas.length + ' reforma(s)') : 'Acta constitutiva';
+      applyAIData(data, label);
     } catch(e){ setParseMsg('Error: '+e.message); }
     setParsing(false);
   };
+
+  const getApiKey = () => (config?.ia?.openaiKey) || (window._lpConfig?.ia?.openaiKey) || '';
 
   const applyAIData = (data, label) => {
     const map = {
@@ -132,11 +141,41 @@ export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user,
     ),
     h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:16 } },
       h('div', { className:'card' },
-        h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:8 } }, 'Cargar acta constitutiva (PDF)'),
-        h('div', { style:{ fontSize:12, color:'var(--t2)', marginBottom:12 } }, 'Detecta: notario, notaría, escritura, estado, socios.'),
-        h('div', { className:'drop', onClick:()=>actaRef.current&&actaRef.current.click(), onDragOver:e=>{e.preventDefault();e.currentTarget.classList.add('over');}, onDragLeave:e=>e.currentTarget.classList.remove('over'), onDrop:e=>{e.preventDefault();e.currentTarget.classList.remove('over');if(e.dataTransfer.files[0])handleActa(e.dataTransfer.files[0]);} },
-          h('input', { ref:actaRef, type:'file', accept:'.pdf', style:{ display:'none' }, onChange:e=>e.target.files[0]&&handleActa(e.target.files[0]) }),
-          h('div', { style:{ fontSize:12, color:'var(--t2)' } }, parsing?'Procesando...':'Arrastra el acta o haz clic'),
+        h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:4 } }, '📄 Acta constitutiva y reformas'),
+        h('div', { style:{ fontSize:11, color:'var(--t3)', marginBottom:12 } }, 'Sube el acta original y todas sus reformas. Claude usará los datos más recientes.'),
+
+        // Acta original
+        h('div', { style:{ fontSize:11, fontWeight:600, color:'var(--t2)', marginBottom:6 } }, 'Acta constitutiva original'),
+        actaFile
+          ? h('div', { style:{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', background:'var(--green-bg)', border:'1px solid var(--green-border)', borderRadius:'var(--r)', marginBottom:12 } },
+              h('span', { style:{ fontSize:13 } }, '📎'),
+              h('span', { style:{ fontSize:12, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, actaFile.name),
+              h('span', { onClick:()=>setActaFile(null), style:{ fontSize:12, color:'var(--red)', cursor:'pointer', padding:'0 4px' } }, '✕'),
+            )
+          : h('div', { className:'drop', style:{ marginBottom:12, padding:14 }, onClick:()=>actaRef.current&&actaRef.current.click(), onDragOver:e=>{e.preventDefault();e.currentTarget.classList.add('over');}, onDragLeave:e=>e.currentTarget.classList.remove('over'), onDrop:e=>{e.preventDefault();e.currentTarget.classList.remove('over');if(e.dataTransfer.files[0])setActaFile({name:e.dataTransfer.files[0].name,file:e.dataTransfer.files[0]});} },
+              h('input', { ref:actaRef, type:'file', accept:'.pdf', style:{ display:'none' }, onChange:e=>{ if(e.target.files[0])setActaFile({name:e.target.files[0].name,file:e.target.files[0]}); e.target.value=''; } }),
+              h('div', { style:{ fontSize:12, color:'var(--t2)' } }, 'Arrastra el acta o haz clic'),
+            ),
+
+        // Reformas
+        h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 } },
+          h('span', { style:{ fontSize:11, fontWeight:600, color:'var(--t2)' } }, 'Reformas', reformas.length>0?(' ('+reformas.length+')'):''),
+          h('button', { onClick:()=>reformaRef.current&&reformaRef.current.click(), style:{ fontSize:11, padding:'4px 10px', border:'1px dashed var(--b2)', borderRadius:'var(--r)', background:'transparent', color:'var(--blue)', cursor:'pointer' } }, '+ Agregar reforma'),
+        ),
+        h('input', { ref:reformaRef, type:'file', accept:'.pdf', style:{ display:'none' }, onChange:e=>{ if(e.target.files[0])addReforma(e.target.files[0]); e.target.value=''; } }),
+        reformas.length===0
+          ? h('div', { style:{ fontSize:11, color:'var(--t3)', padding:'6px 0', marginBottom:8 } }, 'Sin reformas. Agrégalas en orden cronológico (la más nueva al final).')
+          : h('div', { style:{ display:'flex', flexDirection:'column', gap:4, marginBottom:8 } },
+              reformas.map((r,i)=>h('div', { key:i, style:{ display:'flex', alignItems:'center', gap:6, padding:'6px 8px', background:'var(--bg2)', borderRadius:'var(--r)', border:'1px solid var(--b1)' } },
+                h('span', { style:{ fontSize:10, color:'var(--t3)', flexShrink:0 } }, (i+1)+'.'),
+                h('span', { style:{ fontSize:11, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, r.name),
+                h('span', { onClick:()=>rmReforma(i), style:{ fontSize:11, color:'var(--red)', cursor:'pointer', padding:'0 4px', flexShrink:0 } }, '✕'),
+              ))
+            ),
+
+        // Botón analizar todo
+        h('button', { onClick:analyzeActaYReformas, disabled:parsing||(!actaFile&&reformas.length===0), className:'bp', style:{ width:'100%', marginTop:4, opacity:(parsing||(!actaFile&&reformas.length===0))?.5:1 } },
+          parsing ? '⏳ Analizando...' : ('🤖 Analizar acta' + (reformas.length>0?(' + '+reformas.length+' reforma(s)'):'') + ' con Claude')
         ),
       ),
       h('div', { className:'card' },
