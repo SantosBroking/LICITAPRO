@@ -11,7 +11,7 @@
 
   <!-- Apple PWA -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="LicitaPro" />
   <link rel="apple-touch-icon" href="/icon-192.png" />
 
@@ -324,7 +324,8 @@
       background: var(--bg1);
       border-top: 1px solid var(--b1);
       z-index: 200;
-      padding: 6px 0 max(6px, env(safe-area-inset-bottom));
+      padding-top: 6px;
+      padding-bottom: max(6px, env(safe-area-inset-bottom));
     }
     .mobile-nav-inner {
       display: flex;
@@ -353,13 +354,15 @@
       display: none;
       position: fixed;
       top: 0; left: 0; right: 0;
-      height: 52px;
+      height: calc(52px + env(safe-area-inset-top));
+      padding-top: env(safe-area-inset-top);
       background: var(--bg1);
       border-bottom: 1px solid var(--b1);
       z-index: 150;
       align-items: center;
       justify-content: space-between;
-      padding: 0 16px;
+      padding-left: 16px;
+      padding-right: 16px;
     }
     .mobile-header-title {
       font-size: var(--text-md);
@@ -388,49 +391,52 @@
 
     /* ── Responsive ────────────────────────────────────────── */
     @media (max-width: 768px) {
+      /* Estructura */
       .sidebar { display: none; }
       .mobile-header { display: flex; }
       .mobile-nav { display: block; }
       .main-content {
         margin-left: 0;
         max-width: 100vw;
-        padding: 70px 16px 80px;
+        padding-top: calc(64px + env(safe-area-inset-top));
+        padding-left: 14px;
+        padding-right: 14px;
+        padding-bottom: calc(76px + env(safe-area-inset-bottom));
       }
-      .grid-5 { grid-template-columns: repeat(2, 1fr) !important; }
-      .grid-4 { grid-template-columns: repeat(2, 1fr) !important; }
-      .grid-3 { grid-template-columns: 1fr !important; }
-      .grid-2 { grid-template-columns: 1fr !important; }
-      .page-title { font-size: var(--text-lg); }
+
+      /* Grids: métricas en 2 columnas, el resto en 1 */
+      .grid-5, .grid-4 { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+      .grid-3, .grid-2 { grid-template-columns: 1fr !important; gap: 12px !important; }
+
+      /* Tipografía y títulos */
+      .page-title { font-size: 18px; }
       .hide-mobile { display: none !important; }
-      .card { padding: 14px 16px; }
-    }
 
-    @media (max-width: 480px) {
-      .grid-5 { grid-template-columns: repeat(2, 1fr) !important; }
-      .grid-4 { grid-template-columns: repeat(2, 1fr) !important; }
-    }
+      /* Cards y métricas compactas */
+      .card   { padding: 16px !important; border-radius: var(--rl) !important; }
+      .metric { padding: 13px 14px !important; border-radius: var(--rl) !important; }
 
-    /* Ocultar scrollbar de tabs en mobile */
-    @media (max-width: 768px) {
       /* Tabs */
       .tab-scroll::-webkit-scrollbar { display: none; }
-      button.tab { padding: 8px 10px; font-size: 12px; }
+      button.tab { padding: 8px 11px; font-size: 12px; }
 
-      /* Cards y métricas más compactas */
-      .metric { padding: 12px 14px !important; }
-      .card   { padding: 14px 16px !important; border-radius: var(--r) !important; }
-      .page-title { font-size: 17px; }
-
-      /* Ocultar botón nuevo en dashboard (ya está en el header móvil) */
+      /* Botón nuevo del dashboard oculto (ya hay + en el header) */
       .dash-new-btn { display: none !important; }
 
-      /* Tabla: scroll horizontal y texto más pequeño */
+      /* Tablas compactas con scroll horizontal */
       table { font-size: 12px !important; }
-      table td, table th { padding: 8px 5px !important; }
+      table td, table th { padding: 8px 6px !important; white-space: nowrap; }
 
-      /* Alertas: columna en mobile */
-      .alert-row { flex-direction: column !important; align-items: flex-start !important; gap: 2px !important; }
-      .alert-badge { align-self: flex-end; }
+      /* Alertas en columna */
+      .alert-row { flex-direction: column !important; align-items: flex-start !important; gap: 4px !important; }
+      .alert-badge { align-self: flex-start !important; }
+
+      /* Botones un poco más altos para tocar mejor */
+      button { padding: 9px 14px; }
+      button.tab { padding: 8px 11px; }
+
+      /* Inputs más cómodos al tocar */
+      input, select, textarea { padding: 10px 12px; font-size: 16px; }
     }
   </style>
 </head>
