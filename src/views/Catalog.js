@@ -28,7 +28,7 @@ function ProductForm({ prod, onSave, onCancel, existingCats }) {
   const doSave = () => {
     if (!p.nom.trim()) { alert('El nombre del producto es obligatorio'); return; }
     if (!cat.trim()) { alert('La categoría es obligatoria'); return; }
-    onSave({ ...p, cat, id: p.id || 'custom-' + uid('prd') });
+    onSave({ ...p, cat, id: p.id || ('custom-' + uid('prd')) });
   };
 
   return h('div', { className:'card', style:{ maxWidth:600 } },
@@ -91,7 +91,13 @@ function ProductForm({ prod, onSave, onCancel, existingCats }) {
 
 export default function CatalogView({ config, onSaveConfig }) {
   const customProds = config?.customProducts || [];
-  const allProds = [...CATALOG_PRODUCTS, ...customProds];
+  // Productos editados (mismos IDs que estáticos) sobreescriben el original
+  const overrides = {};
+  customProds.forEach(p => { if (CATALOG_PRODUCTS.find(x=>x.id===p.id)) overrides[p.id]=p; });
+  const allProds = [
+    ...CATALOG_PRODUCTS.map(p => overrides[p.id] || p),
+    ...customProds.filter(p => !CATALOG_PRODUCTS.find(x=>x.id===p.id)),
+  ];
   const cats = [...new Set(allProds.map(p => p.cat))];
 
   const [sel, setSel]       = useState(cats[0]);
@@ -104,10 +110,16 @@ export default function CatalogView({ config, onSaveConfig }) {
 
   const saveProduct = async (prod) => {
     const existing = customProds.find(x => x.id === prod.id);
-    const updated = existing
-      ? customProds.map(x => x.id === prod.id ? prod : x)
+    // Si es edición de producto estático (mismo ID), reemplazar en overrides
+    const isStaticEdit = !!CATALOG_PRODUCTS.find(x => x.id === prod.id);
+    const updated = existing || isStaticEdit
+      ? customProds.map(x => x.id === prod.id ? prod : x).concat(existing || isStaticEdit ? [] : [prod])
       : [...customProds, prod];
-    await onSaveConfig({ ...config, customProducts: updated });
+    // Asegurar que si es static edit y no existía en custom, se agregue
+    const finalUpdated = customProds.find(x=>x.id===prod.id)
+      ? customProds.map(x=>x.id===prod.id?prod:x)
+      : [...customProds, prod];
+    await onSaveConfig({ ...config, customProducts: finalUpdated });
     // Si es nueva categoría, actualizar la selección
     setSel(prod.cat);
     setForm(null);
@@ -140,9 +152,10 @@ export default function CatalogView({ config, onSaveConfig }) {
       prods.map(prod => {
         const isCustom = !!customProds.find(x => x.id === prod.id);
         return h('div', { key:prod.id, className:'card', style:{ position:'relative' } },
-          isCustom && h('div', { style:{ position:'absolute', top:10, right:10, display:'flex', gap:6 } },
-            h('button', { onClick:()=>setForm(prod), style:{ fontSize:11, padding:'3px 8px', color:'var(--blue)', background:'transparent', border:'.5px solid var(--blue-border)' } }, 'Editar'),
-            h('button', { onClick:()=>deleteProduct(prod.id), style:{ fontSize:11, padding:'3px 8px', color:'var(--red)', background:'transparent', border:'.5px solid #E24B4A55' } }, 'Eliminar'),
+          h('div', { style:{ position:'absolute', top:10, right:10, display:'flex', gap:6 } },
+            h('button', { onClick:()=>setForm({...prod, photo: prod.photo || CATALOG_IMAGES[prod.id] || ''}), style:{ fontSize:11, padding:'3px 8px', color:'var(--blue)', background:'transparent', border:'.5px solid var(--blue-border)', background:'var(--bg1)' } }, 'Editar'),
+            isCustom && CATALOG_PRODUCTS.find(x=>x.id===prod.id) && h('button', { onClick:()=>deleteProduct(prod.id), style:{ fontSize:11, padding:'3px 8px', color:'var(--t2)', background:'transparent', border:'.5px solid var(--b2)', background:'var(--bg1)' }, title:'Restaurar original' }, '↩ Restaurar'),
+            isCustom && !CATALOG_PRODUCTS.find(x=>x.id===prod.id) && h('button', { onClick:()=>deleteProduct(prod.id), style:{ fontSize:11, padding:'3px 8px', color:'var(--red)', background:'transparent', border:'.5px solid #E24B4A55' } }, 'Eliminar'),
           ),
           (prod.photo || CATALOG_IMAGES[prod.id]) && h('img', { src:prod.photo || CATALOG_IMAGES[prod.id], style:{ width:'100%', height:120, objectFit:'cover', borderRadius:'var(--r)', marginBottom:10, border:'1px solid var(--b1)' } }),
           h('div', { style:{ fontSize:13, fontWeight:500, marginBottom:3 } }, prod.nom),
@@ -153,7 +166,8 @@ export default function CatalogView({ config, onSaveConfig }) {
               prod.vis ? 'visible cliente' : 'uso interno'
             ),
             prod.price>0 && h('span', { style:{ fontSize:12, fontWeight:500, color:'var(--t1)' } }, '$'+prod.price.toLocaleString('es-MX')),
-            isCustom && h('span', { style:{ fontSize:10, padding:'2px 8px', borderRadius:10, background:'var(--purple-bg)', color:'var(--purple)' } }, '★ Personalizado'),
+            isCustom && !CATALOG_PRODUCTS.find(x=>x.id===prod.id) && h('span', { style:{ fontSize:10, padding:'2px 8px', borderRadius:10, background:'var(--purple-bg)', color:'var(--purple)' } }, '★ Personalizado'),
+            isCustom && CATALOG_PRODUCTS.find(x=>x.id===prod.id) && h('span', { style:{ fontSize:10, padding:'2px 8px', borderRadius:10, background:'var(--amber-bg)', color:'var(--amber)' } }, '✏ Editado'),
           ),
         );
       })
