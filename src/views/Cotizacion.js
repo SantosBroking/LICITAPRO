@@ -28,7 +28,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
     const yr=new Date().getFullYear();
     const makeP=(id,activo)=>({id,activo,tipo:'',marca:'',modelo:'',ano:yr,version:'',cantidad:0,costoMSMS:0,modoPrecio:'Utilidad deseada $',techo:0,utilidadDeseada:0,utilidadPct:0});
     return {
-      version:c.version||'V1', folio:c.folio||'', fechaCotizacion:c.fechaCotizacion||TODAY(), vigenciaDias:c.vigenciaDias||20,
+      version:c.version||'V1', folio:c.folio||'', municipio:c.municipio||'', fechaCotizacion:c.fechaCotizacion||TODAY(), vigenciaDias:c.vigenciaDias||20,
       condicionesComerciales:c.condicionesComerciales||'', agenciaProveedor:c.agenciaProveedor||'',
       pctIvaSat:c.pctIvaSat!=null?c.pctIvaSat:0.5, pctIvaUtil:c.pctIvaUtil!=null?c.pctIvaUtil:0.5,
       partidas:c.partidas||[makeP('P1',true),makeP('P2',false),makeP('P3',false),makeP('P4',false),makeP('P5',false)],
@@ -107,6 +107,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
       h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:12 } },
         h('div', null, h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:3 } }, 'Folio'), h('input', { value:cot.folio||'', onChange:e=>updCot({...cot,folio:e.target.value}), style:{ fontSize:12 } })),
         h('div', null, h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:3 } }, 'Agencia / Proveedor'), h('input', { value:cot.agenciaProveedor||'', onChange:e=>updCot({...cot,agenciaProveedor:e.target.value}), style:{ fontSize:12 }, placeholder:'Ej: Grupo Surman' })),
+        h('div', { style:{ gridColumn:'1/-1' } }, h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:3 } }, 'Municipio / Destinatario (aparece en el PDF como «Para»)'), h('input', { value:cot.municipio||'', onChange:e=>updCot({...cot,municipio:e.target.value}), style:{ fontSize:12 }, placeholder:'Ej: Tultitlán, Estado de México' })),
       ),
       h('div', { style:{ fontSize:12, color:'var(--t2)', marginBottom:10, background:'var(--bg2)', padding:'8px 12px', borderRadius:'var(--r)' } }, 'Una ', h('strong', null, 'partida'), ' = grupo de vehículos con el mismo equipamiento.'),
       cot.partidas.map(p=>h('div', { key:p.id, className:'card', style:{ marginBottom:8, borderLeft:p.activo?'3px solid var(--blue)':'3px solid transparent', opacity:p.activo?1:.5 } },

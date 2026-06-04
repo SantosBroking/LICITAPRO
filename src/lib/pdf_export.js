@@ -125,7 +125,7 @@ export function printCotizacionCliente({ project, cot, calc, config }) {
   <div><div class="label">Vigencia</div><div class="value">${cot.vigenciaDias||20} días naturales</div></div>
   <div>
     <div class="label">Para</div>
-    <div class="value">${[project.municipio, project.nivelGobierno].filter(Boolean).join(' · ') || '—'}</div>
+    <div class="value">${[cot.municipio||project.municipio, project.nivelGobierno].filter(Boolean).join(' · ') || '—'}</div>
   </div>
   <div>
     <div class="label">Dependencia / Área</div>
