@@ -1,6 +1,6 @@
 // Companies.js — Empresas licitantes
 import { h, useState, useRef } from '../lib/core.js';
-import { sendReminderEmail } from '../lib/email_reminders.js';
+import { sendReminderEmail, getRecipients } from '../lib/email_reminders.js';
 import { AIAnalyzerButton } from '../ui/AIAnalyzerButton.js';
 import { EMPRESA_BASE_DOCS } from '../lib/constants.js';
 import { TODAY, uid, dlFile, fmtBytes } from '../lib/utils.js';
@@ -178,8 +178,20 @@ export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user,
           h(Inp, { label:'Estado', value:c.estado||'', onChange:v=>set('estado',v) }),
         ),
         h(Inp, { label:'Situación en el padrón', value:c.situacion||'', onChange:v=>set('situacion',v), placeholder:'Activo' }),
-        h(Inp, { label:'Correo de información / contacto', value:c.correoInfo||'', onChange:v=>set('correoInfo',v), placeholder:'contacto@empresa.com', type:'email' }),
-        h(Inp, { label:'Correo de contabilidad / contador', value:c.correoContador||'', onChange:v=>set('correoContador',v), placeholder:'contador@empresa.com', type:'email', hint:'Recibirá recordatorios mensuales de documentos a renovar' }),
+        // Lista dinámica de correos para recordatorios
+        h('div', { style:{ marginBottom:14 } },
+          h('label', { style:{ display:'block', fontSize:12, color:'var(--t2)', marginBottom:5, fontWeight:500 } }, 'Correos para recordatorios mensuales'),
+          h('div', { style:{ fontSize:11, color:'var(--t3)', marginBottom:8 } }, 'Estos correos recibirán cada mes el recordatorio de actualizar CSF, opiniones y estado de cuenta.'),
+          h('div', { style:{ display:'flex', flexDirection:'column', gap:6, marginBottom:8 } },
+            (c.correosNotificacion||[]).map((email,i) =>
+              h('div', { key:i, style:{ display:'flex', gap:6, alignItems:'center' } },
+                h('input', { type:'email', value:email, onChange:e=>{ const arr=[...(c.correosNotificacion||[])]; arr[i]=e.target.value; set('correosNotificacion',arr); }, placeholder:'correo@empresa.com', style:{ flex:1 } }),
+                h('button', { onClick:()=>set('correosNotificacion',(c.correosNotificacion||[]).filter((_,j)=>j!==i)), style:{ padding:'6px 10px', color:'var(--red)', background:'transparent', border:'.5px solid #E24B4A55', borderRadius:'var(--r)', cursor:'pointer', flexShrink:0, fontSize:12 } }, '✕'),
+              )
+            ),
+          ),
+          h('button', { onClick:()=>set('correosNotificacion',[...(c.correosNotificacion||[]),'']), style:{ fontSize:12, padding:'6px 12px', border:'1px dashed var(--b2)', borderRadius:'var(--r)', background:'transparent', color:'var(--blue)', cursor:'pointer' } }, '+ Agregar correo'),
+        ),
       ),
       h('div', { className:'card' },
         h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:14 } }, 'Datos notariales'),
@@ -252,10 +264,10 @@ export default function Companies({ companies, setCompanies, projects, onSave, u
                   h('div', { style:{ fontSize:12, color:'var(--t2)' } }, c.rfc||'Sin RFC', ' · ', c.regimen||'Sin régimen'),
                 ),
                 h('div', { style:{ display:'flex', gap:6 }, onClick:e=>e.stopPropagation() },
-                c.correoContador && h('button', { onClick:async e=>{ e.stopPropagation();
+                getRecipients(c).length>0 && h('button', { onClick:async e=>{ e.stopPropagation();
                   try {
                     await sendReminderEmail(c, appConfig);
-                    alert('✅ Recordatorio enviado a ' + c.correoContador);
+                    alert('✅ Recordatorio enviado a: ' + getRecipients(c).join(', '));
                   } catch(err) { alert('Error: ' + err.message); }
                 }, style:{ fontSize:11, padding:'4px 10px', color:'var(--blue)', background:'transparent', border:'.5px solid var(--blue-border)' } }, '📧 Recordatorio'),
                 h('button', { onClick:e=>{ e.stopPropagation(); requestDelete(c); }, style:{ fontSize:11, padding:'4px 10px', color:'#E24B4A', background:'transparent', border:'.5px solid #E24B4A33' } }, '🗑 Eliminar'),
