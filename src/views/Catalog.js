@@ -3,6 +3,24 @@ import { h, useState, useRef } from '../lib/core.js';
 import { CATALOG_PRODUCTS } from '../lib/catalog.js';
 import { CATALOG_IMAGES } from '../lib/catalog_images.js';
 import { uid } from '../lib/utils.js';
+
+// Comprime imagen a máx 300px y calidad 50% para no saturar Supabase
+async function compressImage(dataURL, maxPx=300, quality=0.5) {
+  return new Promise(resolve => {
+    const img = new window.Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height, 1));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(c.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => resolve(dataURL);
+    img.src = dataURL;
+  });
+}
 import { Inp } from '../ui/primitives.js';
 
 const CATS_BASE = [...new Set(CATALOG_PRODUCTS.map(p => p.cat))];
@@ -18,7 +36,7 @@ function ProductForm({ prod, onSave, onCancel, existingCats }) {
     if (!file) return;
     if (file.size > 3*1024*1024) { alert('Imagen muy grande (máx. 3MB)'); return; }
     const r = new FileReader();
-    r.onload = e => { setPreview(e.target.result); set('photo', e.target.result); };
+    r.onload = async e => { const compressed = await compressImage(e.target.result); setPreview(compressed); set('photo', compressed); };
     r.readAsDataURL(file);
   };
 

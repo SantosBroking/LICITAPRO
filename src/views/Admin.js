@@ -104,6 +104,16 @@ export function Settings({ config, user, onSave }) {
       h('div', { style:{ marginTop:24, paddingTop:20, borderTop:'1px solid var(--b2)' } },
         h('div', { style:{ fontSize:13, fontWeight:600, marginBottom:12 } }, '🤖 Inteligencia Artificial'),
         h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:12 } }, 'API Key de Anthropic (Claude) para análisis automático de bases de licitación y documentos. Obtén tu key en console.anthropic.com'),
+        h('div', { style:{ marginBottom:14, padding:'10px 14px', background:'var(--amber-bg)', border:'1px solid var(--amber-border)', borderRadius:'var(--r)', fontSize:12 } },
+          h('div', { style:{ fontWeight:600, marginBottom:4 } }, '⚠ Recuperación: imágenes del catálogo'),
+          h('div', { style:{ color:'var(--t2)', marginBottom:8 } }, 'Si la app tarda mucho al cargar, las imágenes del catálogo pueden ser muy pesadas. Usa este botón para limpiarlas.'),
+          h('button', { onClick:async ()=>{
+            if (!confirm('¿Quitar las fotos del catálogo personalizado? Los productos quedan, solo se eliminan las fotos.')) return;
+            const cleaned = {...cfg, customProducts:(cfg.customProducts||[]).map(p=>({...p,photo:''}))};
+            try { await onSave(cleaned); alert('✅ Fotos limpiadas. Ya puedes volver a agregar fotos más pequeñas.'); }
+            catch(e) { alert('Error: '+e.message); }
+          }, style:{ fontSize:12, padding:'6px 14px', border:'1px solid var(--amber-border)', borderRadius:'var(--r)', background:'white', cursor:'pointer' } }, '🗑 Limpiar fotos del catálogo'),
+        ),
         h(Inp, { label:'Anthropic API Key', value:(cfg.ia||{}).openaiKey||'', type:'password', onChange:v=>setCfg(c=>({...c,ia:{...(c.ia||{}),openaiKey:v}})) }),
       h('div', { style:{ marginTop:24, paddingTop:20, borderTop:'1px solid var(--b1)' } },
         h('div', { style:{ fontSize:13, fontWeight:600, marginBottom:8 } }, '📧 Notificaciones por correo'),

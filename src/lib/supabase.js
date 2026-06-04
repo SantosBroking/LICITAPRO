@@ -48,18 +48,23 @@ export async function signOut() {
 
 // ── CRUD con Supabase ─────────────────────────────────────────
 export async function dbLoad(userId) {
-  const [proj, veh, comp, cfg, aud] = await Promise.all([
+  // Cargar config por separado para que un timeout no bloquee proyectos y empresas
+  const [proj, veh, comp, aud] = await Promise.all([
     sb.from('projects').select('data').eq('user_id', userId),
     sb.from('vehicles').select('data').eq('user_id', userId),
     sb.from('companies').select('data').eq('user_id', userId),
-    sb.from('config').select('data').eq('user_id', userId).maybeSingle(),
     sb.from('audit_log').select('data').eq('user_id', userId).order('created_at', { ascending: false }).limit(200),
   ]);
+  let cfgData = null;
+  try {
+    const cfg = await sb.from('config').select('data').eq('user_id', userId).maybeSingle();
+    cfgData = cfg.data?.data || null;
+  } catch(e) { console.warn('Config no disponible:', e.message); }
   return {
     projects:  (proj.data  || []).map(r => r.data),
     vehicles:  (veh.data   || []).map(r => r.data),
     companies: (comp.data  || []).map(r => r.data),
-    config:    cfg.data?.data || null,
+    config:    cfgData,
     audit:     (aud.data   || []).map(r => r.data),
   };
 }
