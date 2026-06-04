@@ -108,12 +108,15 @@ function ProductForm({ prod, onSave, onCancel, existingCats }) {
 }
 
 export default function CatalogView({ config, onSaveConfig }) {
-  const customProds = config?.customProducts || [];
+  const customProds   = config?.customProducts || [];
+  const hiddenProds   = config?.hiddenProducts  || [];
   // Productos editados (mismos IDs que estáticos) sobreescriben el original
   const overrides = {};
   customProds.forEach(p => { if (CATALOG_PRODUCTS.find(x=>x.id===p.id)) overrides[p.id]=p; });
   const allProds = [
-    ...CATALOG_PRODUCTS.map(p => overrides[p.id] || p),
+    ...CATALOG_PRODUCTS
+      .filter(p => !hiddenProds.includes(p.id))
+      .map(p => overrides[p.id] || p),
     ...customProds.filter(p => !CATALOG_PRODUCTS.find(x=>x.id===p.id)),
   ];
   const cats = [...new Set(allProds.map(p => p.cat))];
@@ -144,8 +147,27 @@ export default function CatalogView({ config, onSaveConfig }) {
   };
 
   const deleteProduct = async (id) => {
-    if (!confirm('¿Eliminar este producto del catálogo?')) return;
-    await onSaveConfig({ ...config, customProducts: customProds.filter(x => x.id !== id) });
+    const isStatic = !!CATALOG_PRODUCTS.find(x => x.id === id);
+    const msg = isStatic
+      ? '¿Ocultar este producto del catálogo? (puedes restaurarlo desde el botón ↩)'
+      : '¿Eliminar este producto personalizado? Esta acción no se puede deshacer.';
+    if (!confirm(msg)) return;
+    if (isStatic) {
+      // Ocultar producto estático
+      await onSaveConfig({ ...config, hiddenProducts: [...hiddenProds, id] });
+    } else {
+      // Eliminar producto personalizado
+      await onSaveConfig({ ...config, customProducts: customProds.filter(x => x.id !== id) });
+    }
+  };
+
+  const restoreProduct = async (id) => {
+    // Restaurar a versión original (quitar de customProds y de hiddenProds)
+    await onSaveConfig({
+      ...config,
+      customProducts: customProds.filter(x => x.id !== id),
+      hiddenProducts: hiddenProds.filter(x => x !== id),
+    });
   };
 
   if (form) {
@@ -163,6 +185,11 @@ export default function CatalogView({ config, onSaveConfig }) {
       h('button', { className:'bp', onClick:()=>setForm('new') }, '+ Agregar producto'),
     ),
     h('input', { value:search, onChange:e=>setSearch(e.target.value), placeholder:'Buscar producto...', style:{ maxWidth:240, marginBottom:16, display:'block' } }),
+    hiddenProds.length > 0 && h('div', { style:{ marginBottom:12, padding:'8px 12px', background:'var(--amber-bg)', border:'1px solid var(--amber-border)', borderRadius:'var(--r)', fontSize:12, display:'flex', alignItems:'center', gap:10 } },
+      h('span', null, '👁 '+hiddenProds.length+' producto(s) oculto(s) en esta categoría no aparecen.'),
+      h('button', { onClick:async()=>{ if(confirm('¿Restaurar todos los productos ocultos?')) await onSaveConfig({...config, hiddenProducts:[]}); },
+        style:{ fontSize:11, padding:'4px 10px', border:'1px solid var(--amber-border)', borderRadius:'var(--r)', background:'white', cursor:'pointer' } }, 'Mostrar todos'),
+    ),
     h('div', { style:{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:14 } },
       cats.map(c => h('button', { key:c, className:sel===c?'bp':'', onClick:()=>{ setSel(c); setSearch(''); }, style:{ fontSize:12, padding:'5px 12px' } }, c))
     ),
@@ -170,10 +197,14 @@ export default function CatalogView({ config, onSaveConfig }) {
       prods.map(prod => {
         const isCustom = !!customProds.find(x => x.id === prod.id);
         return h('div', { key:prod.id, className:'card', style:{ position:'relative' } },
-          h('div', { style:{ position:'absolute', top:10, right:10, display:'flex', gap:6 } },
-            h('button', { onClick:()=>setForm({...prod, photo: prod.photo || CATALOG_IMAGES[prod.id] || ''}), style:{ fontSize:11, padding:'3px 8px', color:'var(--blue)', background:'transparent', border:'.5px solid var(--blue-border)', background:'var(--bg1)' } }, 'Editar'),
-            isCustom && CATALOG_PRODUCTS.find(x=>x.id===prod.id) && h('button', { onClick:()=>deleteProduct(prod.id), style:{ fontSize:11, padding:'3px 8px', color:'var(--t2)', background:'transparent', border:'.5px solid var(--b2)', background:'var(--bg1)' }, title:'Restaurar original' }, '↩ Restaurar'),
-            isCustom && !CATALOG_PRODUCTS.find(x=>x.id===prod.id) && h('button', { onClick:()=>deleteProduct(prod.id), style:{ fontSize:11, padding:'3px 8px', color:'var(--red)', background:'transparent', border:'.5px solid #E24B4A55' } }, 'Eliminar'),
+          h('div', { style:{ position:'absolute', top:8, right:8, display:'flex', gap:4 } },
+            h('button', { onClick:()=>setForm({...prod, photo: prod.photo || CATALOG_IMAGES[prod.id] || ''}),
+              style:{ fontSize:11, padding:'4px 10px', color:'var(--blue)', background:'var(--bg1)', border:'1px solid var(--blue-border)', borderRadius:'var(--r)', cursor:'pointer' } }, '✏ Editar'),
+            isCustom && CATALOG_PRODUCTS.find(x=>x.id===prod.id)
+              ? h('button', { onClick:()=>restoreProduct(prod.id),
+                  style:{ fontSize:11, padding:'4px 10px', color:'var(--t2)', background:'var(--bg1)', border:'1px solid var(--b2)', borderRadius:'var(--r)', cursor:'pointer' } }, '↩ Restaurar')
+              : h('button', { onClick:()=>deleteProduct(prod.id),
+                  style:{ fontSize:11, padding:'4px 10px', color:'var(--red)', background:'var(--bg1)', border:'1px solid #E24B4A55', borderRadius:'var(--r)', cursor:'pointer' } }, '🗑 Borrar'),
           ),
           (prod.photo || CATALOG_IMAGES[prod.id]) && h('img', { src:prod.photo || CATALOG_IMAGES[prod.id], style:{ width:'100%', height:120, objectFit:'cover', borderRadius:'var(--r)', marginBottom:10, border:'1px solid var(--b1)' } }),
           h('div', { style:{ fontSize:13, fontWeight:500, marginBottom:3 } }, prod.nom),
