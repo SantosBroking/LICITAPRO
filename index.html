@@ -406,17 +406,31 @@
     }
 
     @media (max-width: 480px) {
-      .grid-5 { grid-template-columns: 1fr !important; }
-      .grid-4 { grid-template-columns: 1fr !important; }
+      .grid-5 { grid-template-columns: repeat(2, 1fr) !important; }
+      .grid-4 { grid-template-columns: repeat(2, 1fr) !important; }
     }
 
     /* Ocultar scrollbar de tabs en mobile */
     @media (max-width: 768px) {
+      /* Tabs */
       .tab-scroll::-webkit-scrollbar { display: none; }
-      .metric { padding: 12px 14px; }
-      .card { padding: 14px 16px; border-radius: var(--r); }
       button.tab { padding: 8px 10px; font-size: 12px; }
+
+      /* Cards y métricas más compactas */
+      .metric { padding: 12px 14px !important; }
+      .card   { padding: 14px 16px !important; border-radius: var(--r) !important; }
       .page-title { font-size: 17px; }
+
+      /* Ocultar botón nuevo en dashboard (ya está en el header móvil) */
+      .dash-new-btn { display: none !important; }
+
+      /* Tabla: scroll horizontal y texto más pequeño */
+      table { font-size: 12px !important; }
+      table td, table th { padding: 8px 5px !important; }
+
+      /* Alertas: columna en mobile */
+      .alert-row { flex-direction: column !important; align-items: flex-start !important; gap: 2px !important; }
+      .alert-badge { align-self: flex-end; }
     }
   </style>
 </head>

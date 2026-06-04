@@ -34,7 +34,7 @@ export default function Dashboard({ projects, vehicles, companies, onNav }) {
   return h('div', null,
     h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 } },
       h('div', { className:'page-title' }, 'Panel de control'),
-      h('button', { className:'bp', onClick:()=>onNav('project_new') }, '+ Nuevo proyecto'),
+      h('button', { className:'bp dash-new-btn', onClick:()=>onNav('project_new') }, '+ Nuevo proyecto'),
     ),
     h('div', { className:'grid-5', style:{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:12, marginBottom:20 } },
       h(Metric, { label:'Pipeline activo', value:fmt(pipeline), sub:ac.length+' proyectos' }),
@@ -47,10 +47,10 @@ export default function Dashboard({ projects, vehicles, companies, onNav }) {
       h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:12 } }, '⚠ Alertas y vencimientos próximos'),
       h('div', { style:{ display:'flex', flexDirection:'column', gap:6 } },
         upcomingAlerts.slice(0,8).map((a,i) =>
-          h('div', { key:i, onClick:()=>onNav('project_detail',a.project.id), className:a.level==='r'?'alert-r':'alert-y',
-            style:{ padding:'8px 12px', borderRadius:'var(--r)', fontSize:12, cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center' } },
-            h('div', null, h('strong', null, a.project.name), ' — ', a.label, ': ', a.date),
-            h('div', { style:{ fontWeight:500 } }, a.days<0?'Vencido hace '+(-a.days)+'d':a.days===0?'HOY':'En '+a.days+'d'),
+          h('div', { key:i, onClick:()=>onNav('project_detail',a.project.id), className:(a.level==='r'?'alert-r':'alert-y')+' alert-row',
+            style:{ padding:'8px 12px', borderRadius:'var(--r)', fontSize:12, cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 } },
+            h('div', { style:{ flex:1, minWidth:0 } }, h('strong', null, a.project.name), ' — ', a.label, ': ', a.date),
+            h('div', { className:'alert-badge', style:{ fontWeight:600, flexShrink:0, fontSize:11, padding:'2px 8px', borderRadius:8, background:'rgba(0,0,0,.06)' } }, a.days<0?'Vencido hace '+(-a.days)+'d':a.days===0?'HOY':'En '+a.days+'d'),
           )
         )
       ),
