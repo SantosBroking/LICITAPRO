@@ -1,5 +1,5 @@
 // Dashboard.js — Panel principal con KPIs y alertas
-import { h, useMemo } from '../lib/core.js';
+import { h, useMemo, useState } from '../lib/core.js';
 import { STATUSES, FINAL_STATUS } from '../lib/constants.js';
 import { fmt, fmtNum, daysUntil, alertLevel } from '../lib/utils.js';
 import { Metric, Badge, AlertChip, EmptyState } from '../ui/primitives.js';
@@ -23,17 +23,21 @@ export default function Dashboard({ projects, vehicles, companies, onNav, onUpda
         if (lvl) upcomingAlerts.push({ label, date, level:lvl, days:daysUntil(date), project:p });
       });
   });
-  const filtered = upcomingAlerts.filter(a => {
-    const key = a.label + '|' + a.date;
-    return !(a.project.alertasDismissed || []).includes(key);
+  const [dismissed, setDismissed] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('lp_dismissed_alerts') || '[]'); } catch { return []; }
   });
 
   const dismissAlert = (a) => {
-    if (!onUpdate) return;
-    const key = a.label + '|' + a.date;
-    const dismissed = [...(a.project.alertasDismissed || []), key];
-    onUpdate({ ...a.project, alertasDismissed: dismissed });
+    const key = a.project.id + '|' + a.label + '|' + a.date;
+    const next = [...dismissed, key];
+    setDismissed(next);
+    localStorage.setItem('lp_dismissed_alerts', JSON.stringify(next));
   };
+
+  const filtered = upcomingAlerts.filter(a => {
+    const key = a.project.id + '|' + a.label + '|' + a.date;
+    return !dismissed.includes(key);
+  });
 
   if (projects.length === 0)
     return h('div', null,
