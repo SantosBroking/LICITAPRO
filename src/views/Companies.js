@@ -23,10 +23,34 @@ export function EmpresaDocsCard({ company, onUpdate }) {
 
   // Reformas (almacenamiento dinámico, sin análisis)
   const reformas = company.reformas || [];
+  const fileToB64 = (file) => new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file);});
+
   const addReforma = async (file) => {
+    // Si es ZIP, descomprimir y guardar todos los PDFs de adentro
+    const esZip = file.name.toLowerCase().endsWith('.zip') || file.type==='application/zip' || file.type==='application/x-zip-compressed';
+    if (esZip) {
+      if (!window.JSZip) { alert('No se pudo cargar el lector de ZIP. Recarga la página.'); return; }
+      try {
+        const zip = await window.JSZip.loadAsync(file);
+        const pdfEntries = Object.values(zip.files).filter(f => !f.dir && f.name.toLowerCase().endsWith('.pdf') && !f.name.startsWith('__MACOSX'));
+        if (!pdfEntries.length) { alert('El ZIP no contiene PDFs.'); return; }
+        const nuevas = [];
+        for (const entry of pdfEntries) {
+          const blob = await entry.async('blob');
+          if (blob.size > 10*1024*1024) { alert('Omitido (muy grande, máx 10MB): ' + entry.name); continue; }
+          const fileData = await fileToB64(blob);
+          const nombre = entry.name.split('/').pop();
+          nuevas.push({ id:'ref-'+Date.now()+'-'+Math.random().toString(36).slice(2,7), name:nombre, fileData, fileSize:blob.size, uploadDate:TODAY() });
+        }
+        if (nuevas.length) onUpdate({...company, reformas:[...reformas, ...nuevas]});
+        alert('Se agregaron ' + nuevas.length + ' PDF(s) del ZIP.');
+      } catch(e) { alert('Error al leer el ZIP: ' + e.message); }
+      return;
+    }
+    // PDF individual
     if (file.size>10*1024*1024){alert('Archivo muy grande (máx. 10MB). Comprime el PDF.');return;}
     let fileData=null;
-    try{ fileData=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file);}); }catch(e){ alert('Error: '+e.message); return; }
+    try{ fileData=await fileToB64(file); }catch(e){ alert('Error: '+e.message); return; }
     const nueva={ id:'ref-'+Date.now(), name:file.name, fileData, fileSize:file.size, uploadDate:TODAY() };
     onUpdate({...company, reformas:[...reformas, nueva]});
   };
@@ -60,10 +84,10 @@ export function EmpresaDocsCard({ company, onUpdate }) {
       h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 } },
         h('div', null,
           h('div', { style:{ fontSize:13, fontWeight:500 } }, 'Reformas del acta', reformas.length>0?(' ('+reformas.length+')'):''),
-          h('div', { style:{ fontSize:11, color:'var(--t2)' } }, 'Guarda cada reforma posterior al acta constitutiva.'),
+          h('div', { style:{ fontSize:11, color:'var(--t2)' } }, 'Sube PDFs individuales o un ZIP con varias reformas adentro.'),
         ),
-        h('label', { style:{ fontSize:11, padding:'5px 12px', background:'var(--t1)', color:'var(--bg1)', borderRadius:'var(--r)', cursor:'pointer', fontWeight:500, flexShrink:0 } }, '+ Subir reforma',
-          h('input', { type:'file', accept:'.pdf', style:{ display:'none' }, onChange:e=>{ if(e.target.files[0])addReforma(e.target.files[0]); e.target.value=''; } })
+        h('label', { style:{ fontSize:11, padding:'5px 12px', background:'var(--t1)', color:'var(--bg1)', borderRadius:'var(--r)', cursor:'pointer', fontWeight:500, flexShrink:0 } }, '+ Subir PDF o ZIP',
+          h('input', { type:'file', accept:'.pdf,.zip', style:{ display:'none' }, onChange:e=>{ if(e.target.files[0])addReforma(e.target.files[0]); e.target.value=''; } })
         ),
       ),
       reformas.length>0 && h('div', { style:{ display:'flex', flexDirection:'column', gap:6 } },
