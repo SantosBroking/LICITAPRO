@@ -55,18 +55,22 @@ export async function dbLoad(userId) {
     sb.from('companies').select('data').eq('user_id', userId),
     sb.from('audit_log').select('data').eq('user_id', userId).order('created_at', { ascending: false }).limit(200),
   ]);
-  const get = (r) => r.status === 'fulfilled' ? (r.value?.data || []) : [];
+  const get = (r, name) => {
+    if (r.status === 'rejected') { console.error(name+' RECHAZADO:', r.reason); return []; }
+    if (r.value?.error) { console.error(name+' ERROR:', r.value.error); return []; }
+    return r.value?.data || [];
+  };
   let cfgData = null;
   try {
     const cfg = await sb.from('config').select('data').eq('user_id', userId).maybeSingle();
     cfgData = cfg.data?.data || null;
   } catch(e) { console.warn('Config timeout:', e.message); }
   return {
-    projects:  get(proj).map(r => r.data),
-    vehicles:  get(veh).map(r => r.data),
-    companies: get(comp).map(r => r.data),
+    projects:  get(proj,'projects').map(r => r.data),
+    vehicles:  get(veh,'vehicles').map(r => r.data),
+    companies: get(comp,'companies').map(r => r.data),
     config:    cfgData,
-    audit:     get(aud).map(r => r.data),
+    audit:     get(aud,'audit').map(r => r.data),
   };
 }
 

@@ -42,6 +42,19 @@ export default function App() {
   const MOBILE_NAV = NAV_ITEMS.slice(0, 5);
   const getUID = () => user?.id || JSON.parse(localStorage.getItem("lp_user")||"null")?.id || "31daca2f-17ff-4ce1-83ca-99e2b31094b7";
 
+  const reloadData = async () => {
+    const uid = getUID();
+    try {
+      const d = await dbLoad(uid);
+      console.log('reloadData result:', {projects: d.projects?.length, companies: d.companies?.length});
+      setProjects(d.projects || []);
+      setVehicles(d.vehicles || []);
+      setCompanies(d.companies || []);
+      if (d.config) { setConfig(d.config); window._lpConfig = d.config; }
+    } catch(e) { console.error('reloadData error:', e); alert('Error al recargar: ' + e.message); }
+  };
+  window.__reloadData = reloadData;
+
   useEffect(() => {
     const loadData = async (u) => {
       try {
