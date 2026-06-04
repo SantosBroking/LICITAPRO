@@ -1,5 +1,6 @@
 // Companies.js — Empresas licitantes
 import { h, useState, useRef } from '../lib/core.js';
+import { sendReminderEmail } from '../lib/email_reminders.js';
 import { AIAnalyzerButton } from '../ui/AIAnalyzerButton.js';
 import { EMPRESA_BASE_DOCS } from '../lib/constants.js';
 import { TODAY, uid, dlFile, fmtBytes } from '../lib/utils.js';
@@ -217,7 +218,7 @@ export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user,
   );
 }
 
-export default function Companies({ companies, setCompanies, projects, onSave, user, logFn, config }) {
+export default function Companies({ companies, setCompanies, projects, onSave, user, logFn, config, appConfig }) {
   const [sel, setSel]             = useState(null);
   const [deleteState, setDeleteState] = useState(null);
   const requestDelete = c => setDeleteState({ company:c, relatedProjects:projects.filter(p=>p.company===c.name) });
@@ -250,7 +251,15 @@ export default function Companies({ companies, setCompanies, projects, onSave, u
                   h('div', { style:{ fontSize:15, fontWeight:500, marginBottom:2, overflow:'hidden', textOverflow:'ellipsis' } }, c.name||'(Sin nombre)'),
                   h('div', { style:{ fontSize:12, color:'var(--t2)' } }, c.rfc||'Sin RFC', ' · ', c.regimen||'Sin régimen'),
                 ),
-                h('button', { onClick:e=>{ e.stopPropagation(); requestDelete(c); }, style:{ flexShrink:0, fontSize:11, padding:'4px 10px', color:'#E24B4A', background:'transparent', border:'.5px solid #E24B4A33' } }, '🗑 Eliminar'),
+                h('div', { style:{ display:'flex', gap:6 }, onClick:e=>e.stopPropagation() },
+                c.correoContador && h('button', { onClick:async e=>{ e.stopPropagation();
+                  try {
+                    await sendReminderEmail(c, appConfig);
+                    alert('✅ Recordatorio enviado a ' + c.correoContador);
+                  } catch(err) { alert('Error: ' + err.message); }
+                }, style:{ fontSize:11, padding:'4px 10px', color:'var(--blue)', background:'transparent', border:'.5px solid var(--blue-border)' } }, '📧 Recordatorio'),
+                h('button', { onClick:e=>{ e.stopPropagation(); requestDelete(c); }, style:{ fontSize:11, padding:'4px 10px', color:'#E24B4A', background:'transparent', border:'.5px solid #E24B4A33' } }, '🗑 Eliminar'),
+              ),
               ),
               h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', fontSize:12 } },
                 [['Notario',c.notario],['Notaría',c.notaria],['Escritura',c.escritura],['Estado',c.estado]].map(([l,v],i) =>

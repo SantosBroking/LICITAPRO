@@ -3,6 +3,7 @@ import { h, useState, useEffect, useRef, useCallback } from './lib/core.js';
 import { DEFAULT_CONFIG } from './lib/constants.js';
 import { sb, authSb, signOut, dbLoad, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveAuditLog } from './lib/supabase.js';
 import { uid, NOW } from './lib/utils.js';
+import { sendMonthlyReminders, shouldSendMonthlyReminder, currentMonthKey } from './lib/email_reminders.js';
 
 import AuthScreen  from './views/Auth.js';
 import Dashboard   from './views/Dashboard.js';
@@ -49,7 +50,25 @@ export default function App() {
         setVehicles(d.vehicles || []);
         setCompanies(d.companies || []);
         setAudit(d.audit || []);
-        if (d.config) { setConfig(d.config); window._lpConfig = d.config; }
+        if (d.config) { setConfig(d.config); window._lpConfig = d.config;
+          // Auto-envío mensual si es día 1 y no se envió este mes
+          const cfg = d.config;
+          if (cfg?.notif?.resendKey && shouldSendMonthlyReminder(cfg?.notif?.lastReminderSent)) {
+            const comps = (d.companies || []);
+            const withEmail = comps.filter(c => c.correoContador);
+            if (withEmail.length > 0) {
+              sendMonthlyReminders(comps, cfg)
+                .then(async r => {
+                  if (r.sent.length > 0) {
+                    const newCfg = { ...cfg, notif: { ...cfg.notif, lastReminderSent: currentMonthKey() } };
+                    try { await saveConfig(newCfg, '31daca2f-17ff-4ce1-83ca-99e2b31094b7'); } catch(e){}
+                    console.log('Recordatorios enviados:', r.sent);
+                  }
+                })
+                .catch(e => console.error('Error recordatorios:', e));
+            }
+          }
+        }
       } catch(e) { console.error('Error cargando datos:', e); }
     };
 
@@ -174,7 +193,7 @@ export default function App() {
     projects:       h(ProjectsList,  { projects, vehicles, onNav:nav }),
     project_new:    h(ProjectForm,   { companies, config, onSave:handleSaveProject, onCancel:()=>nav('projects') }),
     project_detail: projDetailView,
-    companies:      h(Companies,     { companies, setCompanies, projects, config, onSave:async c=>{ const ex=companies.find(x=>x.id===c.id); setCompanies(ex?companies.map(x=>x.id===c.id?c:x):[...companies,c]); try{ await saveCompany(c, getUID()); log(user, ex?'actualizó':'creó', 'empresa', c.id, c.name); }catch(e){ console.error('Error guardando empresa:', e); } }, user, logFn:log }),
+    companies:      h(Companies,     { companies, setCompanies, projects, config, appConfig:config, onSave:async c=>{ const ex=companies.find(x=>x.id===c.id); setCompanies(ex?companies.map(x=>x.id===c.id?c:x):[...companies,c]); try{ await saveCompany(c, getUID()); log(user, ex?'actualizó':'creó', 'empresa', c.id, c.name); }catch(e){ console.error('Error guardando empresa:', e); } }, user, logFn:log }),
     catalog:        h(CatalogView, { config, onSaveConfig:handleSaveConfig }),
     reports:        h(Reports,       { projects, vehicles, companies, audit }),
     settings:       h(Settings,      { config, user, onSave:handleSaveConfig }),
