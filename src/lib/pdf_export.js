@@ -10,8 +10,9 @@ const IVA = 0.16;
 // ── Estilos base compartidos ──────────────────────────────────
 const BASE_CSS = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  @page { size: A4 portrait; margin: 20mm 18mm; }
-  body { font-family: Arial, sans-serif; font-size: 10px; color: #1a1917; background: white; padding: 24px 32px; max-width: 900px; margin: 0 auto; }
+  @page { size: A4 portrait; margin: 8mm 12mm; }
+  @page { @top-center { content: none; } @bottom-center { content: none; } }
+  body { font-family: Arial, sans-serif; font-size: 10px; color: #1a1917; background: white; padding: 16px 24px; max-width: 900px; margin: 0 auto; }
   h1 { font-size: 18px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
   h2 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
   table { width: 100%; border-collapse: collapse; margin-bottom: 20px; table-layout: fixed; }
@@ -41,11 +42,12 @@ const BASE_CSS = `
   @media print { body { padding: 8px 16px; } .no-print { display: none !important; } }
 `;
 
-function openPrint(html) {
+function openPrint(html, title) {
   const w = window.open('', '_blank');
   if (!w) { alert('Permite ventanas emergentes para imprimir'); return; }
   w.document.write(html);
   w.document.close();
+  if (title) w.document.title = title;
   setTimeout(() => w.print(), 600);
 }
 
@@ -121,9 +123,16 @@ export function printCotizacionCliente({ project, cot, calc, config }) {
 <div class="cot-meta">
   <div><div class="label">Fecha</div><div class="value">${fmtDate(cot.fechaCotizacion)}</div></div>
   <div><div class="label">Vigencia</div><div class="value">${cot.vigenciaDias||20} días naturales</div></div>
-  <div><div class="label">Cliente / Dependencia</div><div class="value">${project.dependencia||'—'}</div></div>
+  <div>
+    <div class="label">Para</div>
+    <div class="value">${[project.municipio, project.nivelGobierno].filter(Boolean).join(' · ') || '—'}</div>
+  </div>
+  <div>
+    <div class="label">Dependencia / Área</div>
+    <div class="value">${project.dependencia||'—'}</div>
+  </div>
   <div><div class="label">Proyecto</div><div class="value">${project.name||'—'}</div></div>
-  ${project.ubicacion?`<div><div class="label">Ubicación</div><div class="value">${project.ubicacion}</div></div>`:''}
+  ${project.ubicacion&&!project.municipio?`<div><div class="label">Ubicación</div><div class="value">${project.ubicacion}</div></div>`:''}
   ${cot.condicionesComerciales?`<div style="grid-column:1/-1"><div class="label">Condiciones</div><div class="value">${cot.condicionesComerciales}</div></div>`:''}
 </div>
 

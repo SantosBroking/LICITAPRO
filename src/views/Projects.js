@@ -99,7 +99,7 @@ export function ProjectsList({ projects, vehicles, onNav }) {
 
 export function ProjectForm({ project, companies, config, onSave, onCancel }) {
   const isE = !!project;
-  const [p, sP] = useState(project || { id:uid('proj'), name:'', dependencia:'', nivelGobierno:'', company:'', numLicitacion:'', status:'prospecto', tipoProcedimiento:'', productType:'Patrullas y vehículos', responsable:'', montoEstimado:0, probability:50, description:'', observaciones:'', fechaPublicacion:'', fechaAclaraciones:'', fechaPropuesta:'', fechaFallo:'', fechaContrato:'', notes:[], activity:[], preguntas:[], docs:[], preparation:{}, cotizacion:{} });
+  const [p, sP] = useState(project || { id:uid('proj'), name:'', dependencia:'', nivelGobierno:'', municipio:'', company:'', numLicitacion:'', status:'prospecto', tipoProcedimiento:'', productType:'Patrullas y vehículos', responsable:'', montoEstimado:0, probability:50, description:'', observaciones:'', fechaPublicacion:'', fechaAclaraciones:'', fechaPropuesta:'', fechaFallo:'', fechaContrato:'', notes:[], activity:[], preguntas:[], docs:[], preparation:{}, cotizacion:{} });
   const set = (k,v) => sP(prev=>({...prev,[k]:v}));
   const [basesMsg, setBasesMsg] = useState('');
   const handleBasesForm = (data) => {
@@ -109,6 +109,8 @@ export function ProjectForm({ project, companies, config, onSave, onCancel }) {
       ...(data.numeroLicitacion       && { numLicitacion:      data.numeroLicitacion }),
       ...(data.dependencia            && { dependencia:        data.dependencia }),
       ...(data.nivelGobierno          && { nivelGobierno:      data.nivelGobierno }),
+      ...(data.ubicacion             && { municipio:          data.ubicacion }),
+      ...(data.ubicacion             && { ubicacion:           data.ubicacion }),
       ...(data.tipoProcedimiento      && { tipoProcedimiento:  data.tipoProcedimiento }),
       ...(data.tipoProducto           && { productType:        data.tipoProducto }),
       ...(data.objetoLicitacion       && { description:        data.descripcion || data.objetoLicitacion }),
@@ -152,6 +154,7 @@ export function ProjectForm({ project, companies, config, onSave, onCancel }) {
         h(Inp, { label:'Nombre del proyecto *', value:p.name, onChange:v=>set('name',v), placeholder:'Equipamiento patrullas SSP' }),
         h(Inp, { label:'Nivel de gobierno', value:p.nivelGobierno, onChange:v=>set('nivelGobierno',v), options:[...DEPENDENCIAS_COMUNES,...(config?.customStatuses||[])] }),
         h(Inp, { label:'Dependencia (nombre)', value:p.dependencia, onChange:v=>set('dependencia',v), placeholder:'Dirección de Desarrollo Urbano…' }),
+        h(Inp, { label:'Municipio / Ciudad', value:p.municipio||'', onChange:v=>set('municipio',v), placeholder:'Tultitlán, Tlalnepantla…' }),
         h(Inp, { label:'Empresa licitante', value:p.company, onChange:v=>set('company',v), options:companies.map(c=>c.name) }),
         h(Inp, { label:'Núm. de licitación', value:p.numLicitacion, onChange:v=>set('numLicitacion',v), placeholder:'LA-019GYN999-E1-2025' }),
         h(Inp, { label:'Responsable', value:p.responsable, onChange:v=>set('responsable',v) }),
@@ -220,6 +223,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onUpdate, 
     if (data.numeroLicitacion)        upd.numLicitacion     = data.numeroLicitacion;
     if (data.dependencia)             upd.dependencia       = data.dependencia;
     if (data.nivelGobierno)           upd.nivelGobierno     = data.nivelGobierno;
+    if (data.ubicacion)               upd.municipio         = data.ubicacion;
     if (data.tipoProcedimiento)       upd.tipoProcedimiento = data.tipoProcedimiento;
     if (data.tipoProducto)            upd.productType       = data.tipoProducto;
     if (data.objetoLicitacion || data.descripcion) upd.description = data.descripcion || data.objetoLicitacion;
@@ -298,7 +302,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onUpdate, 
       h('div', { className:'grid-2 mob-1col', style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 } },
       h('div', { className:'card' },
         h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:14 } }, 'Datos del proyecto'),
-        [['Nivel de gobierno',project.nivelGobierno],['Dependencia',project.dependencia],['Tipo procedimiento',project.tipoProcedimiento],['Tipo producto',project.productType],['Empresa',project.company],['Responsable',project.responsable]].map(([l,v],i)=>
+        [['Nivel de gobierno',project.nivelGobierno],['Municipio',project.municipio],['Dependencia',project.dependencia],['Tipo procedimiento',project.tipoProcedimiento],['Tipo producto',project.productType],['Empresa',project.company],['Responsable',project.responsable]].map(([l,v],i)=>
           h('div', { key:i, style:{ display:'flex', justifyContent:'space-between', padding:'9px 0', borderBottom:'.5px solid var(--b3)', fontSize:13 } },
             h('span', { style:{ color:'var(--t2)' } }, l), h('span', { style:{ fontWeight:500 } }, v||'—'),
           )
