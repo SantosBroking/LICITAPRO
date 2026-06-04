@@ -149,7 +149,7 @@ export default function App() {
     setProjects(prev=>prev.filter(x=>x.id!==id));
     setVehicles(prev=>prev.filter(v=>v.projectId!==id));
     try {
-      await deleteProject(id);
+      await deleteProject(id, getUID());
       log(user,'eliminó','proyecto',id,p?.name||'');
     } catch(e) {
       console.error('Error al eliminar proyecto:', e);

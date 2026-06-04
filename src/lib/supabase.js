@@ -77,9 +77,24 @@ export async function saveProject(project, userId) {
   if (error) throw error;
 }
 
-export async function deleteProject(id) {
-  const { error: e1 } = await sb.from('projects').delete().eq('id', id);
-  if (e1) throw e1;
+export async function deleteProject(id, userId) {
+  // Intentar borrar con y sin user_id para cubrir ambos casos
+  let deleted = false;
+  if (userId) {
+    const { error, count } = await sb.from('projects').delete({ count:'exact' }).eq('id', id).eq('user_id', userId);
+    if (error) throw error;
+    if (count > 0) deleted = true;
+  }
+  if (!deleted) {
+    const { error, count } = await sb.from('projects').delete({ count:'exact' }).eq('id', id);
+    if (error) throw error;
+    if (count === 0) {
+      // El delete no borró nada — intentar con upsert marcando como eliminado
+      // y luego forzar borrado por data->id
+      const { error: e2 } = await sb.from('projects').delete().filter('data->>id', 'eq', id);
+      if (e2) throw e2;
+    }
+  }
   try { await sb.from('vehicles').delete().eq('project_id', id); } catch(e) {}
 }
 
