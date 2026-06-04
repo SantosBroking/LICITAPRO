@@ -50,7 +50,6 @@ export async function signOut() {
 // ── CRUD con Supabase ─────────────────────────────────────────
 export async function dbLoad(userId) {
   // allSettled: si una tabla falla, las demás siguen cargando
-  console.log('[dbLoad] consultando con userId:', userId);
   const [proj, veh, comp, aud] = await Promise.allSettled([
     sb.from('projects').select('data').eq('user_id', userId),
     sb.from('vehicles').select('data').eq('user_id', userId),
@@ -68,8 +67,6 @@ export async function dbLoad(userId) {
     cfgData = cfg.data?.data || null;
   } catch(e) { console.warn('Config timeout:', e.message); }
   return {
-    // Diagnóstico raw
-    console.log('[dbLoad] proj raw:', JSON.stringify(proj).slice(0, 300));
     projects:  get(proj,'projects').map(r => r.data),
     vehicles:  get(veh,'vehicles').map(r => r.data),
     companies: get(comp,'companies').map(r => r.data),
