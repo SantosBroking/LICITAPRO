@@ -101,6 +101,31 @@ export function ProjectForm({ project, companies, config, onSave, onCancel }) {
   const isE = !!project;
   const [p, sP] = useState(project || { id:uid('proj'), name:'', dependencia:'', company:'', numLicitacion:'', status:'prospecto', tipoProcedimiento:'', productType:'Patrullas y vehículos', responsable:'', montoEstimado:0, probability:50, description:'', observaciones:'', fechaPublicacion:'', fechaAclaraciones:'', fechaPropuesta:'', fechaFallo:'', fechaContrato:'', notes:[], activity:[], preguntas:[], docs:[], preparation:{}, cotizacion:{} });
   const set = (k,v) => sP(prev=>({...prev,[k]:v}));
+  const [basesMsg, setBasesMsg] = useState('');
+  const handleBasesForm = (data) => {
+    sP(prev => ({
+      ...prev,
+      ...(data.numeroLicitacion       && { numLicitacion:     data.numeroLicitacion }),
+      ...(data.dependencia            && { dependencia:        data.dependencia }),
+      ...(data.tipoProcedimiento      && { tipoProcedimiento:  data.tipoProcedimiento }),
+      ...(data.tipoProducto           && { productType:        data.tipoProducto }),
+      ...(data.descripcion            && { description:        data.descripcion }),
+      ...((!prev.name || prev.name.length < 5) && data.numeroLicitacion && { name: data.numeroLicitacion }),
+      ...(data.fechaPublicacion       && { fechaPublicacion:   data.fechaPublicacion }),
+      ...(data.fechaJuntaAclaraciones && { fechaAclaraciones:  data.fechaJuntaAclaraciones }),
+      ...(data.fechaPresentacion      && { fechaPropuesta:     data.fechaPresentacion }),
+      ...(data.fechaFallo             && { fechaFallo:         data.fechaFallo }),
+      ...(data.fechaContrato          && { fechaContrato:      data.fechaContrato }),
+    }));
+    const campos = [
+      data.numeroLicitacion  && 'No. licitación',
+      data.dependencia       && 'dependencia',
+      data.tipoProcedimiento && 'tipo procedimiento',
+      data.descripcion       && 'descripción',
+      data.fechaPublicacion  && 'fechas',
+    ].filter(Boolean);
+    setBasesMsg(campos.length ? '✅ Datos extraídos: ' + campos.join(', ') + '. Revisa y guarda.' : 'No se detectaron datos. Verifica que el PDF sea de bases de licitación.');
+  };
   const doSave = async () => { if(!p.name.trim()){alert('El nombre del proyecto es obligatorio');return;} await onSave(p,true); };
   return h('div', null,
     h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 } },
@@ -110,6 +135,15 @@ export function ProjectForm({ project, companies, config, onSave, onCancel }) {
         h('button', { className:'bp', onClick:doSave }, 'Guardar proyecto'),
       ),
     ),
+    h('div', { style:{ marginBottom:16, padding:'14px 16px', background:'var(--blue-bg)', border:'1px solid var(--blue-border)', borderRadius:'var(--rl)', display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' } },
+      h('span', { style:{ fontSize:22 } }, '🤖'),
+      h('div', { style:{ flex:1, minWidth:180 } },
+        h('div', { style:{ fontSize:13, fontWeight:600, color:'var(--blue)' } }, 'Llenar desde bases de licitación'),
+        h('div', { style:{ fontSize:11, color:'var(--t2)', marginTop:2 } }, 'Sube el PDF de las bases y Claude llenará automáticamente número, dependencia, tipo, descripción y fechas.'),
+      ),
+      h(AIAnalyzerButton, { config, tipo:'bases', label:'Subir bases', onResult: handleBasesForm }),
+    ),
+    basesMsg && h('div', { style:{ marginBottom:16, padding:'10px 12px', background:'var(--green-bg)', border:'1px solid var(--green-border)', borderRadius:'var(--r)', fontSize:12, color:'#14532d' } }, basesMsg),
     h('div', { className:'grid-2', style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 } },
       h('div', { className:'card' },
         h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:14 } }, 'Datos principales'),
