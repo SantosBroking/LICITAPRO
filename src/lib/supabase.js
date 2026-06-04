@@ -80,7 +80,7 @@ export async function saveProject(project, userId) {
 export async function deleteProject(id) {
   const { error: e1 } = await sb.from('projects').delete().eq('id', id);
   if (e1) throw e1;
-  await sb.from('vehicles').delete().eq('project_id', id).catch(()=>{});
+  try { await sb.from('vehicles').delete().eq('project_id', id); } catch(e) {}
 }
 
 export async function saveVehicle(vehicle, userId) {
