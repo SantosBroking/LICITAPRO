@@ -41,7 +41,7 @@ export default function Dashboard({ projects, vehicles, companies, onNav, onUpda
     if (vistas.has(key)) return false;  // evitar duplicados
     vistas.add(key);
     return true;
-  });
+  }).sort((a, b) => a.days - b.days);  // más urgente/vencido primero
 
   if (projects.length === 0)
     return h('div', null,
