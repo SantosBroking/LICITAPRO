@@ -1,6 +1,7 @@
 // Flujo.js — Calendario de Pagos a Proveedores (rediseñado)
 import { h, useState, useMemo } from '../lib/core.js';
 import { fmt } from '../lib/utils.js';
+import { calcCotizacion } from '../lib/calc.js';
 
 const BLOQUES_DEFAULT = [
   { id:'V',  nom:'Vehículo',                 diasCredito:60, pctAnticipo:50, diasAnticipo:0 },
