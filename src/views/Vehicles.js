@@ -11,6 +11,7 @@ export function VehiclesTab({ project, vehicles, onSave, onDelete, onNav, user, 
   if (showForm || editing)
     return h(VehicleForm, { vehicle:editing, projectId:project.id,
       onSave: v => { onSave(v); if(logFn)logFn(user,editing?'actualizó':'agregó','vehículo',v.id,v.vin||v.marca+' '+v.modelo); setShowForm(false); setEditing(null); },
+      onSaveMany: arr => { arr.forEach(v => { onSave(v); if(logFn)logFn(user,'agregó','vehículo',v.id,v.vin||v.marca+' '+v.modelo); }); setShowForm(false); setEditing(null); },
       onCancel: () => { setShowForm(false); setEditing(null); },
     });
   return h('div', null,
@@ -47,8 +48,24 @@ export function VehiclesTab({ project, vehicles, onSave, onDelete, onNav, user, 
 }
 
 // ── VehicleForm ───────────────────────────────────────────────
-export function VehicleForm({ vehicle, projectId, onSave, onCancel }) {
+export function VehicleForm({ vehicle, projectId, onSave, onSaveMany, onCancel }) {
   const [v, sV] = useState(vehicle || { id:uid('VEH'), projectId, marca:'', modelo:'', version:'', ano:'', color:'', vin:'', numMotor:'', numInventario:'', precioUnitario:0, iva:0, precioTotal:0, equipamiento:'', statusDocs:'Pendiente', statusEntrega:'Pendiente', ubicacion:'', observaciones:'', facturaAgencia:{}, facturaEquipo:{}, facturaGobierno:{}, actaEntrega:{} });
+  const [lote, setLote] = useState(false);       // modo varios VINs
+  const [vinsText, setVinsText] = useState('');   // VINs uno por línea
+  const esEdicion = !!vehicle;
+
+  const vinsList = vinsText.split('\n').map(s=>s.trim()).filter(Boolean);
+
+  const guardarLote = () => {
+    if (vinsList.length === 0) { alert('Agrega al menos un VIN (uno por línea).'); return; }
+    const base = { ...v };
+    delete base.id; delete base.vin;
+    const nuevos = vinsList.map(vin => ({
+      ...base, id:uid('VEH'), vin,
+      facturaAgencia:{}, facturaEquipo:{}, facturaGobierno:{}, actaEntrega:{},
+    }));
+    onSaveMany(nuevos);
+  };
   const set = (k, val) => sV(p => {
     const u = { ...p, [k]:val };
     if (k==='precioUnitario') { const pu=Number(val)||0; u.iva=Math.round(pu*.16); u.precioTotal=pu+u.iva; }
@@ -56,11 +73,18 @@ export function VehicleForm({ vehicle, projectId, onSave, onCancel }) {
   });
   return h('div', null,
     h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 } },
-      h('div', { style:{ fontSize:16, fontWeight:500 } }, vehicle?'Editar vehículo':'Nuevo vehículo'),
+      h('div', { style:{ fontSize:16, fontWeight:500 } }, esEdicion?'Editar vehículo':(lote?('Agregar '+vinsList.length+' vehículo(s)'):'Nuevo vehículo')),
       h('div', { style:{ display:'flex', gap:8 } },
         h('button', { onClick:onCancel }, 'Cancelar'),
-        h('button', { className:'bp', onClick:()=>onSave(v) }, 'Guardar'),
+        h('button', { className:'bp', onClick:()=> lote ? guardarLote() : onSave(v) }, lote ? ('Crear '+vinsList.length+' vehículo(s)') : 'Guardar'),
       ),
+    ),
+    !esEdicion && h('div', { style:{ marginBottom:16, padding:'12px 16px', background:'var(--blue-bg)', border:'1px solid var(--blue-border)', borderRadius:'var(--rl)', display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' } },
+      h('label', { style:{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:13 } },
+        h('input', { type:'checkbox', checked:lote, onChange:e=>setLote(e.target.checked) }),
+        h('span', { style:{ fontWeight:500 } }, 'Varios vehículos iguales (un VIN por cada uno)'),
+      ),
+      h('span', { style:{ fontSize:11, color:'var(--t2)' } }, lote ? 'Captura los datos comunes abajo y pega todos los VINs.' : 'Actívalo si vas a registrar muchos coches del mismo modelo.'),
     ),
     h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 } },
       h('div', { className:'card' },
@@ -73,8 +97,15 @@ export function VehicleForm({ vehicle, projectId, onSave, onCancel }) {
           h(Inp, { label:'Color', value:v.color, onChange:val=>set('color',val) }),
           h(Inp, { label:'# Inventario', value:v.numInventario, onChange:val=>set('numInventario',val) }),
         ),
-        h(Inp, { label:'VIN / Núm. de serie', value:v.vin, onChange:val=>set('vin',val), placeholder:'17 caracteres' }),
-        h(Inp, { label:'Núm. de motor', value:v.numMotor, onChange:val=>set('numMotor',val) }),
+        lote
+          ? h('div', { style:{ marginBottom:14 } },
+              h('label', { style:{ display:'block', fontSize:12, color:'var(--t2)', fontWeight:500, marginBottom:5 } }, 'VINs / Núm. de serie — uno por línea ('+vinsList.length+')'),
+              h('textarea', { value:vinsText, onChange:e=>setVinsText(e.target.value), rows:6,
+                placeholder:'3FA6P0H7XKR123456\n3FA6P0H7XKR123457\n3FA6P0H7XKR123458', style:{ width:'100%', fontFamily:'monospace', fontSize:12, padding:'8px 10px', border:'1px solid var(--b2)', borderRadius:8, resize:'vertical' } }),
+              h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:4 } }, 'Cada línea crea un vehículo con los mismos datos pero distinto VIN.'),
+            )
+          : h(Inp, { label:'VIN / Núm. de serie', value:v.vin, onChange:val=>set('vin',val), placeholder:'17 caracteres' }),
+        !lote && h(Inp, { label:'Núm. de motor', value:v.numMotor, onChange:val=>set('numMotor',val) }),
         h(Inp, { label:'Equipamiento', value:v.equipamiento, onChange:val=>set('equipamiento',val), textarea:true }),
         h(Inp, { label:'Ubicación', value:v.ubicacion, onChange:val=>set('ubicacion',val) }),
       ),
