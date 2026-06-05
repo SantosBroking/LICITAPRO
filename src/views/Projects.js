@@ -8,6 +8,7 @@ import { Badge, AlertChip, Metric, Inp, EmptyState, ConfirmAction, NumInput, Del
 import CotizacionTab from './Cotizacion.js';
 import BasesPreparacion from './Bases.js';
 import { VehiclesTab, VehicleDetail, BillingTab, DocsTab } from './Vehicles.js';
+import Flujo from './Flujo.js';
 import { AIAnalyzerButton } from '../ui/AIAnalyzerButton.js';
 
 const PROJ_TABS = [{id:'info',l:'Información'},{id:'activity',l:'Actividad'},{id:'cotizacion',l:'Cotización MSMS'},{id:'bases',l:'Bases'},{id:'vehiculos',l:'Vehículos'},{id:'facturacion',l:'Facturación'},{id:'docs',l:'Documentos'},{id:'preguntas',l:'Preguntas'}];
