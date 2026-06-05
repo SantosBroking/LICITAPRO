@@ -27,15 +27,18 @@ IMPORTANTE: "razonSocial" es el NOMBRE de la empresa (ejemplo: SATHRI, GRUPO SUR
 Responde ÚNICAMENTE con JSON válido, sin texto adicional ni backticks:
 {"razonSocial":"","nombreComercial":"","rfc":"","regimenFiscal":"","regimenCapital":"","domicilioFiscal":"","codigoPostal":"","ciudad":"","estado":"","representanteLegal":"","cargoRepresentante":"","telefono":"","correo":"","notario":"","numeroEscritura":"","fechaConstitucion":null,"fechaUltimaReforma":null,"objetoSocial":""}`,
 
-  factura: `Analiza esta factura mexicana (CFDI). Extrae los datos fiscales.
+  factura: `Analiza esta factura mexicana (CFDI) de un vehículo. Extrae datos fiscales Y del vehículo.
 Responde ÚNICAMENTE con JSON válido, sin texto adicional ni backticks:
-{"folio":"","fecha":null,"emisor":"","rfcEmisor":"","receptor":"","rfcReceptor":"","uuid":"","subtotal":null,"iva":null,"total":null}
+{"folio":"","fecha":null,"emisor":"","receptor":"","uuid":"","subtotal":null,"iva":null,"total":null,"vin":"","marca":"","modelo":"","ano":"","color":"","numMotor":""}
 - "folio" = folio o número de factura
 - "fecha" = formato YYYY-MM-DD
-- "emisor" = nombre o razón social de quien emite la factura
-- "receptor" = nombre o razón social de quien recibe
+- "emisor" = razón social de quien emite (la agencia/proveedor)
+- "receptor" = razón social de quien recibe
 - "uuid" = folio fiscal UUID (36 caracteres con guiones)
-- subtotal, iva, total = números sin símbolos`,
+- subtotal, iva, total = números sin símbolos
+- "vin" = NIV o número de serie del vehículo (17 caracteres), búscalo en la descripción del concepto
+- "marca", "modelo", "ano", "color", "numMotor" = datos del vehículo si aparecen en la descripción
+- Si algún campo del vehículo no aparece, déjalo como cadena vacía`,
 
   constancia: `Analiza esta Constancia de Situación Fiscal (CSF) del SAT mexicano.
 

@@ -5,6 +5,48 @@ import { DOC_CATEGORIES, EMPRESA_BASE_DOCS } from '../lib/constants.js';
 import { fmt, TODAY, NOW, uid, dlFile, fmtBytes } from '../lib/utils.js';
 import { Inp, Metric, EmptyState, ConfirmAction, NumInput } from '../ui/primitives.js';
 
+// ── Parseo de CFDI (XML) ──────────────────────────────────────
+function findByLocal(doc, localName) {
+  const all = doc.getElementsByTagName('*');
+  for (let i = 0; i < all.length; i++) if (all[i].localName === localName) return all[i];
+  return null;
+}
+function parseCFDIVehiculo(xmlText) {
+  // Intenta extraer VIN/marca/modelo de la descripción de los conceptos
+  const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+  const conceptos = Array.from(doc.getElementsByTagName('*')).filter(e => e.localName === 'Concepto');
+  let desc = '', precio = 0;
+  conceptos.forEach(c => {
+    const d = c.getAttribute('Descripcion') || '';
+    if (d.length > desc.length) { desc = d; precio = Number(c.getAttribute('Importe') || 0); }
+  });
+  // VIN: 17 caracteres alfanuméricos (sin I, O, Q)
+  const vinMatch = desc.match(/\b[A-HJ-NPR-Z0-9]{17}\b/i);
+  return { descripcion: desc, vin: vinMatch ? vinMatch[0].toUpperCase() : '', precio };
+}
+
+function parseCFDI(xmlText) {
+  const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+  const comp = findByLocal(doc, 'Comprobante');
+  if (!comp) throw new Error('No es un XML de CFDI válido');
+  const emisor = findByLocal(doc, 'Emisor');
+  const receptor = findByLocal(doc, 'Receptor');
+  const tfd = findByLocal(doc, 'TimbreFiscalDigital');
+  const imp = findByLocal(doc, 'Impuestos');
+  const subtotal = Number(comp.getAttribute('SubTotal') || 0);
+  const total    = Number(comp.getAttribute('Total') || 0);
+  let iva = imp ? Number(imp.getAttribute('TotalImpuestosTrasladados') || 0) : 0;
+  if (!iva) iva = Math.round((total - subtotal) * 100) / 100;
+  return {
+    folio:    comp.getAttribute('Folio') || comp.getAttribute('Serie') || '',
+    fecha:    (comp.getAttribute('Fecha') || '').slice(0, 10),
+    emisor:   emisor?.getAttribute('Nombre') || emisor?.getAttribute('Rfc') || '',
+    receptor: receptor?.getAttribute('Nombre') || receptor?.getAttribute('Rfc') || '',
+    uuid:     tfd?.getAttribute('UUID') || '',
+    subtotal, iva, total,
+  };
+}
+
 // ── VehiclesTab ────────────────────────────────────────────────
 export function VehiclesTab({ project, vehicles, onSave, onDelete, onNav, user, logFn }) {
   const [showForm, setShowForm] = useState(false);
@@ -29,7 +71,7 @@ export function VehiclesTab({ project, vehicles, onSave, onDelete, onNav, user, 
                 ['VIN','MARCA/MODELO','AÑO','PRECIO','ENTREGA','FACTURAS',''].map(hd => h('td', { key:hd, style:{ padding:'8px 6px', color:'var(--t2)', fontSize:11 } }, hd))
               )),
               h('tbody', null, vehicles.map(v => {
-                const fc = (v.facturaAgencia?.folio?1:0)+(v.facturaEquipo?.folio?1:0)+(v.facturaGobierno?.folio?1:0);
+                const fc = (v.facturaAgencia?.folio?1:0)+(v.facturaGobierno?.folio?1:0);
                 return h('tr', { key:v.id, style:{ borderBottom:'.5px solid var(--b3)', cursor:'pointer' }, onClick:()=>onNav('vehicle_detail',v.id) },
                   h('td', { style:{ padding:'10px 6px', fontFamily:'monospace', fontSize:11 } }, v.vin||'—'),
                   h('td', { style:{ padding:'10px 6px', fontWeight:500 } }, v.marca,' ',v.modelo, v.version?' · '+v.version:''),
@@ -38,7 +80,7 @@ export function VehiclesTab({ project, vehicles, onSave, onDelete, onNav, user, 
                   h('td', { style:{ padding:'10px 6px' } },
                     v.statusEntrega && h('span', { style:{ fontSize:11, padding:'2px 8px', borderRadius:10, background:v.statusEntrega==='Entregado'?'#E1F5EE':'#FAEEDA', color:v.statusEntrega==='Entregado'?'#085041':'#633806' } }, v.statusEntrega)
                   ),
-                  h('td', { style:{ padding:'10px 6px', fontSize:11, color:fc===3?'var(--green)':'var(--amber)' } }, fc+'/3'),
+                  h('td', { style:{ padding:'10px 6px', fontSize:11, color:fc===2?'var(--green)':'var(--amber)' } }, fc+'/2'),
                   h('td', { style:{ padding:'10px 6px' } },
                     h('div', { style:{ display:'flex', gap:6 } },
                       h('button', { onClick:e=>{ e.stopPropagation(); setEditing(v); }, style:{ fontSize:11, padding:'3px 8px' } }, 'Editar'),
@@ -59,6 +101,51 @@ export function VehicleForm({ vehicle, projectId, onSave, onSaveMany, onCancel }
   const [lote, setLote] = useState(false);       // modo varios VINs
   const [vinsText, setVinsText] = useState('');   // VINs uno por línea
   const esEdicion = !!vehicle;
+  const factRef = useRef(null), factPdfRef = useRef(null);
+  const [factMsg, setFactMsg] = useState('');
+  const [factBusy, setFactBusy] = useState(false);
+
+  // Crear vehículo(s) desde factura(s) de agencia
+  const crearDesdeXMLs = async (files) => {
+    const arr = [];
+    for (const file of files) {
+      try {
+        const text = await file.text();
+        const fac = parseCFDI(text);
+        const veh = parseCFDIVehiculo(text);
+        const b64 = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file); });
+        const precioSinIVA = fac.subtotal || 0;
+        arr.push({
+          id:uid('VEH'), projectId,
+          marca:'', modelo:'', version:'', ano:'', color:'', numMotor:'', numInventario:'',
+          vin: veh.vin || '',
+          precioUnitario: precioSinIVA, iva: fac.iva || 0, precioTotal: fac.total || 0,
+          equipamiento:'', statusDocs:'Pendiente', statusEntrega:'Pendiente', ubicacion:'', observaciones: veh.descripcion || '',
+          facturaAgencia:{ folio:fac.folio, fecha:fac.fecha, emisor:fac.emisor, receptor:fac.receptor, uuid:fac.uuid, subtotal:fac.subtotal, iva:fac.iva, total:fac.total, statusPago:'Pendiente', xmlNombre:file.name, xmlData:b64 },
+          facturaGobierno:{}, actaEntrega:{},
+        });
+      } catch(e) { setFactMsg('Error en '+file.name+': '+e.message); }
+    }
+    if (arr.length) { onSaveMany(arr); }
+  };
+
+  const crearDesdePDF = async (file) => {
+    const apiKey = window._lpConfig?.ia?.openaiKey;
+    if (!apiKey) { setFactMsg('Agrega tu API Key de Anthropic en Configuración para analizar PDFs.'); return; }
+    setFactBusy(true); setFactMsg('🤖 Analizando factura...');
+    try {
+      const d = await analyzeFactura(file, apiKey);
+      // Rellenar el formulario con lo extraído (modo un vehículo)
+      sV(p => ({ ...p,
+        marca:d.marca||p.marca, modelo:d.modelo||p.modelo, ano:d.ano||p.ano, color:d.color||p.color,
+        vin:d.vin||p.vin, numMotor:d.numMotor||p.numMotor,
+        precioUnitario:d.subtotal||p.precioUnitario, iva:d.iva||p.iva, precioTotal:d.total||p.precioTotal,
+        facturaAgencia:{ folio:d.folio, fecha:d.fecha, emisor:d.emisor, receptor:d.receptor, uuid:d.uuid, subtotal:d.subtotal, iva:d.iva, total:d.total, statusPago:'Pendiente' },
+      }));
+      setFactBusy(false);
+      setFactMsg('✅ Datos extraídos. Revisa y completa lo que falte, luego Guarda.');
+    } catch(e) { setFactBusy(false); setFactMsg('Error: '+e.message); }
+  };
 
   const vinsList = vinsText.split('\n').map(s=>s.trim()).filter(Boolean);
 
@@ -91,6 +178,22 @@ export function VehicleForm({ vehicle, projectId, onSave, onSaveMany, onCancel }
         h('span', { style:{ fontWeight:500 } }, 'Varios vehículos iguales (un VIN por cada uno)'),
       ),
       h('span', { style:{ fontSize:11, color:'var(--t2)' } }, lote ? 'Captura los datos comunes abajo y pega todos los VINs.' : 'Actívalo si vas a registrar muchos coches del mismo modelo.'),
+    ),
+    !esEdicion && h('div', { style:{ marginBottom:16, padding:'14px 16px', background:'var(--bg2)', border:'1px solid var(--b2)', borderRadius:'var(--rl)' } },
+      h('div', { style:{ fontSize:13, fontWeight:600, marginBottom:4 } }, '🤖 Crear desde factura de la agencia (Surman)'),
+      h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:10 } }, 'Si ya tienes las facturas de los vehículos, súbelas y se crean los vehículos con sus datos y la factura adjunta. El XML es exacto; el PDF lo analiza Claude.'),
+      h('div', { style:{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' } },
+        h('button', { onClick:()=>factRef.current?.click(),
+          style:{ fontSize:12, padding:'8px 14px', border:'1px solid var(--green)', borderRadius:8, background:'var(--bg1)', color:'var(--t1)', cursor:'pointer' } }, '📄 Subir factura(s) XML'),
+        h('input', { ref:factRef, type:'file', accept:'.xml', multiple:true, style:{ display:'none' },
+          onChange:e=>{ crearDesdeXMLs(Array.from(e.target.files)); e.target.value=''; } }),
+        h('button', { onClick:()=>factPdfRef.current?.click(), disabled:factBusy,
+          style:{ fontSize:12, padding:'8px 14px', border:'1px solid var(--b2)', borderRadius:8, background:'var(--bg1)', color:'var(--t1)', cursor:'pointer', opacity:factBusy?.6:1 } }, factBusy?'⏳ Analizando...':'🤖 Analizar 1 PDF'),
+        h('input', { ref:factPdfRef, type:'file', accept:'.pdf', style:{ display:'none' },
+          onChange:e=>{ crearDesdePDF(e.target.files[0]); e.target.value=''; } }),
+      ),
+      h('div', { style:{ fontSize:10, color:'var(--t3)', marginTop:8 } }, 'XML: puedes subir varias a la vez, crea un vehículo por factura. PDF: rellena este formulario (un vehículo).'),
+      factMsg && h('div', { style:{ marginTop:8, fontSize:11, color:factMsg.startsWith('Error')?'var(--red)':'var(--t1)', padding:'6px 10px', background:'var(--bg1)', borderRadius:6 } }, factMsg),
     ),
     h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 } },
       h('div', { className:'card' },
@@ -130,34 +233,6 @@ export function VehicleForm({ vehicle, projectId, onSave, onSaveMany, onCancel }
       ),
     ),
   );
-}
-
-// ── Parseo de CFDI (XML) ──────────────────────────────────────
-function findByLocal(doc, localName) {
-  const all = doc.getElementsByTagName('*');
-  for (let i = 0; i < all.length; i++) if (all[i].localName === localName) return all[i];
-  return null;
-}
-function parseCFDI(xmlText) {
-  const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
-  const comp = findByLocal(doc, 'Comprobante');
-  if (!comp) throw new Error('No es un XML de CFDI válido');
-  const emisor = findByLocal(doc, 'Emisor');
-  const receptor = findByLocal(doc, 'Receptor');
-  const tfd = findByLocal(doc, 'TimbreFiscalDigital');
-  const imp = findByLocal(doc, 'Impuestos');
-  const subtotal = Number(comp.getAttribute('SubTotal') || 0);
-  const total    = Number(comp.getAttribute('Total') || 0);
-  let iva = imp ? Number(imp.getAttribute('TotalImpuestosTrasladados') || 0) : 0;
-  if (!iva) iva = Math.round((total - subtotal) * 100) / 100;
-  return {
-    folio:    comp.getAttribute('Folio') || comp.getAttribute('Serie') || '',
-    fecha:    (comp.getAttribute('Fecha') || '').slice(0, 10),
-    emisor:   emisor?.getAttribute('Nombre') || emisor?.getAttribute('Rfc') || '',
-    receptor: receptor?.getAttribute('Nombre') || receptor?.getAttribute('Rfc') || '',
-    uuid:     tfd?.getAttribute('UUID') || '',
-    subtotal, iva, total,
-  };
 }
 
 // ── FacturaCard ───────────────────────────────────────────────
@@ -242,7 +317,7 @@ export function VehicleDetail({ vehicle, project, company, onNav, onUpdate, onDe
   const [tab, setTab] = useState('info');
   if (!vehicle) return h('div', { className:'empty' }, h('h3', null, 'Vehículo no encontrado'));
   const updFact = (key, fac) => { onUpdate({...vehicle,[key]:fac}); if(logFn)logFn(user,'actualizó factura '+key,'vehículo',vehicle.id,fac.folio||''); };
-  const tabs = [{id:'info',l:'Información'},{id:'facturas',l:'Facturación (3)'},{id:'entrega',l:'Acta entrega'}];
+  const tabs = [{id:'info',l:'Información'},{id:'facturas',l:'Facturación (2)'},{id:'entrega',l:'Acta entrega'}];
   return h('div', null,
     h('div', { style:{ display:'flex', alignItems:'center', gap:8, marginBottom:6 } },
       h('span', { onClick:()=>onNav('projects'), style:{ fontSize:12, color:'var(--blue)', cursor:'pointer' } }, 'Proyectos'),
@@ -280,7 +355,6 @@ export function VehicleDetail({ vehicle, project, company, onNav, onUpdate, onDe
     ),
     tab==='facturas' && h('div', { style:{ display:'flex', flexDirection:'column', gap:16 } },
       h(FacturaCard, { title:'Factura de la agencia (a la empresa)', subtitle:'La agencia automotriz me factura este vehículo', color:'#5B8DEF', data:vehicle.facturaAgencia||{}, onSave:f=>updFact('facturaAgencia',f) }),
-      h(FacturaCard, { title:'Factura del proveedor de equipamiento', subtitle:'El proveedor me factura el equipo/instalación', color:'#EF9F27', data:vehicle.facturaEquipo||{}, onSave:f=>updFact('facturaEquipo',f) }),
       h(FacturaCard, { title:'Factura al cliente final (gobierno)', subtitle:'Yo facturo el vehículo equipado al cliente', color:'#1D9E75', data:vehicle.facturaGobierno||{}, onSave:f=>updFact('facturaGobierno',f) }),
     ),
     tab==='entrega' && h(ActaEntrega, { vehicle, project, company, onUpdate }),
@@ -339,7 +413,7 @@ ${acta.observaciones?`<p><strong>Observaciones:</strong> ${acta.observaciones}</
 export function BillingTab({ project, vehicles, onNav }) {
   const totals = { agencia:{count:0,total:0,pagadas:0}, equipo:{count:0,total:0,pagadas:0}, gobierno:{count:0,total:0,pagadas:0} };
   vehicles.forEach(v => {
-    [['agencia','facturaAgencia'],['equipo','facturaEquipo'],['gobierno','facturaGobierno']].forEach(([k,f]) => {
+    [['agencia','facturaAgencia'],['gobierno','facturaGobierno']].forEach(([k,f]) => {
       const fc=v[f]; if(fc?.folio){totals[k].count++;totals[k].total+=(fc.total||0);if(['Pagada','Cobrada'].includes(fc.statusPago))totals[k].pagadas++;}
     });
   });
@@ -359,12 +433,12 @@ export function BillingTab({ project, vehicles, onNav }) {
       h('div', { style:{ overflowX:'auto' } },
         h('table', { style:{ fontSize:13 } },
           h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b3)' } },
-            ['VIN/MOD.','F. AGENCIA','F. EQUIPO','F. CLIENTE','TOTAL'].map(hd => h('td', { key:hd, style:{ padding:'8px 6px', color:'var(--t2)', fontSize:11 } }, hd))
+            ['VIN/MOD.','F. AGENCIA','F. CLIENTE','TOTAL'].map(hd => h('td', { key:hd, style:{ padding:'8px 6px', color:'var(--t2)', fontSize:11 } }, hd))
           )),
           h('tbody', null, vehicles.map(v =>
             h('tr', { key:v.id, style:{ borderBottom:'.5px solid var(--b3)', cursor:'pointer' }, onClick:()=>onNav('vehicle_detail',v.id) },
               h('td', { style:{ padding:'10px 6px', fontWeight:500 } }, v.vin||v.id, h('div', { style:{ fontSize:11, color:'var(--t2)', fontWeight:400 } }, v.marca,' ',v.modelo)),
-              ...[v.facturaAgencia,v.facturaEquipo,v.facturaGobierno].map((f,i) =>
+              ...[v.facturaAgencia,v.facturaGobierno].map((f,i) =>
                 h('td', { key:i, style:{ padding:'10px 6px' } },
                   f?.folio
                     ? h('div', null, h('div', { style:{ fontSize:12, fontWeight:500 } }, fmt(f.total)), h('div', { style:{ fontSize:10, color:'var(--t2)' } }, f.folio,' · ',f.statusPago||'—'))
