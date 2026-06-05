@@ -327,6 +327,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onUpdate, 
       ),
     )),
     // Actividad
+    tab==='flujo' && h(Flujo, { project, onUpdate:updProject }),
     tab==='activity' && h('div', null,
       h('div', { className:'card', style:{ marginBottom:16 } },
         h('div', { style:{ display:'flex', gap:8 } },
