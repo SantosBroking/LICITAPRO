@@ -1,5 +1,6 @@
 // Vehicles.js — Vehículos, Facturas, Acta entrega, Billing, Docs
-import { h, useState } from '../lib/core.js';
+import { h, useState, useRef } from '../lib/core.js';
+import { analyzeFactura } from '../lib/ai_analyzer.js';
 import { DOC_CATEGORIES, EMPRESA_BASE_DOCS } from '../lib/constants.js';
 import { fmt, TODAY, NOW, uid, dlFile, fmtBytes } from '../lib/utils.js';
 import { Inp, Metric, EmptyState, ConfirmAction, NumInput } from '../ui/primitives.js';
@@ -38,7 +39,12 @@ export function VehiclesTab({ project, vehicles, onSave, onDelete, onNav, user, 
                     v.statusEntrega && h('span', { style:{ fontSize:11, padding:'2px 8px', borderRadius:10, background:v.statusEntrega==='Entregado'?'#E1F5EE':'#FAEEDA', color:v.statusEntrega==='Entregado'?'#085041':'#633806' } }, v.statusEntrega)
                   ),
                   h('td', { style:{ padding:'10px 6px', fontSize:11, color:fc===3?'var(--green)':'var(--amber)' } }, fc+'/3'),
-                  h('td', { style:{ padding:'10px 6px' } }, h('button', { onClick:e=>{ e.stopPropagation(); setEditing(v); }, style:{ fontSize:11, padding:'3px 8px' } }, 'Editar')),
+                  h('td', { style:{ padding:'10px 6px' } },
+                    h('div', { style:{ display:'flex', gap:6 } },
+                      h('button', { onClick:e=>{ e.stopPropagation(); setEditing(v); }, style:{ fontSize:11, padding:'3px 8px' } }, 'Editar'),
+                      h('button', { onClick:e=>{ e.stopPropagation(); if(confirm('¿Eliminar este vehículo'+(v.vin?' ('+v.vin+')':'')+'? Esta acción no se puede deshacer.')){ onDelete(v.id); if(logFn)logFn(user,'eliminó','vehículo',v.id,v.vin||''); } }, style:{ fontSize:11, padding:'3px 8px', color:'var(--red)', border:'.5px solid #E24B4A55', background:'transparent' } }, 'Borrar'),
+                    ),
+                  ),
                 );
               }))
             )
@@ -126,12 +132,74 @@ export function VehicleForm({ vehicle, projectId, onSave, onSaveMany, onCancel }
   );
 }
 
+// ── Parseo de CFDI (XML) ──────────────────────────────────────
+function findByLocal(doc, localName) {
+  const all = doc.getElementsByTagName('*');
+  for (let i = 0; i < all.length; i++) if (all[i].localName === localName) return all[i];
+  return null;
+}
+function parseCFDI(xmlText) {
+  const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+  const comp = findByLocal(doc, 'Comprobante');
+  if (!comp) throw new Error('No es un XML de CFDI válido');
+  const emisor = findByLocal(doc, 'Emisor');
+  const receptor = findByLocal(doc, 'Receptor');
+  const tfd = findByLocal(doc, 'TimbreFiscalDigital');
+  const imp = findByLocal(doc, 'Impuestos');
+  const subtotal = Number(comp.getAttribute('SubTotal') || 0);
+  const total    = Number(comp.getAttribute('Total') || 0);
+  let iva = imp ? Number(imp.getAttribute('TotalImpuestosTrasladados') || 0) : 0;
+  if (!iva) iva = Math.round((total - subtotal) * 100) / 100;
+  return {
+    folio:    comp.getAttribute('Folio') || comp.getAttribute('Serie') || '',
+    fecha:    (comp.getAttribute('Fecha') || '').slice(0, 10),
+    emisor:   emisor?.getAttribute('Nombre') || emisor?.getAttribute('Rfc') || '',
+    receptor: receptor?.getAttribute('Nombre') || receptor?.getAttribute('Rfc') || '',
+    uuid:     tfd?.getAttribute('UUID') || '',
+    subtotal, iva, total,
+  };
+}
+
 // ── FacturaCard ───────────────────────────────────────────────
 export function FacturaCard({ title, subtitle, color, data, onSave }) {
-  const [f, sF] = useState({ folio:'', fecha:'', emisor:'', receptor:'', uuid:'', subtotal:0, iva:0, total:0, statusPago:'Pendiente', ...data });
+  const [f, sF] = useState({ folio:'', fecha:'', emisor:'', receptor:'', uuid:'', subtotal:0, iva:0, total:0, statusPago:'Pendiente', xmlNombre:'', xmlData:'', ...data });
   const set = (k, v) => sF(p => { const u={...p,[k]:v}; if(k==='subtotal'){const st=Number(v)||0;u.iva=Math.round(st*.16);u.total=st+u.iva;} return u; });
   const hasData = f.folio||f.uuid||f.total>0;
   const save = () => onSave({...f, subtotal:Number(f.subtotal)||0, iva:Number(f.iva)||0, total:Number(f.total)||0});
+
+  const xmlRef = useRef(null), pdfRef = useRef(null);
+  const [msg, setMsg] = useState('');
+  const [analizando, setAnalizando] = useState(false);
+
+  const handleXML = async (file) => {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const d = parseCFDI(text);
+      // Guardar también el XML completo (base64) para descarga futura
+      const b64 = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file); });
+      sF(p => ({ ...p, ...d, xmlNombre:file.name, xmlData:b64 }));
+      setMsg('✅ XML procesado: folio '+(d.folio||'—')+', total '+fmt(d.total)+'. Revisa y guarda.');
+    } catch(e) { setMsg('Error al leer XML: '+e.message); }
+  };
+
+  const handlePDF = async (file) => {
+    if (!file) return;
+    const apiKey = window._lpConfig?.ia?.openaiKey;
+    if (!apiKey) { setMsg('Agrega tu API Key de Anthropic en Configuración para analizar PDFs.'); return; }
+    setAnalizando(true); setMsg('🤖 Analizando PDF con Claude...');
+    try {
+      const d = await analyzeFactura(file, apiKey);
+      sF(p => ({ ...p,
+        folio:d.folio||p.folio, fecha:d.fecha||p.fecha,
+        emisor:d.emisor||p.emisor, receptor:d.receptor||p.receptor,
+        uuid:d.uuid||p.uuid,
+        subtotal:d.subtotal||p.subtotal, iva:d.iva||p.iva, total:d.total||p.total,
+      }));
+      setMsg('✅ PDF analizado: folio '+(d.folio||'—')+', total '+fmt(d.total||0)+'. Revisa y guarda.');
+    } catch(e) { setMsg('Error: '+e.message); }
+    setAnalizando(false);
+  };
   return h('div', { className:'card', style:{ borderLeft:'3px solid '+color } },
     h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8 } },
       h('div', null,
@@ -142,6 +210,16 @@ export function FacturaCard({ title, subtitle, color, data, onSave }) {
         ? h('span', { style:{ fontSize:11, padding:'3px 12px', borderRadius:12, background:['Pagada','Cobrada'].includes(f.statusPago)?'#E1F5EE':'#FAEEDA', color:['Pagada','Cobrada'].includes(f.statusPago)?'#085041':'#633806', fontWeight:500 } }, f.statusPago)
         : h('span', { style:{ fontSize:11, color:'var(--t3)' } }, 'Sin registrar'),
     ),
+    // Analizador de factura
+    h('div', { style:{ display:'flex', gap:8, marginTop:12, flexWrap:'wrap', alignItems:'center' } },
+      h('button', { onClick:()=>xmlRef.current?.click(), style:{ fontSize:12, padding:'7px 12px', border:'1px solid '+color, borderRadius:8, background:'var(--bg1)', color:'var(--t1)', cursor:'pointer' } }, '📄 Subir XML (CFDI)'),
+      h('input', { ref:xmlRef, type:'file', accept:'.xml', style:{ display:'none' }, onChange:e=>{ handleXML(e.target.files[0]); e.target.value=''; } }),
+      h('button', { onClick:()=>pdfRef.current?.click(), disabled:analizando, style:{ fontSize:12, padding:'7px 12px', border:'1px solid var(--b2)', borderRadius:8, background:'var(--bg1)', color:'var(--t1)', cursor:'pointer', opacity:analizando?.6:1 } }, analizando?'⏳ Analizando...':'🤖 Analizar PDF'),
+      h('input', { ref:pdfRef, type:'file', accept:'.pdf', style:{ display:'none' }, onChange:e=>{ handlePDF(e.target.files[0]); e.target.value=''; } }),
+      f.xmlNombre && h('span', { style:{ fontSize:11, color:'var(--green)', display:'flex', alignItems:'center', gap:4 } }, '📎 '+f.xmlNombre,
+        h('span', { onClick:()=>dlFile(f.xmlData,f.xmlNombre), style:{ color:'var(--blue)', cursor:'pointer', textDecoration:'underline' } }, 'descargar')),
+    ),
+    msg && h('div', { style:{ marginTop:8, fontSize:11, color:msg.startsWith('Error')?'var(--red)':'var(--t2)', padding:'6px 10px', background:'var(--bg2)', borderRadius:6 } }, msg),
     h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12, marginTop:14 } },
       h(Inp, { label:'Folio', value:f.folio, onChange:v=>set('folio',v) }),
       h(Inp, { label:'Fecha', value:f.fecha, onChange:v=>set('fecha',v), type:'date' }),

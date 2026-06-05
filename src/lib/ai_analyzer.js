@@ -27,6 +27,16 @@ IMPORTANTE: "razonSocial" es el NOMBRE de la empresa (ejemplo: SATHRI, GRUPO SUR
 Responde ÚNICAMENTE con JSON válido, sin texto adicional ni backticks:
 {"razonSocial":"","nombreComercial":"","rfc":"","regimenFiscal":"","regimenCapital":"","domicilioFiscal":"","codigoPostal":"","ciudad":"","estado":"","representanteLegal":"","cargoRepresentante":"","telefono":"","correo":"","notario":"","numeroEscritura":"","fechaConstitucion":null,"fechaUltimaReforma":null,"objetoSocial":""}`,
 
+  factura: `Analiza esta factura mexicana (CFDI). Extrae los datos fiscales.
+Responde ÚNICAMENTE con JSON válido, sin texto adicional ni backticks:
+{"folio":"","fecha":null,"emisor":"","rfcEmisor":"","receptor":"","rfcReceptor":"","uuid":"","subtotal":null,"iva":null,"total":null}
+- "folio" = folio o número de factura
+- "fecha" = formato YYYY-MM-DD
+- "emisor" = nombre o razón social de quien emite la factura
+- "receptor" = nombre o razón social de quien recibe
+- "uuid" = folio fiscal UUID (36 caracteres con guiones)
+- subtotal, iva, total = números sin símbolos`,
+
   constancia: `Analiza esta Constancia de Situación Fiscal (CSF) del SAT mexicano.
 
 LEE CON CUIDADO LOS CAMPOS:
@@ -84,7 +94,7 @@ async function callClaudeAPI(contentBlock, prompt, apiKey, retries = 2) {
 
 // Detecta el tipo real del documento por nombre de archivo
 function detectTipo(file, tipo) {
-  if (tipo !== 'empresa') return tipo;
+  if (tipo !== 'empresa') return tipo;  // factura, constancia, bases pasan directo
   const n = file.name.toLowerCase();
   if (n.includes('constancia') || n.includes('csf') || n.includes('fiscal') || n.includes('sat'))
     return 'constancia';
@@ -113,6 +123,10 @@ export async function analyzeDocument(file, tipo, apiKey) {
 }
 
 // Múltiples documentos (acta + reformas): analiza cada uno, combina lo más reciente
+export async function analyzeFactura(file, apiKey) {
+  return analyzeDocument(file, 'factura', apiKey);
+}
+
 export async function analyzeMultipleDocuments(files, tipo, apiKey) {
   const results = [];
   for (const file of files) {
