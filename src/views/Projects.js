@@ -11,7 +11,7 @@ import { VehiclesTab, VehicleDetail, BillingTab, DocsTab } from './Vehicles.js';
 import Flujo from './Flujo.js';
 import { AIAnalyzerButton } from '../ui/AIAnalyzerButton.js';
 
-const PROJ_TABS = [{id:'info',l:'Información'},{id:'activity',l:'Actividad'},{id:'cotizacion',l:'Cotización MSMS'},{id:'bases',l:'Bases'},{id:'vehiculos',l:'Vehículos'},{id:'facturacion',l:'Facturación'},{id:'docs',l:'Documentos'},{id:'preguntas',l:'Preguntas'}];
+const PROJ_TABS = [{id:'info',l:'Información'},{id:'cotizacion',l:'Cotización MSMS'},{id:'flujo',l:'Flujo de Pagos'},{id:'bases',l:'Bases'},{id:'vehiculos',l:'Vehículos'},{id:'facturacion',l:'Facturación'},{id:'docs',l:'Documentos'},{id:'preguntas',l:'Preguntas'},{id:'activity',l:'Actividad'}];
 
 export function ProjectsList({ projects, vehicles, onNav }) {
   const [view, setView]     = useState('table');
