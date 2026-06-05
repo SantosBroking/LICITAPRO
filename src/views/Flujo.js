@@ -25,6 +25,34 @@ const CAT_A_BLOQUE = {
   '05': '5', '06': '6', '07': '7', '08': '8', '09': '9',
 };
 
+// Extrae costos desde la cotización del proyecto
+function costosDesdeCotz(cot = {}) {
+  const { partidas = [], equipo = [], retornos = [], fianzas = [] } = cot;
+  const c = {};
+
+  // Vehículo: costoMSMS (con IVA) × cantidad por partida activa
+  c['V'] = partidas
+    .filter(p => p.activo && (p.cantidad || 0) > 0)
+    .reduce((s, p) => s + (p.costoMSMS || 0) * (p.cantidad || 0), 0);
+
+  // Equipo por categoría: costoConIVA × suma de cantidades en todas las partidas
+  equipo.filter(e => e.usar !== false).forEach(e => {
+    const prefix = (e.cat || '').slice(0, 2);
+    const bid = CAT_A_BLOQUE[prefix];
+    if (!bid) return;
+    const qty = (e.cnts || []).reduce((s, q) => s + (q || 0), 0);
+    c[bid] = (c[bid] || 0) + (e.costoConIVA || 0) * qty;
+  });
+
+  // Retornos → bloque 10
+  c['10'] = (retornos || []).reduce((s, r) => s + (r.monto || 0) * 1.16, 0);
+
+  // Fianzas → bloque 11
+  c['11'] = (fianzas || []).reduce((s, f) => s + (f.monto || 0) * 1.16, 0);
+
+  return c;
+}
+
 function addDays(dateStr, days) {
   if (!dateStr) return null;
   const d = new Date(dateStr);
@@ -69,7 +97,6 @@ function numInp(value, onChange, label) {
 export default function Flujo({ project, onUpdate }) {
   const saved   = project.flujo || {};
   const cot     = project.cotizacion || {};
-  const parts   = cot.partidas || [];
 
   // ── Parámetros ──────────────────────────────────────────────
   const [fechaInicio,      setFechaInicio]      = useState(saved.fechaInicio      || project.fechaContrato || '');
@@ -78,25 +105,23 @@ export default function Flujo({ project, onUpdate }) {
   const [diasAntCliente,   setDiasAntCliente]   = useState(saved.diasAntCliente   ?? 0);
 
   // ── Bloques de proveedores ──────────────────────────────────
+  // Costos actuales de la cotización
+  const costosCotz = costosDesdeCotz(cot);
+  const hayCotizacion = Object.values(costosCotz).some(v => v > 0);
+
   const [bloques, setBloques] = useState(() => {
     const base = saved.bloques ? saved.bloques : BLOQUES_DEFAULT;
-    // Auto-rellenar costos de la cotización si hay partidas
-    const costosPorBloque = {};
-    parts.forEach(p => {
-      const prefix = (p.id || '').slice(0, 2);
-      const bid    = CAT_A_BLOQUE[prefix] || '12';
-      costosPorBloque[bid] = (costosPorBloque[bid] || 0) + ((p.costUnit || 0) * (p.qty || 1) * 1.16);
-    });
-    // El vehículo viene de project.vehicles o partidas marcadas como vehículo
-    const vehCosto = parts.filter(p => (p.id||'').toLowerCase().startsWith('veh') || (p.cat||'').toLowerCase().includes('veh'))
-      .reduce((s, p) => s + (p.costUnit || 0) * (p.qty || 1) * 1.16, 0);
-    if (vehCosto) costosPorBloque['V'] = vehCosto;
-
     return base.map(b => ({
       ...b,
-      costo: saved.bloques ? b.costo : (costosPorBloque[b.id] || b.costo || 0),
+      // Si hay guardado previo usa ese costo, si no usa el de la cotización
+      costo: saved.bloques ? (b.costo || 0) : (costosCotz[b.id] || 0),
     }));
   });
+
+  // Recalcular desde cotización
+  const recalcularDesdeCot = () => {
+    setBloques(prev => prev.map(b => ({ ...b, costo: costosCotz[b.id] || 0 })));
+  };
 
   const setBloque = (id, field, val) =>
     setBloques(prev => prev.map(b => b.id === id ? { ...b, [field]: val } : b));
@@ -172,10 +197,18 @@ export default function Flujo({ project, onUpdate }) {
         h('div', { className:'page-title' }, 'Calendario de Pagos'),
         h('div', { style:{ fontSize:12, color:'var(--t2)' } }, 'Flujo de inversión por proveedor — ' + (project.name || '')),
       ),
-      h('button', { className:'bp', onClick:guardar }, 'Guardar cambios'),
+      h('div', { style:{ display:'flex', gap:8 } },
+        hayCotizacion && h('button', { onClick:recalcularDesdeCot,
+          style:{ fontSize:12, padding:'8px 14px', border:'1px solid var(--b2)', borderRadius:'var(--r)', background:'var(--bg2)', cursor:'pointer' } },
+          '↺ Recalcular desde cotización'),
+        h('button', { className:'bp', onClick:guardar }, 'Guardar cambios'),
+      ),
     ),
 
     // A. Parámetros
+    !hayCotizacion && h('div', { style:{ marginBottom:16, padding:'10px 14px', background:'var(--amber-bg)', border:'1px solid var(--amber-border)', borderRadius:'var(--r)', fontSize:12 } },
+      '⚠ No hay cotización cargada. Los costos se toman de la cotización del proyecto (pestaña Cotización MSMS). Puedes ingresarlos manualmente en la tabla de abajo.'
+    ),
     h('div', { className:'card', style:{ marginBottom:16 } },
       h('div', { style:{ fontSize:13, fontWeight:600, marginBottom:14 } }, 'A. Parámetros del flujo'),
       h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:14 } },
