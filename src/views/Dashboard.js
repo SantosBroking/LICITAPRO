@@ -34,9 +34,13 @@ export default function Dashboard({ projects, vehicles, companies, onNav, onUpda
     localStorage.setItem('lp_dismissed_alerts', JSON.stringify(next));
   };
 
+  const vistas = new Set();
   const filtered = upcomingAlerts.filter(a => {
     const key = a.project.id + '|' + a.label + '|' + a.date;
-    return !dismissed.includes(key);
+    if (dismissed.includes(key)) return false;
+    if (vistas.has(key)) return false;  // evitar duplicados
+    vistas.add(key);
+    return true;
   });
 
   if (projects.length === 0)

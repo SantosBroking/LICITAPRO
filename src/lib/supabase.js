@@ -66,10 +66,14 @@ export async function dbLoad(userId) {
     const cfg = await sb.from('config').select('data').eq('user_id', userId).maybeSingle();
     cfgData = cfg.data?.data || null;
   } catch(e) { console.warn('Config timeout:', e.message); }
+  const dedup = (arr) => {
+    const seen = new Set();
+    return arr.filter(x => { if (!x || seen.has(x.id)) return false; seen.add(x.id); return true; });
+  };
   return {
-    projects:  get(proj,'projects').map(r => r.data),
-    vehicles:  get(veh,'vehicles').map(r => r.data),
-    companies: get(comp,'companies').map(r => r.data),
+    projects:  dedup(get(proj,'projects').map(r => r.data)),
+    vehicles:  dedup(get(veh,'vehicles').map(r => r.data)),
+    companies: dedup(get(comp,'companies').map(r => r.data)),
     config:    cfgData,
     audit:     get(aud,'audit').map(r => r.data),
   };
