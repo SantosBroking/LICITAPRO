@@ -18,12 +18,16 @@ const BASE_CSS = `
   h2 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
   table { width: 100%; border-collapse: collapse; margin-bottom: 20px; table-layout: fixed; }
   td { vertical-align: middle; overflow: hidden; }
-  col.c-num  { width: 28px; }
-  col.c-conc { width: 30%; }
-  col.c-desc { width: 30%; }
-  col.c-cant { width: 44px; }
-  col.c-pu   { width: 80px; }
-  col.c-sub  { width: 90px; }
+  col.c-num  { width: 22px; }
+  col.c-img  { width: 62px; }
+  col.c-nom  { width: 30%; }
+  col.c-desc { width: 20%; }
+  col.c-cant { width: 38px; }
+  col.c-pu   { width: 68px; }
+  col.c-sub  { width: 80px; }
+  /* Evitar que una fila (con su imagen) se parta entre páginas */
+  tr { page-break-inside: avoid; break-inside: avoid; }
+  thead { display: table-header-group; }
   th { background: #1a1917; color: white; padding: 7px 10px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
   td { padding: 7px 10px; border-bottom: .5px solid #e0ddd8; vertical-align: top; }
   tr:last-child td { border-bottom: none; }
@@ -205,7 +209,7 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
             const num = rowNum++;
             return `<tr>
               <td style="text-align:center;color:#6b6862;font-size:10px">${num}</td>
-              <td style="text-align:center;padding:4px">${img ? `<img src="${img}" style="width:60px;height:60px;object-fit:contain;border-radius:3px;" />` : ''}</td>
+              <td style="text-align:center;padding:4px">${img ? `<img src="${img}" style="width:54px;height:54px;object-fit:contain;border-radius:3px;" />` : ''}</td>
               <td style="font-weight:600;font-size:11px">${comp.nom}</td>
               <td style="font-size:10px;color:#6b6862">${comp.desc||''}</td>
               <td style="text-align:center">${(e.cnts&&e.cnts[pi])!=null?(e.cnts[pi]||0):1}</td>
@@ -217,7 +221,7 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
           const num = rowNum++;
           return `<tr>
             <td style="text-align:center;color:#6b6862;font-size:10px">${num}</td>
-            <td style="text-align:center;padding:4px">${img ? `<img src="${img}" style="width:60px;height:60px;object-fit:contain;border-radius:3px;" />` : ''}</td>
+            <td style="text-align:center;padding:4px">${img ? `<img src="${img}" style="width:54px;height:54px;object-fit:contain;border-radius:3px;" />` : ''}</td>
             <td style="font-weight:600;font-size:11px">${e.nombre}</td>
             <td style="font-size:10px;color:#6b6862">${e.descripcion||''}</td>
             <td style="text-align:center">${(e.cnts&&e.cnts[pi])!=null?(e.cnts[pi]||0):1}</td>
