@@ -12,7 +12,8 @@ const BASE_CSS = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
   @page { size: A4 portrait; margin: 8mm 12mm; }
   @page { @top-center { content: none; } @bottom-center { content: none; } }
-  body { font-family: Arial, sans-serif; font-size: 10px; color: #1a1917; background: white; padding: 16px 24px; max-width: 900px; margin: 0 auto; }
+  body { font-family: Arial, sans-serif; font-size: 10px; color: #1a1917; background: #e8e8e8; margin: 0; padding: 0; }
+  .sheet { width: 210mm; min-height: 297mm; padding: 14mm; margin: 60px auto 24px; background: white; box-shadow: 0 2px 14px rgba(0,0,0,.18); }
   h1 { font-size: 18px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
   h2 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
   table { width: 100%; border-collapse: collapse; margin-bottom: 20px; table-layout: fixed; }
@@ -39,7 +40,11 @@ const BASE_CSS = `
   .badge { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 10px; font-weight: 600; }
   .confidential { background: #FCEBEB; color: #791F1F; font-size: 10px; padding: 6px 12px; border-radius: 4px; border-left: 3px solid #e24b4a; margin-bottom: 16px; }
   .footer { margin-top: 40px; padding-top: 14px; border-top: .5px solid #e0ddd8; font-size: 10px; color: #a0998f; display: flex; justify-content: space-between; }
-  @media print { body { padding: 8px 16px; } .no-print { display: none !important; } }
+  @media print {
+    body { background: white; }
+    .sheet { width: auto; min-height: 0; padding: 0; margin: 0; box-shadow: none; }
+    .no-print { display: none !important; }
+  }
 `;
 
 function openPrint(html, title) {
@@ -48,7 +53,7 @@ function openPrint(html, title) {
   w.document.write(html);
   w.document.close();
   if (title) w.document.title = title;
-  setTimeout(() => w.print(), 600);
+  // No auto-imprimir: el usuario ve el preview y decide (botón Imprimir o Cerrar)
 }
 
 // ── helpers ───────────────────────────────────────────────────
@@ -101,10 +106,11 @@ export function printCotizacionCliente({ project, cot, calc, config }) {
 .firma-line { border-top: 1px solid #1a1917; width: 200px; padding-top: 8px; text-align: center; font-size: 10px; color: #6b6862; }
 </style></head><body>
 
-<div class="no-print" style="background:#1a1917;color:white;padding:12px 20px;margin:-32px -40px 24px;display:flex;justify-content:space-between;align-items:center">
+<div class="no-print" style="position:fixed;top:0;left:0;right:0;z-index:100;background:#1a1917;color:white;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px">
   <span style="font-weight:500">Cotización Cliente — ${cot.folio||''}</span>
-  <button onclick="window.print()" style="background:white;color:#1a1917;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-weight:500">Imprimir / Guardar PDF</button>
+  <span style="display:flex;gap:8px"><button onclick="try{window.close()}catch(e){};setTimeout(function(){if(history.length>1)history.back()},100)" style="background:transparent;color:white;border:1px solid rgba(255,255,255,.4);padding:6px 16px;border-radius:4px;cursor:pointer;font-weight:500">← Cerrar</button><button onclick="window.print()" style="background:white;color:#1a1917;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-weight:500">Imprimir / Guardar PDF</button></span>
 </div>
+<div class="sheet">
 
 <div class="header-top">
   <div class="empresa-info">
@@ -224,7 +230,7 @@ ${cot.condicionesComerciales ? `<div style="background:#f6f6f4;padding:12px 16px
   <span>${emp.razonSocial||'MSMS CORP'} • ${emp.rfc||''}</span>
   <span>Generado: ${new Date().toLocaleDateString('es-MX')}</span>
 </div>
-</body></html>`;
+</div></body></html>`;
 
   openPrint(html);
 }
@@ -249,10 +255,11 @@ export function printResumenRetornos({ project, cot, calc }) {
 <title>Resumen Retornos ${cot.folio||''}</title>
 <style>${BASE_CSS}</style></head><body>
 
-<div class="no-print" style="background:#1a1917;color:white;padding:12px 20px;margin:-32px -40px 24px;display:flex;justify-content:space-between;align-items:center">
+<div class="no-print" style="position:fixed;top:0;left:0;right:0;z-index:100;background:#1a1917;color:white;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px">
   <span style="font-weight:500">Resumen Retornos — ${cot.folio||''}</span>
-  <button onclick="window.print()" style="background:white;color:#1a1917;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-weight:500">Imprimir / Guardar PDF</button>
+  <span style="display:flex;gap:8px"><button onclick="try{window.close()}catch(e){};setTimeout(function(){if(history.length>1)history.back()},100)" style="background:transparent;color:white;border:1px solid rgba(255,255,255,.4);padding:6px 16px;border-radius:4px;cursor:pointer;font-weight:500">← Cerrar</button><button onclick="window.print()" style="background:white;color:#1a1917;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-weight:500">Imprimir / Guardar PDF</button></span>
 </div>
+<div class="sheet">
 
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #1a1917">
   <div>
@@ -357,7 +364,7 @@ export function printResumenRetornos({ project, cot, calc }) {
   <span>MSMS CORP — Documento confidencial</span>
   <span>Generado: ${new Date().toLocaleDateString('es-MX')}</span>
 </div>
-</body></html>`;
+</div></body></html>`;
 
   openPrint(html);
 }
@@ -380,10 +387,11 @@ export function printResumenInterno({ project, cot, calc }) {
 .kpi .k-value { font-size: 16px; font-weight: 700; }
 </style></head><body>
 
-<div class="no-print" style="background:#1a1917;color:white;padding:12px 20px;margin:-32px -40px 24px;display:flex;justify-content:space-between;align-items:center">
+<div class="no-print" style="position:fixed;top:0;left:0;right:0;z-index:100;background:#1a1917;color:white;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px">
   <span style="font-weight:500">Resumen Interno — ${cot.folio||''}</span>
-  <button onclick="window.print()" style="background:white;color:#1a1917;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-weight:500">Imprimir / Guardar PDF</button>
+  <span style="display:flex;gap:8px"><button onclick="try{window.close()}catch(e){};setTimeout(function(){if(history.length>1)history.back()},100)" style="background:transparent;color:white;border:1px solid rgba(255,255,255,.4);padding:6px 16px;border-radius:4px;cursor:pointer;font-weight:500">← Cerrar</button><button onclick="window.print()" style="background:white;color:#1a1917;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-weight:500">Imprimir / Guardar PDF</button></span>
 </div>
+<div class="sheet">
 
 <div class="confidential">⚠ USO INTERNO MSMS CORP — NO COMPARTIR CON CLIENTE</div>
 
@@ -469,7 +477,7 @@ export function printResumenInterno({ project, cot, calc }) {
   <span>MSMS CORP — Documento confidencial — No compartir con cliente</span>
   <span>Generado: ${new Date().toLocaleDateString('es-MX')}</span>
 </div>
-</body></html>`;
+</div></body></html>`;
 
   openPrint(html);
 }
