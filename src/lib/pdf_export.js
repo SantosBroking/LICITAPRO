@@ -48,12 +48,40 @@ const BASE_CSS = `
 `;
 
 function openPrint(html, title) {
-  const w = window.open('', '_blank');
-  if (!w) { alert('Permite ventanas emergentes para imprimir'); return; }
-  w.document.write(html);
-  w.document.close();
-  if (title) w.document.title = title;
-  // No auto-imprimir: el usuario ve el preview y decide (botón Imprimir o Cerrar)
+  // Overlay in-app (funciona en PWA standalone donde window.open no tiene botón de regreso)
+  const prev = document.getElementById('lp-print-overlay');
+  if (prev) prev.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'lp-print-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#e8e8e8;display:flex;flex-direction:column';
+
+  const bar = document.createElement('div');
+  bar.style.cssText = 'background:#1a1917;color:#fff;padding:max(10px,env(safe-area-inset-top)) 16px 10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-shrink:0';
+  bar.innerHTML =
+    '<button id="lpp-back" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.45);padding:9px 18px;border-radius:8px;font-weight:600;font-size:15px;cursor:pointer">← Volver</button>' +
+    '<span style="font-weight:500;font-size:13px;opacity:.85;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (title||'Vista previa') + '</span>' +
+    '<button id="lpp-print" style="background:#fff;color:#1a1917;border:none;padding:9px 18px;border-radius:8px;font-weight:600;font-size:15px;cursor:pointer">Imprimir / PDF</button>';
+
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'flex:1;width:100%;border:none;background:#e8e8e8';
+
+  overlay.appendChild(bar);
+  overlay.appendChild(iframe);
+  document.body.appendChild(overlay);
+
+  const doc = iframe.contentWindow.document;
+  doc.open();
+  // Ocultar la barra interna del HTML (usamos la barra del overlay)
+  doc.write(html.replace('</head>', '<style>.no-print{display:none!important}</style></head>'));
+  doc.close();
+  if (title) { try { doc.title = title; } catch(e){} }
+
+  bar.querySelector('#lpp-back').onclick = () => overlay.remove();
+  bar.querySelector('#lpp-print').onclick = () => {
+    try { iframe.contentWindow.focus(); iframe.contentWindow.print(); }
+    catch(e) { window.print(); }
+  };
 }
 
 // ── helpers ───────────────────────────────────────────────────
