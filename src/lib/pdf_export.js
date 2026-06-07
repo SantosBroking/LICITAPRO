@@ -10,8 +10,7 @@ const IVA = 0.16;
 // ── Estilos base compartidos ──────────────────────────────────
 const BASE_CSS = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  @page { size: A4 portrait; margin: 8mm 12mm; }
-  @page { @top-center { content: none; } @bottom-center { content: none; } }
+  @page { size: A4 portrait; margin: 0; }
   body { font-family: Arial, sans-serif; font-size: 10px; color: #1a1917; background: #e8e8e8; margin: 0; padding: 0; }
   .sheet { width: 210mm; min-height: 297mm; padding: 14mm; margin: 60px auto 24px; background: white; box-shadow: 0 2px 14px rgba(0,0,0,.18); }
   h1 { font-size: 18px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
@@ -26,7 +25,8 @@ const BASE_CSS = `
   col.c-pu   { width: 68px; }
   col.c-sub  { width: 80px; }
   /* Evitar que una fila (con su imagen) se parta entre páginas */
-  tr { page-break-inside: avoid; break-inside: avoid; }
+  tr, td { page-break-inside: avoid; break-inside: avoid; }
+  td img { page-break-inside: avoid; break-inside: avoid; display: inline-block; vertical-align: middle; }
   thead { display: table-header-group; }
   th { background: #1a1917; color: white; padding: 7px 10px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
   td { padding: 7px 10px; border-bottom: .5px solid #e0ddd8; vertical-align: top; }
@@ -46,7 +46,7 @@ const BASE_CSS = `
   .footer { margin-top: 40px; padding-top: 14px; border-top: .5px solid #e0ddd8; font-size: 10px; color: #a0998f; display: flex; justify-content: space-between; }
   @media print {
     body { background: white; }
-    .sheet { width: auto; min-height: 0; padding: 0; margin: 0; box-shadow: none; }
+    .sheet { width: auto; min-height: 0; padding: 12mm 14mm; margin: 0; box-shadow: none; }
     .no-print { display: none !important; }
   }
 `;
