@@ -12,7 +12,7 @@ const BASE_CSS = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
   @page { size: A4 portrait; margin: 0; }
   body { font-family: Arial, sans-serif; font-size: 10px; color: #1a1917; background: #e8e8e8; margin: 0; padding: 0; }
-  .sheet { width: 210mm; min-height: 297mm; padding: 14mm; margin: 60px auto 24px; background: white; box-shadow: 0 2px 14px rgba(0,0,0,.18); }
+  .sheet { width: 210mm; min-height: 297mm; padding: 10mm; margin: 50px auto 24px; background: white; box-shadow: 0 2px 14px rgba(0,0,0,.18); }
   h1 { font-size: 18px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
   h2 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
   table { width: 100%; border-collapse: collapse; margin-bottom: 20px; table-layout: fixed; }
@@ -52,7 +52,7 @@ const BASE_CSS = `
 `;
 
 function openPrint(html, title) {
-  // Overlay in-app (funciona en PWA standalone donde window.open no tiene botón de regreso)
+  // Overlay in-app con generación de PDF propia (sin encabezado/pie del navegador)
   const prev = document.getElementById('lp-print-overlay');
   if (prev) prev.remove();
 
@@ -65,7 +65,7 @@ function openPrint(html, title) {
   bar.innerHTML =
     '<button id="lpp-back" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.45);padding:9px 18px;border-radius:8px;font-weight:600;font-size:15px;cursor:pointer">← Volver</button>' +
     '<span style="font-weight:500;font-size:13px;opacity:.85;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (title||'Vista previa') + '</span>' +
-    '<button id="lpp-print" style="background:#fff;color:#1a1917;border:none;padding:9px 18px;border-radius:8px;font-weight:600;font-size:15px;cursor:pointer">Imprimir / PDF</button>';
+    '<button id="lpp-pdf" style="background:#fff;color:#1a1917;border:none;padding:9px 18px;border-radius:8px;font-weight:600;font-size:15px;cursor:pointer">Descargar PDF</button>';
 
   const iframe = document.createElement('iframe');
   iframe.style.cssText = 'flex:1;width:100%;border:none;background:#e8e8e8';
@@ -76,15 +76,44 @@ function openPrint(html, title) {
 
   const doc = iframe.contentWindow.document;
   doc.open();
-  // Ocultar la barra interna del HTML (usamos la barra del overlay)
-  doc.write(html.replace('</head>', '<style>.no-print{display:none!important}</style></head>'));
+  doc.write(html.replace('</head>',
+    '<style>.no-print{display:none!important}</style>' +
+    '<scr' + 'ipt src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"></scr' + 'ipt>' +
+    '</head>'));
   doc.close();
   if (title) { try { doc.title = title; } catch(e){} }
 
   bar.querySelector('#lpp-back').onclick = () => overlay.remove();
-  bar.querySelector('#lpp-print').onclick = () => {
-    try { iframe.contentWindow.focus(); iframe.contentWindow.print(); }
-    catch(e) { window.print(); }
+
+  const fname = (title || 'cotizacion').replace(/[^a-z0-9áéíóúñ ]/gi, '').replace(/\s+/g, '_') + '.pdf';
+  bar.querySelector('#lpp-pdf').onclick = () => {
+    const win = iframe.contentWindow;
+    const el = win.document.querySelector('.sheet');
+    const btn = bar.querySelector('#lpp-pdf');
+    if (!win.html2pdf || !el) {
+      // Fallback: impresión nativa (puede mostrar encabezado en iOS)
+      try { win.focus(); win.print(); } catch(e) { window.print(); }
+      return;
+    }
+    btn.textContent = 'Generando...'; btn.disabled = true;
+    // Quitar sombra/margen exterior solo durante la captura
+    const prevShadow = el.style.boxShadow, prevMargin = el.style.margin;
+    el.style.boxShadow = 'none'; el.style.margin = '0';
+    win.html2pdf().set({
+      margin: 0,
+      filename: fname,
+      image: { type: 'jpeg', quality: 0.96 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['css', 'legacy'], avoid: 'tr' },
+    }).from(el).save().then(() => {
+      el.style.boxShadow = prevShadow; el.style.margin = prevMargin;
+      btn.textContent = 'Descargar PDF'; btn.disabled = false;
+    }).catch((e) => {
+      el.style.boxShadow = prevShadow; el.style.margin = prevMargin;
+      btn.textContent = 'Descargar PDF'; btn.disabled = false;
+      alert('Error al generar PDF: ' + (e.message || e));
+    });
   };
 }
 
