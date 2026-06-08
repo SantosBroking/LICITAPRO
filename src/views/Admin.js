@@ -29,6 +29,108 @@ export function Reports({ projects, vehicles, companies, audit }) {
   const ac=projects.filter(p=>!['cobrado','perdida','cancelada'].includes(p.status));
   const won=projects.filter(p=>['ganada','contrato','entrega','facturado','cobrado'].includes(p.status));
   const lost=projects.filter(p=>p.status==='perdida');
+  const [migRunning, setMigRunning] = useState(false);
+  const [migStatus, setMigStatus]   = useState('');
+  const [migDone,   setMigDone]     = useState(false);
+  const log = (msg) => setMigStatus(prev => prev + msg + '\n');
+
+  const runMigration = async () => {
+    setMigRunning(true); setMigStatus('Iniciando migración...\n'); setMigDone(false);
+    let total = 0, migrated = 0, errors = 0;
+    const UID = '31daca2f-17ff-4ce1-83ca-99e2b31094b7';
+
+    // ── 1. Fotos del catálogo (customProducts) ──
+    try {
+      log('\n📷 Fotos del catálogo...');
+      const prods = (cfg?.customProducts || []);
+      for (const prod of prods) {
+        if (prod.photo && isBase64(prod.photo)) {
+          total++;
+          try {
+            const path = `catalog/${prod.id || uid('prd')}.jpg`;
+            const blob = base64ToBlob(prod.photo, 'image/jpeg');
+            const url  = await uploadToStorage(path, blob, 'image/jpeg');
+            if (url) { prod.photo = url; migrated++; log('  ✓ ' + (prod.nom||prod.id)); }
+            else { errors++; log('  ✗ Sin Storage: ' + (prod.nom||prod.id)); }
+          } catch(e) { errors++; log('  ✗ Error: ' + e.message); }
+        }
+      }
+      if (migrated > 0) { await onSave({ ...cfg, customProducts: prods }); log('  Guardado en config.'); }
+    } catch(e) { log('Error en catálogo: ' + e.message); }
+
+    // ── 2. Vehículos: XMLs de facturas ──
+    try {
+      log('\n🚗 XMLs de facturas de vehículos...');
+      const { data: vRows } = await sb.from('vehicles').select('id,data').eq('user_id', UID);
+      for (const row of (vRows||[])) {
+        const v = row.data;
+        let changed = false;
+        for (const key of ['facturaAgencia','facturaGobierno']) {
+          const f = v[key];
+          if (f?.xmlData && isBase64(f.xmlData)) {
+            total++;
+            try {
+              const path = `vehiculos/${v.id}/${key}-${f.xmlNombre||'factura.xml'}`;
+              const blob = base64ToBlob(f.xmlData, 'text/xml');
+              const url  = await uploadToStorage(path, blob, 'text/xml');
+              if (url) { f.xmlData = url; changed = true; migrated++; log('  ✓ ' + (v.vin||v.id) + ' / ' + key); }
+              else { errors++; log('  ✗ Sin Storage: ' + (v.vin||v.id)); }
+            } catch(e) { errors++; log('  ✗ Error: ' + e.message); }
+          }
+        }
+        if (changed) {
+          await sb.from('vehicles').update({ data: v }).eq('id', row.id);
+        }
+      }
+    } catch(e) { log('Error en vehículos: ' + e.message); }
+
+    // ── 3. Documentos de empresas ──
+    try {
+      log('\n🏢 Documentos de empresas...');
+      const { data: cRows } = await sb.from('companies').select('id,data').eq('user_id', UID);
+      for (const row of (cRows||[])) {
+        const c = row.data;
+        let changed = false;
+        // Documentos base
+        for (const doc of (c.baseDocs||[])) {
+          if (doc.fileData && isBase64(doc.fileData)) {
+            total++;
+            try {
+              const path = `empresas/${c.id}/${doc.id}-${doc.fileName||'doc.pdf'}`;
+              const blob = base64ToBlob(doc.fileData, 'application/pdf');
+              const url  = await uploadToStorage(path, blob, 'application/pdf');
+              if (url) { doc.fileData = url; changed = true; migrated++; log('  ✓ ' + (c.nombre||c.id) + '/' + doc.name); }
+              else { errors++; }
+            } catch(e) { errors++; log('  ✗ ' + e.message); }
+          }
+        }
+        // Reformas
+        for (const ref of (c.reformas||[])) {
+          if (ref.fileData && isBase64(ref.fileData)) {
+            total++;
+            try {
+              const path = `empresas/${c.id}/reformas/${ref.id}-${ref.name||'reforma.pdf'}`;
+              const blob = base64ToBlob(ref.fileData, 'application/pdf');
+              const url  = await uploadToStorage(path, blob, 'application/pdf');
+              if (url) { ref.fileData = url; changed = true; migrated++; log('  ✓ Reforma: ' + ref.name); }
+              else { errors++; }
+            } catch(e) { errors++; log('  ✗ ' + e.message); }
+          }
+        }
+        if (changed) {
+          await sb.from('companies').update({ data: c }).eq('id', row.id);
+        }
+      }
+    } catch(e) { log('Error en empresas: ' + e.message); }
+
+    log('\n─────────────────────────────');
+    log('Total encontrados: ' + total);
+    log('Migrados a Storage: ' + migrated);
+    log('Errores: ' + errors);
+    setMigRunning(false);
+    if (migrated > 0) setMigDone(true);
+  };
+
   return h('div', null,
     h('div', { className:'page-title', style:{ marginBottom:16 } }, 'Reportes y exportación'),
     h('div', { className:'grid-4', style:{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:20 } },
@@ -55,6 +157,20 @@ export function Reports({ projects, vehicles, companies, audit }) {
         h('button', { onClick:()=>toExcel([shVehicles(filtVehicles,filtered)],`Vehiculos_${TODAY()}.xlsx`), style:{ fontSize:13, padding:'10px 16px' } }, 'Solo vehículos'),
       ),
     ),
+    // ── Migración a Storage ──────────────────────────────────────
+    h('div', { className:'card', style:{ marginTop:20 } },
+      h('div', { style:{ fontSize:14, fontWeight:600, marginBottom:4 } }, '📦 Migrar archivos existentes a Supabase Storage'),
+      h('div', { style:{ fontSize:12, color:'var(--t2)', marginBottom:12 } },
+        'Sube a Storage todos los archivos (fotos del catálogo, XMLs de facturas, documentos de empresas) que están guardados como base64 en la base de datos. Los nuevos ya van directo a Storage; este botón migra los que ya estaban guardados antes.'
+      ),
+      migStatus && h('div', { style:{ marginBottom:10, padding:'10px 14px', background:'var(--bg2)', borderRadius:'var(--r)', fontSize:12, fontFamily:'monospace', whiteSpace:'pre-wrap', maxHeight:200, overflowY:'auto' } }, migStatus),
+      h('div', { style:{ display:'flex', gap:10, flexWrap:'wrap' } },
+        h('button', { onClick:runMigration, disabled:migRunning,
+          style:{ padding:'10px 20px', borderRadius:'var(--r)', background:'var(--blue)', color:'white', border:'none', cursor:migRunning?'wait':'pointer', fontWeight:600, opacity:migRunning?.6:1 } },
+          migRunning ? '⏳ Migrando...' : '🚀 Iniciar migración'),
+        migDone && h('span', { style:{ fontSize:12, color:'var(--green)', alignSelf:'center' } }, '✅ Migración completada'),
+      ),
+    ),
   );
 }
 
@@ -70,6 +186,108 @@ export function Settings({ config, user, onSave }) {
   const rmStatus  = i  => set('customStatuses',(cfg.customStatuses||[]).filter((_,j)=>j!==i));
   const addPType  = () => { if(newPType.trim()){set('customProductTypes',[...(cfg.customProductTypes||[]),newPType.trim()]);setNewPType('');} };
   const rmPType   = i  => set('customProductTypes',(cfg.customProductTypes||[]).filter((_,j)=>j!==i));
+  const [migRunning, setMigRunning] = useState(false);
+  const [migStatus, setMigStatus]   = useState('');
+  const [migDone,   setMigDone]     = useState(false);
+  const log = (msg) => setMigStatus(prev => prev + msg + '\n');
+
+  const runMigration = async () => {
+    setMigRunning(true); setMigStatus('Iniciando migración...\n'); setMigDone(false);
+    let total = 0, migrated = 0, errors = 0;
+    const UID = '31daca2f-17ff-4ce1-83ca-99e2b31094b7';
+
+    // ── 1. Fotos del catálogo (customProducts) ──
+    try {
+      log('\n📷 Fotos del catálogo...');
+      const prods = (cfg?.customProducts || []);
+      for (const prod of prods) {
+        if (prod.photo && isBase64(prod.photo)) {
+          total++;
+          try {
+            const path = `catalog/${prod.id || uid('prd')}.jpg`;
+            const blob = base64ToBlob(prod.photo, 'image/jpeg');
+            const url  = await uploadToStorage(path, blob, 'image/jpeg');
+            if (url) { prod.photo = url; migrated++; log('  ✓ ' + (prod.nom||prod.id)); }
+            else { errors++; log('  ✗ Sin Storage: ' + (prod.nom||prod.id)); }
+          } catch(e) { errors++; log('  ✗ Error: ' + e.message); }
+        }
+      }
+      if (migrated > 0) { await onSave({ ...cfg, customProducts: prods }); log('  Guardado en config.'); }
+    } catch(e) { log('Error en catálogo: ' + e.message); }
+
+    // ── 2. Vehículos: XMLs de facturas ──
+    try {
+      log('\n🚗 XMLs de facturas de vehículos...');
+      const { data: vRows } = await sb.from('vehicles').select('id,data').eq('user_id', UID);
+      for (const row of (vRows||[])) {
+        const v = row.data;
+        let changed = false;
+        for (const key of ['facturaAgencia','facturaGobierno']) {
+          const f = v[key];
+          if (f?.xmlData && isBase64(f.xmlData)) {
+            total++;
+            try {
+              const path = `vehiculos/${v.id}/${key}-${f.xmlNombre||'factura.xml'}`;
+              const blob = base64ToBlob(f.xmlData, 'text/xml');
+              const url  = await uploadToStorage(path, blob, 'text/xml');
+              if (url) { f.xmlData = url; changed = true; migrated++; log('  ✓ ' + (v.vin||v.id) + ' / ' + key); }
+              else { errors++; log('  ✗ Sin Storage: ' + (v.vin||v.id)); }
+            } catch(e) { errors++; log('  ✗ Error: ' + e.message); }
+          }
+        }
+        if (changed) {
+          await sb.from('vehicles').update({ data: v }).eq('id', row.id);
+        }
+      }
+    } catch(e) { log('Error en vehículos: ' + e.message); }
+
+    // ── 3. Documentos de empresas ──
+    try {
+      log('\n🏢 Documentos de empresas...');
+      const { data: cRows } = await sb.from('companies').select('id,data').eq('user_id', UID);
+      for (const row of (cRows||[])) {
+        const c = row.data;
+        let changed = false;
+        // Documentos base
+        for (const doc of (c.baseDocs||[])) {
+          if (doc.fileData && isBase64(doc.fileData)) {
+            total++;
+            try {
+              const path = `empresas/${c.id}/${doc.id}-${doc.fileName||'doc.pdf'}`;
+              const blob = base64ToBlob(doc.fileData, 'application/pdf');
+              const url  = await uploadToStorage(path, blob, 'application/pdf');
+              if (url) { doc.fileData = url; changed = true; migrated++; log('  ✓ ' + (c.nombre||c.id) + '/' + doc.name); }
+              else { errors++; }
+            } catch(e) { errors++; log('  ✗ ' + e.message); }
+          }
+        }
+        // Reformas
+        for (const ref of (c.reformas||[])) {
+          if (ref.fileData && isBase64(ref.fileData)) {
+            total++;
+            try {
+              const path = `empresas/${c.id}/reformas/${ref.id}-${ref.name||'reforma.pdf'}`;
+              const blob = base64ToBlob(ref.fileData, 'application/pdf');
+              const url  = await uploadToStorage(path, blob, 'application/pdf');
+              if (url) { ref.fileData = url; changed = true; migrated++; log('  ✓ Reforma: ' + ref.name); }
+              else { errors++; }
+            } catch(e) { errors++; log('  ✗ ' + e.message); }
+          }
+        }
+        if (changed) {
+          await sb.from('companies').update({ data: c }).eq('id', row.id);
+        }
+      }
+    } catch(e) { log('Error en empresas: ' + e.message); }
+
+    log('\n─────────────────────────────');
+    log('Total encontrados: ' + total);
+    log('Migrados a Storage: ' + migrated);
+    log('Errores: ' + errors);
+    setMigRunning(false);
+    if (migrated > 0) setMigDone(true);
+  };
+
   return h('div', null,
     h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 } },
       h('div', { style:{ fontSize:20, fontWeight:500 } }, 'Configuración'),
@@ -156,6 +374,108 @@ export function AuditLogView({ audit }) {
   const page_items = visible.slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE);
   const pages = Math.ceil(visible.length/PAGE_SIZE);
   const entities = [...new Set(audit.map(a=>a.entity).filter(Boolean))];
+  const [migRunning, setMigRunning] = useState(false);
+  const [migStatus, setMigStatus]   = useState('');
+  const [migDone,   setMigDone]     = useState(false);
+  const log = (msg) => setMigStatus(prev => prev + msg + '\n');
+
+  const runMigration = async () => {
+    setMigRunning(true); setMigStatus('Iniciando migración...\n'); setMigDone(false);
+    let total = 0, migrated = 0, errors = 0;
+    const UID = '31daca2f-17ff-4ce1-83ca-99e2b31094b7';
+
+    // ── 1. Fotos del catálogo (customProducts) ──
+    try {
+      log('\n📷 Fotos del catálogo...');
+      const prods = (cfg?.customProducts || []);
+      for (const prod of prods) {
+        if (prod.photo && isBase64(prod.photo)) {
+          total++;
+          try {
+            const path = `catalog/${prod.id || uid('prd')}.jpg`;
+            const blob = base64ToBlob(prod.photo, 'image/jpeg');
+            const url  = await uploadToStorage(path, blob, 'image/jpeg');
+            if (url) { prod.photo = url; migrated++; log('  ✓ ' + (prod.nom||prod.id)); }
+            else { errors++; log('  ✗ Sin Storage: ' + (prod.nom||prod.id)); }
+          } catch(e) { errors++; log('  ✗ Error: ' + e.message); }
+        }
+      }
+      if (migrated > 0) { await onSave({ ...cfg, customProducts: prods }); log('  Guardado en config.'); }
+    } catch(e) { log('Error en catálogo: ' + e.message); }
+
+    // ── 2. Vehículos: XMLs de facturas ──
+    try {
+      log('\n🚗 XMLs de facturas de vehículos...');
+      const { data: vRows } = await sb.from('vehicles').select('id,data').eq('user_id', UID);
+      for (const row of (vRows||[])) {
+        const v = row.data;
+        let changed = false;
+        for (const key of ['facturaAgencia','facturaGobierno']) {
+          const f = v[key];
+          if (f?.xmlData && isBase64(f.xmlData)) {
+            total++;
+            try {
+              const path = `vehiculos/${v.id}/${key}-${f.xmlNombre||'factura.xml'}`;
+              const blob = base64ToBlob(f.xmlData, 'text/xml');
+              const url  = await uploadToStorage(path, blob, 'text/xml');
+              if (url) { f.xmlData = url; changed = true; migrated++; log('  ✓ ' + (v.vin||v.id) + ' / ' + key); }
+              else { errors++; log('  ✗ Sin Storage: ' + (v.vin||v.id)); }
+            } catch(e) { errors++; log('  ✗ Error: ' + e.message); }
+          }
+        }
+        if (changed) {
+          await sb.from('vehicles').update({ data: v }).eq('id', row.id);
+        }
+      }
+    } catch(e) { log('Error en vehículos: ' + e.message); }
+
+    // ── 3. Documentos de empresas ──
+    try {
+      log('\n🏢 Documentos de empresas...');
+      const { data: cRows } = await sb.from('companies').select('id,data').eq('user_id', UID);
+      for (const row of (cRows||[])) {
+        const c = row.data;
+        let changed = false;
+        // Documentos base
+        for (const doc of (c.baseDocs||[])) {
+          if (doc.fileData && isBase64(doc.fileData)) {
+            total++;
+            try {
+              const path = `empresas/${c.id}/${doc.id}-${doc.fileName||'doc.pdf'}`;
+              const blob = base64ToBlob(doc.fileData, 'application/pdf');
+              const url  = await uploadToStorage(path, blob, 'application/pdf');
+              if (url) { doc.fileData = url; changed = true; migrated++; log('  ✓ ' + (c.nombre||c.id) + '/' + doc.name); }
+              else { errors++; }
+            } catch(e) { errors++; log('  ✗ ' + e.message); }
+          }
+        }
+        // Reformas
+        for (const ref of (c.reformas||[])) {
+          if (ref.fileData && isBase64(ref.fileData)) {
+            total++;
+            try {
+              const path = `empresas/${c.id}/reformas/${ref.id}-${ref.name||'reforma.pdf'}`;
+              const blob = base64ToBlob(ref.fileData, 'application/pdf');
+              const url  = await uploadToStorage(path, blob, 'application/pdf');
+              if (url) { ref.fileData = url; changed = true; migrated++; log('  ✓ Reforma: ' + ref.name); }
+              else { errors++; }
+            } catch(e) { errors++; log('  ✗ ' + e.message); }
+          }
+        }
+        if (changed) {
+          await sb.from('companies').update({ data: c }).eq('id', row.id);
+        }
+      }
+    } catch(e) { log('Error en empresas: ' + e.message); }
+
+    log('\n─────────────────────────────');
+    log('Total encontrados: ' + total);
+    log('Migrados a Storage: ' + migrated);
+    log('Errores: ' + errors);
+    setMigRunning(false);
+    if (migrated > 0) setMigDone(true);
+  };
+
   return h('div', null,
     h('div', { style:{ fontSize:20, fontWeight:500, marginBottom:16 } }, 'Bitácora de auditoría'),
     h('div', { style:{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' } },
