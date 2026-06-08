@@ -143,6 +143,16 @@ export async function printCotizacionCliente({ project, cot, calc, config }) {
       imgCache[url] = await new Promise(r => { const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(blob); });
     } catch(e) { imgCache[url] = url; }
   };
+  // Diagnóstico de fotos de vehículos
+  const debugInfo = (cot.partidas||[]).map(p => ({
+    id: p.id,
+    vehiculoId: p.vehiculoId || 'NO SELECCIONADO',
+    enCatalogo: !!(liveCatMap[p.vehiculoId]),
+    photoLen: (liveCatMap[p.vehiculoId]?.photo || p.foto || '').slice(0,30),
+  }));
+  console.log('[PDF Vehículos]', debugInfo);
+  window.__pdfDebug = debugInfo;
+
   // Recopilar fotos de vehículos — prioriza catálogo en vivo sobre snapshot guardado
   const allFotos = (cot.partidas||[]).map(p => {
     const live = liveCatMap[p.vehiculoId]?.photo || '';

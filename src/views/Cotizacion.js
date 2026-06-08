@@ -171,7 +171,9 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
           h('input', { type:'checkbox', checked:p.activo, onChange:e=>updPartida(p.id,'activo',e.target.checked), style:{ width:15, height:15, cursor:'pointer', accentColor:'var(--blue)' } }),
           (() => {
             const vehFoto = p.foto || (window._lpConfig?.customProducts||[]).find(x=>x.id===p.vehiculoId)?.photo || '';
-            return vehFoto ? h('img', { src:vehFoto, style:{ width:36, height:28, objectFit:'contain', borderRadius:4, flexShrink:0 } }) : null;
+            if (vehFoto) return h('img', { src:vehFoto, style:{ width:36, height:28, objectFit:'contain', borderRadius:4, flexShrink:0 } });
+            if (p.vehiculoId) return h('span', { style:{ fontSize:10, color:'var(--amber)', padding:'2px 6px', background:'#FEF3C7', borderRadius:4 } }, '⚠ sin foto');
+            return h('span', { style:{ fontSize:10, color:'var(--t3)', padding:'2px 6px', background:'var(--bg2)', borderRadius:4 } }, '🚗 sin seleccionar');
           })(),
           h('span', { style:{ fontWeight:600, fontSize:14, color:p.activo?'var(--blue)':'var(--t3)' } }, p.id),
           p.activo&&p.cantidad>0&&p.tipo && h('span', { style:{ fontSize:12, color:'var(--t2)' } }, p.cantidad,' × ',p.tipo,' ',p.marca,' ',p.modelo),
