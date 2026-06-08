@@ -23,7 +23,7 @@ const NAV_ITEMS = [
 ];
 
 export default function App() {
-  const [user,      setUser]      = useState({ id: "31daca2f-17ff-4ce1-83ca-99e2b31094b7", email: "santiago@brokingroup.com" });
+  const [user,      setUser]      = useState(null); // null hasta que onAuthStateChange confirme la sesión
   const [loading,   setLoading]   = useState(true);
   const [projects,  setProjects]  = useState([]);
   const [vehicles,  setVehicles]  = useState([]);
@@ -198,6 +198,7 @@ export default function App() {
 
   const handleLogin = async (u) => {
     setUser(u);
+    await loadData(u);
     setLoading(true);
     try {
       const d = await dbLoad(u.workspaceId || u.id);
