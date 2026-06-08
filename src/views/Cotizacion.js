@@ -5,6 +5,23 @@ import { calcCotizacion } from '../lib/calc.js';
 import { fmt, pctS, daysOld, TODAY, uid } from '../lib/utils.js';
 import { NumInput } from '../ui/primitives.js';
 
+// Construye catálogo en vivo (base + personalizados) para que editar el catálogo
+// se refleje inmediatamente en la cotización sin necesidad de re-agregar productos.
+function buildLiveCatalog() {
+  const custom = window._lpConfig?.customProducts || [];
+  const map = {};
+  [...CATALOG_PRODUCTS, ...custom].forEach(p => { map[p.id] = p; });
+  return map;
+}
+// Mezcla los datos del catálogo en vivo con la entrada guardada en la cotización.
+// Los campos del usuario (costo, cantidades, etc.) se respetan; nombre/cat/vis vienen del catálogo.
+function liveEquipo(e) {
+  const cat = buildLiveCatalog();
+  const live = cat[e.productoId];
+  if (!live) return e;
+  return { ...e, nombre: live.nom || e.nombre, cat: live.cat || e.cat, vis: live.vis ?? e.vis };
+}
+
 const TABS = ['partidas','equipo','extras','corrida','agente'];
 const TAB_LABELS = { partidas:'1 · Partidas', equipo:'2 · Equipo', extras:'3 · Retornos e ISR', corrida:'4 · Corrida financiera', agente:'5 · Agente Claude' };
 const BASES_RETORNO = ['% sobre venta c/IVA','% sobre venta s/IVA','Monto fijo total','Monto fijo por unidad'];
@@ -188,7 +205,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
             h('td', { style:{ padding:'6px 4px', color:'var(--t2)', fontSize:10, width:115 } }, 'Estatus'),
             h('td', { style:{ padding:'6px 4px', width:24 } }),
           )),
-          h('tbody', null, [...cot.equipo].sort((a,b)=>(a.cat||'').localeCompare(b.cat||'','es',{numeric:true})).map(e=>{
+          h('tbody', null, [...cot.equipo].sort((a,b)=>(a.cat||'').localeCompare(b.cat||'','es',{numeric:true})).map(eRaw=>{ const e=liveEquipo(eRaw);
             const days=daysOld(e.fechaCosto), ageC=days===null?'':days>120?'var(--red)':days>60?'var(--amber)':'';
             const estBg=e.est==='Confirmado'?'#E1F5EE':e.est==='Vencido'?'#FCEBEB':'#FAEEDA';
             const estTx=e.est==='Confirmado'?'#085041':e.est==='Vencido'?'#791F1F':'#633806';

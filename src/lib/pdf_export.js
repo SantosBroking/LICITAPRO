@@ -129,6 +129,16 @@ const fmtDate = d => {
 // ══════════════════════════════════════════════════════════════
 export function printCotizacionCliente({ project, cot, calc, config }) {
   const emp = config?.empresa || {};
+  // Catálogo en vivo: productos base + personalizados del config
+  const liveCatMap = {};
+  [...CATALOG_PRODUCTS, ...(config?.customProducts || [])].forEach(p => { liveCatMap[p.id] = p; });
+  // Función para enriquecer cada entrada de equipo con datos actuales del catálogo
+  const liveEq = (e) => {
+    const live = liveCatMap[e.productoId];
+    if (!live) return e;
+    return { ...e, nombre: live.nom || e.nombre, descripcion: live.desc || e.descripcion, cat: live.cat || e.cat, vis: live.vis ?? e.vis };
+  };
+
   // Mapa de kits efectivo: los kits editados en config sobrescriben los del catálogo base
   const effKitMap = { ...KIT_MAP };
   (config?.customProducts || []).forEach(p => {
@@ -153,7 +163,7 @@ export function printCotizacionCliente({ project, cot, calc, config }) {
     const subtotal = pvUnit * qty;
 
     // Equipo visible para el cliente
-    const eqItems = (cot.equipo||[]).filter(e => e.usar && e.vis && (e.cnts&&e.cnts[pi]>0)).sort((a,b)=>(a.cat||'').localeCompare(b.cat||'','es',{numeric:true}));
+    const eqItems = (cot.equipo||[]).map(liveEq).filter(e => e.usar && e.vis && (e.cnts&&e.cnts[pi]>0)).sort((a,b)=>(a.cat||'').localeCompare(b.cat||'','es',{numeric:true}));
 
     return { p, qty, pvUnit, subtotal, eqItems, pi };
   });
