@@ -107,7 +107,16 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
     setAiLoading(false);
   };
 
-  const cats   = [...new Set(CATALOG_PRODUCTS.map(p=>p.cat))];
+  // Catálogo completo: base + personalizados del config (sin vehículos, sin ocultos)
+  const hiddenProds = window._lpConfig?.hiddenProducts || [];
+  const customProds = (window._lpConfig?.customProducts || []).filter(x => !x.esVehiculo);
+  const overrides = {};
+  customProds.forEach(p => { if (CATALOG_PRODUCTS.find(x=>x.id===p.id)) overrides[p.id]=p; });
+  const allCatalog = [
+    ...CATALOG_PRODUCTS.filter(p=>!hiddenProds.includes(p.id)).map(p=>overrides[p.id]||p),
+    ...customProds.filter(p=>!CATALOG_PRODUCTS.find(x=>x.id===p.id) && !p.esVehiculo),
+  ];
+  const cats   = [...new Set(allCatalog.map(p=>p.cat))];
   const tabIdx = TABS.indexOf(tab);
   const goNext = ()=>{ if(tabIdx<TABS.length-1)setTab(TABS[tabIdx+1]); };
   const goPrev = ()=>{ if(tabIdx>0)setTab(TABS[tabIdx-1]); };
@@ -238,7 +247,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
           cats.map(c=>h('button',{key:c,style:{fontSize:11,padding:'4px 10px',background:catSel===c?'var(--t1)':'transparent',color:catSel===c?'var(--bg1)':'var(--t2)',border:'.5px solid var(--b2)',borderRadius:'var(--r)'},onClick:()=>setCatSel(c)},c))
         ),
         h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:5 } },
-          CATALOG_PRODUCTS.filter(p=>p.cat===catSel).map(prod=>{
+          allCatalog.filter(p=>p.cat===catSel).map(prod=>{
             const ya=cot.equipo.some(e=>e.productoId===prod.id);
             return h('div', { key:prod.id, style:{ padding:'7px 10px', background:ya?'#E1F5EE':'var(--bg2)', borderRadius:'var(--r)', border:'.5px solid var(--b3)', display:'flex', justifyContent:'space-between', alignItems:'center', gap:6 } },
               h('div', { style:{ minWidth:0 } },
