@@ -282,8 +282,7 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
         return eqItems.map((e,i) => {
         const kitItems = effKitMap[e.productoId];
         if (kitItems && kitItems.length > 0) {
-          const allCat = [...CATALOG_PRODUCTS, ...(config?.customProducts || [])];
-          const comps = kitItems.map(kid => allCat.find(p => p.id === kid)).filter(Boolean);
+          const comps = kitItems.map(kid => liveCatMap[kid]).filter(Boolean);
           return comps.map((comp, ci) => {
             const img = comp.photo || CATALOG_IMAGES[comp.id];
             const num = rowNum++;
@@ -297,13 +296,14 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
             </tr>`;
           }).join('');
         } else {
-          const img = CATALOG_IMAGES[e.productoId];
+          const liveProd = liveCatMap[e.productoId];
+          const img = (liveProd?.photo) || CATALOG_IMAGES[e.productoId];
           const num = rowNum++;
           return `<tr>
             <td style="text-align:center;color:#6b6862;font-size:10px">${num}</td>
             <td style="text-align:center;padding:4px">${img ? `<img src="${img}" style="width:58px;height:58px;object-fit:contain;border-radius:3px;" />` : ''}</td>
-            <td style="font-weight:600;font-size:11px">${e.nombre}</td>
-            <td style="font-size:10px;color:#6b6862">${e.descripcion||''}</td>
+            <td style="font-weight:600;font-size:11px">${liveProd?.nom||e.nombre}</td>
+            <td style="font-size:10px;color:#6b6862">${liveProd?.desc||e.descripcion||''}</td>
             <td style="text-align:center">${(e.cnts&&e.cnts[pi])!=null?(e.cnts[pi]||0):1}</td>
             <td style="text-align:right"></td>
             <td style="text-align:right"></td>
