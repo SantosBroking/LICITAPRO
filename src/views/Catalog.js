@@ -23,7 +23,7 @@ async function compressImage(dataURL, maxPx=300, quality=0.5) {
 }
 import { Inp } from '../ui/primitives.js';
 
-const CATS_BASE = [...new Set(CATALOG_PRODUCTS.map(p => p.cat))];
+const CATS_BASE = ['00 Vehículos', ...new Set(CATALOG_PRODUCTS.map(p => p.cat))];
 const EMPTY_PROD = () => ({ id:'', cat:'', catNew:'', sub:'', nom:'', desc:'', prov:'MSMS CORP', vis:true, price:0, photo:'' });
 
 function ProductForm({ prod, onSave, onCancel, existingCats, allProducts }) {
@@ -44,9 +44,12 @@ function ProductForm({ prod, onSave, onCancel, existingCats, allProducts }) {
   const cat = p.catNew || p.cat;
 
   const doSave = () => {
-    if (!p.nom.trim()) { alert('El nombre del producto es obligatorio'); return; }
-    if (!cat.trim()) { alert('La categoría es obligatoria'); return; }
-    onSave({ ...p, cat, id: p.id || ('custom-' + uid('prd')) });
+    const finalCat = p.esVehiculo ? '00 Vehículos' : cat;
+    const autoNom = p.esVehiculo ? [p.v_marca,p.v_modelo,p.v_version,p.v_ano].filter(Boolean).join(' ') : '';
+    const finalNom = p.nom.trim() || autoNom;
+    if (!finalNom) { alert('Agrega al menos la marca y modelo del vehículo'); return; }
+    if (!finalCat.trim()) { alert('La categoría es obligatoria'); return; }
+    onSave({ ...p, nom:finalNom, cat:finalCat, id: p.id || ('custom-' + uid('prd')) });
   };
 
   return h('div', { className:'card', style:{ maxWidth:600 } },
@@ -108,16 +111,19 @@ function ProductForm({ prod, onSave, onCancel, existingCats, allProducts }) {
     // ── Modelo de vehículo ──
     h('div', { style:{ border:'1px solid var(--b1)', borderRadius:'var(--rl)', padding:14, marginBottom:14 } },
       h('label', { style:{ display:'flex', gap:8, alignItems:'center', cursor:'pointer', marginBottom:p.esVehiculo?12:0 } },
-        h('input', { type:'checkbox', checked:!!p.esVehiculo, onChange:e=>set('esVehiculo',e.target.checked) }),
+        h('input', { type:'checkbox', checked:!!p.esVehiculo, onChange:e=>{
+          const v = e.target.checked;
+          sP(x=>({...x, esVehiculo:v, cat:v?'00 Vehículos':x.cat}));
+        } }),
         h('span', { style:{ fontSize:13, fontWeight:500 } }, '🚗 Es un modelo de vehículo'),
         h('span', { style:{ fontSize:11, color:'var(--t3)', marginLeft:4 } }, '— aparece como opción rápida en las partidas de la cotización'),
       ),
       p.esVehiculo && h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))', gap:10 } },
         h(Inp, { label:'Tipo', value:p.v_tipo||'', onChange:v=>set('v_tipo',v), placeholder:'Pickup patrulla' }),
-        h(Inp, { label:'Marca', value:p.v_marca||'', onChange:v=>set('v_marca',v), placeholder:'Nissan' }),
-        h(Inp, { label:'Modelo', value:p.v_modelo||'', onChange:v=>set('v_modelo',v), placeholder:'Frontier' }),
-        h(Inp, { label:'Versión', value:p.v_version||'', onChange:v=>set('v_version',v), placeholder:'LE TA 4x4' }),
-        h(Inp, { label:'Año', value:p.v_ano||'', onChange:v=>set('v_ano',v), placeholder:'2026' }),
+        h(Inp, { label:'Marca', value:p.v_marca||'', onChange:v=>{ sP(x=>({...x,v_marca:v,nom:[v,x.v_modelo,x.v_version,x.v_ano].filter(Boolean).join(' ')||x.nom})); }, placeholder:'Nissan' }),
+        h(Inp, { label:'Modelo', value:p.v_modelo||'', onChange:v=>{ sP(x=>({...x,v_modelo:v,nom:[x.v_marca,v,x.v_version,x.v_ano].filter(Boolean).join(' ')||x.nom})); }, placeholder:'Frontier' }),
+        h(Inp, { label:'Versión', value:p.v_version||'', onChange:v=>{ sP(x=>({...x,v_version:v,nom:[x.v_marca,x.v_modelo,v,x.v_ano].filter(Boolean).join(' ')||x.nom})); }, placeholder:'LE TA 4x4' }),
+        h(Inp, { label:'Año', value:p.v_ano||'', onChange:v=>{ sP(x=>({...x,v_ano:v,nom:[x.v_marca,x.v_modelo,x.v_version,v].filter(Boolean).join(' ')||x.nom})); }, placeholder:'2026' }),
       ),
     ),
 
