@@ -58,10 +58,9 @@ export default function App() {
   };
   window.__reloadData = reloadData;
 
-  useEffect(() => {
-    const loadData = async (u) => {
-      try {
-        const d = await dbLoad(u.workspaceId || u.id);
+  const loadData = useCallback(async (u) => {
+    try {
+      const d = await dbLoad(u.workspaceId || u.id);
         setProjects(d.projects || []);
         setVehicles(d.vehicles || []);
         setCompanies(d.companies || []);
@@ -85,9 +84,10 @@ export default function App() {
             }
           }
         }
-      } catch(e) { console.error('Error cargando datos:', e); }
-    };
+    } catch(e) { console.error('Error cargando datos:', e); }
+  }, []);
 
+  useEffect(() => {
     const { data: { subscription } } = authSb.onAuthStateChange(async (event, session) => {
       if (event === 'INITIAL_SESSION') {
         if (session?.user) {
@@ -198,16 +198,8 @@ export default function App() {
 
   const handleLogin = async (u) => {
     setUser(u);
-    await loadData(u);
     setLoading(true);
-    try {
-      const d = await dbLoad(u.workspaceId || u.id);
-      setProjects(d.projects || []);
-      setVehicles(d.vehicles || []);
-      setCompanies(d.companies || []);
-      setAudit(d.audit || []);
-      if (d.config) { setConfig(d.config); window._lpConfig = d.config; }
-    } catch(e) { console.error(e); }
+    await loadData(u);
     setLoading(false);
   };
   if (!user) return h(AuthScreen, { onLogin: handleLogin });
