@@ -357,6 +357,20 @@ export function Settings({ config, user, onSave }) {
         ),
       ),
     ),
+    // ── Migración a Storage ──
+    h('div', { className:'card', style:{ marginTop:16 } },
+      h('div', { style:{ fontSize:14, fontWeight:600, marginBottom:4 } }, '📦 Migrar archivos a Supabase Storage'),
+      h('div', { style:{ fontSize:12, color:'var(--t2)', marginBottom:12 } },
+        'Sube a Storage todos los archivos (fotos del catálogo, XMLs de facturas, documentos de empresas) que están guardados como base64. Los nuevos ya van directo a Storage; este botón migra los existentes.'
+      ),
+      migStatus && h('div', { style:{ marginBottom:10, padding:'10px 14px', background:'var(--bg2)', borderRadius:'var(--r)', fontSize:11, fontFamily:'monospace', whiteSpace:'pre-wrap', maxHeight:180, overflowY:'auto' } }, migStatus),
+      h('div', { style:{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' } },
+        h('button', { onClick:runMigration, disabled:migRunning,
+          style:{ padding:'10px 20px', borderRadius:'var(--r)', background:'var(--blue)', color:'white', border:'none', cursor:migRunning?'wait':'pointer', fontWeight:600, opacity:migRunning?.6:1 } },
+          migRunning ? '⏳ Migrando...' : '🚀 Iniciar migración'),
+        migDone && h('span', { style:{ fontSize:12, color:'var(--green)' } }, '✅ Migración completada — recarga la página'),
+      ),
+    ),
   );
 }
 
