@@ -67,10 +67,27 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
   })});
   const catalogVehiculos = [...CATALOG_PRODUCTS, ...(window._lpConfig?.customProducts||[])].filter(x=>x.esVehiculo);
   const updEquipo  = (eid,k,v) => updCot({...cot,equipo:cot.equipo.map(e=>e.id===eid?{...e,[k]:v}:e)});
-  const updCnts = (eid,pi,v) => updCot({...cot,equipo:cot.equipo.map(e=>{ if(e.id!==eid)return e; const cnts=[...(e.cnts||[0,0,0,0,0])];cnts[pi]=Number(v)||0;return{...e,cnts}; })});
+  const updCnts = (eid,pi,v) => updCot({...cot,equipo:cot.equipo.map(e=>{ if(e.id!==eid)return e; const cnts=[...(e.cnts||new Array(cot.partidas.length).fill(0))];cnts[pi]=Number(v)||0;return{...e,cnts}; })});
+
+  const addPartida = () => {
+    const nums = cot.partidas.map(p=>parseInt(p.id.replace('P',''))).filter(n=>!isNaN(n));
+    const next = nums.length ? Math.max(...nums)+1 : cot.partidas.length+1;
+    const newPart = makeP('P'+next, false);
+    const newEquipo = cot.equipo.map(e=>({...e, cnts:[...(e.cnts||new Array(cot.partidas.length).fill(0)),0]}));
+    updCot({...cot, partidas:[...cot.partidas,newPart], equipo:newEquipo});
+  };
+
+  const removeLastPartida = () => {
+    if (cot.partidas.length <= 1) { alert('Debe haber al menos una partida.'); return; }
+    const last = cot.partidas[cot.partidas.length-1];
+    if (last.activo && last.cantidad>0) { alert('Desactiva la última partida antes de eliminarla.'); return; }
+    const idx = cot.partidas.length-1;
+    const newEquipo = cot.equipo.map(e=>({...e, cnts:(e.cnts||[]).slice(0,idx)}));
+    updCot({...cot, partidas:cot.partidas.slice(0,-1), equipo:newEquipo});
+  };
   const addEquipo = prod => {
     if(cot.equipo.some(e=>e.productoId===prod.id))return;
-    updCot({...cot,equipo:[...cot.equipo,{id:uid('EQ'),productoId:prod.id,nombre:prod.nom,cat:prod.cat,usar:true,vis:prod.vis,costoConIVA:0,llevaIVA:prod.cat!=='08 Mano de obra',cnts:[0,0,0,0,0],est:'Estimado',fechaCosto:TODAY(),notas:''}]});
+    updCot({...cot,equipo:[...cot.equipo,{id:uid('EQ'),productoId:prod.id,nombre:prod.nom,cat:prod.cat,usar:true,vis:prod.vis,costoConIVA:0,llevaIVA:prod.cat!=='08 Mano de obra',cnts:new Array(cot.partidas.length).fill(0),est:'Estimado',fechaCosto:TODAY(),notas:''}]});
   };
   const removeEquipo  = eid => updCot({...cot,equipo:cot.equipo.filter(e=>e.id!==eid)});
   const addRetorno    = ()  => updCot({...cot,retornos:[...cot.retornos,{id:uid('RET'),nombre:'Retorno',base:'% sobre venta c/IVA',valor:0,activo:true,llevaIVA:false}]});
@@ -132,7 +149,13 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
         h('div', null, h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:3 } }, 'Agencia / Proveedor'), h('input', { value:cot.agenciaProveedor||'', onChange:e=>updCot({...cot,agenciaProveedor:e.target.value}), style:{ fontSize:12 }, placeholder:'Ej: Grupo Surman' })),
         h('div', { style:{ gridColumn:'1/-1' } }, h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:3 } }, 'Municipio / Destinatario (aparece en el PDF como «Para»)'), h('input', { value:cot.municipio||'', onChange:e=>updCot({...cot,municipio:e.target.value}), style:{ fontSize:12 }, placeholder:'Ej: Tultitlán, Estado de México' })),
       ),
-      h('div', { style:{ fontSize:12, color:'var(--t2)', marginBottom:10, background:'var(--bg2)', padding:'8px 12px', borderRadius:'var(--r)' } }, 'Una ', h('strong', null, 'partida'), ' = grupo de vehículos con el mismo equipamiento.'),
+      h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 } },
+        h('div', { style:{ fontSize:12, color:'var(--t2)', background:'var(--bg2)', padding:'8px 12px', borderRadius:'var(--r)', flex:1 } }, 'Una ', h('strong', null, 'partida'), ' = grupo de vehículos con el mismo equipamiento.'),
+        h('div', { style:{ display:'flex', gap:6, marginLeft:10 } },
+          h('button', { onClick:addPartida, style:{ fontSize:12, padding:'6px 14px', borderRadius:'var(--r)', border:'1px solid var(--blue)', color:'var(--blue)', background:'var(--bg1)', cursor:'pointer', fontWeight:500 } }, '+ Partida'),
+          cot.partidas.length > 1 && h('button', { onClick:removeLastPartida, style:{ fontSize:12, padding:'6px 14px', borderRadius:'var(--r)', border:'1px solid var(--b2)', color:'var(--t2)', background:'var(--bg1)', cursor:'pointer' } }, '− Última'),
+        ),
+      ),
       cot.partidas.map(p=>h('div', { key:p.id, className:'card', style:{ marginBottom:8, borderLeft:p.activo?'3px solid var(--blue)':'3px solid transparent', opacity:p.activo?1:.5 } },
         h('div', { style:{ display:'flex', alignItems:'center', gap:10, marginBottom:p.activo?12:0 } },
           h('input', { type:'checkbox', checked:p.activo, onChange:e=>updPartida(p.id,'activo',e.target.checked), style:{ width:15, height:15, cursor:'pointer', accentColor:'var(--blue)' } }),
