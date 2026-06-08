@@ -174,19 +174,18 @@ export default function CatalogView({ config, onSaveConfig }) {
   );
 
   const saveProduct = async (prod) => {
-    const existing = customProds.find(x => x.id === prod.id);
-    // Si es edición de producto estático (mismo ID), reemplazar en overrides
-    const isStaticEdit = !!CATALOG_PRODUCTS.find(x => x.id === prod.id);
-    const updated = existing || isStaticEdit
-      ? customProds.map(x => x.id === prod.id ? prod : x).concat(existing || isStaticEdit ? [] : [prod])
-      : [...customProds, prod];
-    // Asegurar que si es static edit y no existía en custom, se agregue
-    const finalUpdated = customProds.find(x=>x.id===prod.id)
-      ? customProds.map(x=>x.id===prod.id?prod:x)
-      : [...customProds, prod];
+    let safeProd = { ...prod };
+    // Si la foto es base64, comprimir y subir a Storage (si el bucket existe)
+    if (safeProd.photo && isBase64(safeProd.photo)) {
+      const compressed = await compressImage(safeProd.photo, 300, 0.5);
+      const url = await uploadImageToStorage(`catalog/${safeProd.id || ('custom-'+uid('prd'))}.jpg`, compressed);
+      safeProd.photo = url || compressed; // URL si subió a Storage, base64 comprimido como fallback
+    }
+    const finalUpdated = customProds.find(x=>x.id===safeProd.id)
+      ? customProds.map(x=>x.id===safeProd.id?safeProd:x)
+      : [...customProds, safeProd];
     await onSaveConfig({ ...config, customProducts: finalUpdated });
-    // Si es nueva categoría, actualizar la selección
-    setSel(prod.cat);
+    setSel(safeProd.cat);
     setForm(null);
   };
 

@@ -140,3 +140,67 @@ export async function saveAuditLog(entry, userId) {
   if (!userId) return;
   await sb.from('audit_log').insert({ id: entry.id, user_id: userId, data: entry }).catch(()=>{});
 }
+
+// ══ Supabase Storage ══════════════════════════════════════════
+const BUCKET = 'licitapro';
+
+/** Detecta si un string es base64 (data URL) o una URL de storage */
+export const isBase64 = (s) => typeof s === 'string' && s.startsWith('data:');
+
+/** Detecta si un string es una ruta de Storage */
+export const isStoragePath = (s) => typeof s === 'string' && s.includes('/storage/v1/');
+
+/** Convierte base64 a Blob para poder subir a Storage */
+export function base64ToBlob(base64, mimeType = 'application/octet-stream') {
+  const [header, b64] = base64.includes(',') ? base64.split(',') : ['', base64];
+  const mime = mimeType || (header.match(/:(.*?);/)?.[1]) || 'application/octet-stream';
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
+/** Sube un File/Blob a Storage. Retorna la URL pública.
+ *  Si falla (bucket no existe, permisos, etc.) retorna null — el código llamador debe manejar fallback. */
+export async function uploadToStorage(path, fileOrBlob, contentType) {
+  try {
+    const { data, error } = await sb.storage
+      .from(BUCKET)
+      .upload(path, fileOrBlob, { contentType, upsert: true });
+    if (error) { console.warn('[Storage] upload error:', error.message); return null; }
+    const { data: urlData } = sb.storage.from(BUCKET).getPublicUrl(data.path);
+    return urlData?.publicUrl || null;
+  } catch(e) { console.warn('[Storage] upload exception:', e.message); return null; }
+}
+
+/** Sube una imagen en base64 a Storage. Retorna URL pública o null. */
+export async function uploadImageToStorage(path, base64, mimeType = 'image/jpeg') {
+  const blob = base64ToBlob(base64, mimeType);
+  return uploadToStorage(path, blob, mimeType);
+}
+
+/** Sube un File directamente a Storage (XML, PDF). Retorna URL pública o null. */
+export async function uploadFileToStorage(path, file) {
+  return uploadToStorage(path, file, file.type || 'application/octet-stream');
+}
+
+/** Elimina un archivo de Storage (no falla si no existe). */
+export async function deleteFromStorage(path) {
+  try {
+    // Extraer solo el path relativo si viene la URL completa
+    const rel = path.includes('/storage/v1/') 
+      ? path.split('/object/public/'+BUCKET+'/')[1] 
+      : path;
+    if (rel) await sb.storage.from(BUCKET).remove([rel]);
+  } catch(e) { /* silencioso */ }
+}
+
+/** Dispara descarga de un archivo que puede ser base64 o URL de Storage */
+export function downloadFile(dataOrUrl, filename) {
+  const a = document.createElement('a');
+  a.download = filename;
+  a.href = dataOrUrl; // funciona para data: y https://
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}

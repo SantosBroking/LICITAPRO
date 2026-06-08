@@ -13,7 +13,11 @@ export function EmpresaDocsCard({ company, onUpdate }) {
     let fileData = null;
     if (def.storeFile) {
       if (file.size>10*1024*1024){alert('Archivo muy grande (máx. 10MB). Para archivos grandes, comprime el PDF.');return;}
-      try{fileData=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file);});}catch(e){alert('Error: '+e.message);return;}
+      try{
+        const sp = `empresas/${company.id}/${def.id}-${file.name}`;
+        const url = await uploadFileToStorage(sp, file);
+        fileData = url || await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file);});
+      }catch(e){alert('Error: '+e.message);return;}
     }
     const newDoc={id:def.id,name:def.name,category:def.category,status:'guardado',uploadDate:TODAY(),fileName:file.name,fileSize:file.size,fileData,expirationDate:'',notes:''};
     const updated=docs.find(d=>d.id===def.id)?docs.map(d=>d.id===def.id?newDoc:d):[...docs,newDoc];
@@ -39,8 +43,11 @@ export function EmpresaDocsCard({ company, onUpdate }) {
         for (const entry of pdfEntries) {
           const blob = await entry.async('blob');
           if (blob.size > 10*1024*1024) { alert('Omitido (muy grande, máx 10MB): ' + entry.name); continue; }
-          const fileData = await fileToB64(blob);
           const nombre = entry.name.split('/').pop();
+          const rf = new File([blob], nombre, {type:'application/pdf'});
+          const sp = `empresas/${company.id}/reformas/${Date.now()}-${nombre}`;
+          const url = await uploadFileToStorage(sp, rf);
+          const fileData = url || await fileToB64(blob);
           nuevas.push({ id:'ref-'+Date.now()+'-'+Math.random().toString(36).slice(2,7), name:nombre, fileData, fileSize:blob.size, uploadDate:TODAY() });
         }
         if (nuevas.length) onUpdate({...company, reformas:[...reformas, ...nuevas]});
@@ -51,7 +58,7 @@ export function EmpresaDocsCard({ company, onUpdate }) {
     // PDF individual
     if (file.size>10*1024*1024){alert('Archivo muy grande (máx. 10MB). Comprime el PDF.');return;}
     let fileData=null;
-    try{ fileData=await fileToB64(file); }catch(e){ alert('Error: '+e.message); return; }
+    try{ const sp=`empresas/${company.id}/reformas/${Date.now()}-${file.name}`; const url=await uploadFileToStorage(sp,file); fileData=url||await fileToB64(file); }catch(e){ alert('Error: '+e.message); return; }
     const nueva={ id:'ref-'+Date.now(), name:file.name, fileData, fileSize:file.size, uploadDate:TODAY() };
     onUpdate({...company, reformas:[...reformas, nueva]});
   };

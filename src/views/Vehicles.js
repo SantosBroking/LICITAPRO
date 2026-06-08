@@ -1,6 +1,7 @@
 // Vehicles.js — Vehículos, Facturas, Acta entrega, Billing, Docs
 import { h, useState, useRef } from '../lib/core.js';
 import { analyzeFactura } from '../lib/ai_analyzer.js';
+import { uploadFileToStorage, uploadImageToStorage, isBase64, downloadFile as dlStorage } from '../lib/supabase.js';
 import { DOC_CATEGORIES, EMPRESA_BASE_DOCS } from '../lib/constants.js';
 import { fmt, TODAY, NOW, uid, dlFile, fmtBytes } from '../lib/utils.js';
 import { Inp, Metric, EmptyState, ConfirmAction, NumInput } from '../ui/primitives.js';
@@ -113,15 +114,17 @@ export function VehicleForm({ vehicle, projectId, onSave, onSaveMany, onCancel }
         const text = await file.text();
         const fac = parseCFDI(text);
         const veh = parseCFDIVehiculo(text);
-        const b64 = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file); });
+        const vehId = uid('VEH');
+        const storagePath = `vehiculos/${vehId}/factura-agencia-${file.name}`;
+        const url = await uploadFileToStorage(storagePath, file);
         const precioSinIVA = fac.subtotal || 0;
         arr.push({
-          id:uid('VEH'), projectId,
+          id:vehId, projectId,
           marca:'', modelo:'', version:'', ano:'', color:'', numMotor:'', numInventario:'',
           vin: veh.vin || '',
           precioUnitario: precioSinIVA, iva: fac.iva || 0, precioTotal: fac.total || 0,
           equipamiento:'', statusDocs:'Pendiente', statusEntrega:'Pendiente', ubicacion:'', observaciones: veh.descripcion || '',
-          facturaAgencia:{ folio:fac.folio, fecha:fac.fecha, emisor:fac.emisor, receptor:fac.receptor, uuid:fac.uuid, subtotal:fac.subtotal, iva:fac.iva, total:fac.total, statusPago:'Pendiente', xmlNombre:file.name, xmlData:b64 },
+          facturaAgencia:{ folio:fac.folio, fecha:fac.fecha, emisor:fac.emisor, receptor:fac.receptor, uuid:fac.uuid, subtotal:fac.subtotal, iva:fac.iva, total:fac.total, statusPago:'Pendiente', xmlNombre:file.name, xmlData: url || await file.text() },
           facturaGobierno:{}, actaEntrega:{},
         });
       } catch(e) { setFactMsg('Error en '+file.name+': '+e.message); }
@@ -251,10 +254,11 @@ export function FacturaCard({ title, subtitle, color, data, onSave }) {
     try {
       const text = await file.text();
       const d = parseCFDI(text);
-      // Guardar también el XML completo (base64) para descarga futura
-      const b64 = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file); });
-      sF(p => ({ ...p, ...d, xmlNombre:file.name, xmlData:b64 }));
-      setMsg('✅ XML procesado: folio '+(d.folio||'—')+', total '+fmt(d.total)+'. Revisa y guarda.');
+      // Subir a Storage (más eficiente que base64); fallback a base64 si el bucket no existe
+      const storagePath = `vehiculos/xml-${Date.now()}-${file.name}`;
+      const url = await uploadFileToStorage(storagePath, file);
+      sF(p => ({ ...p, ...d, xmlNombre:file.name, xmlData: url || await file.text(), xmlPath: url ? storagePath : null }));
+      setMsg('✅ XML procesado: folio '+(d.folio||'—')+', total '+fmt(d.total)+(url?' · guardado en Storage':'')+'. Revisa y guarda.');
     } catch(e) { setMsg('Error al leer XML: '+e.message); }
   };
 
@@ -292,7 +296,7 @@ export function FacturaCard({ title, subtitle, color, data, onSave }) {
       h('button', { onClick:()=>pdfRef.current?.click(), disabled:analizando, style:{ fontSize:12, padding:'7px 12px', border:'1px solid var(--b2)', borderRadius:8, background:'var(--bg1)', color:'var(--t1)', cursor:'pointer', opacity:analizando?.6:1 } }, analizando?'⏳ Analizando...':'🤖 Analizar PDF'),
       h('input', { ref:pdfRef, type:'file', accept:'.pdf', style:{ display:'none' }, onChange:e=>{ handlePDF(e.target.files[0]); e.target.value=''; } }),
       f.xmlNombre && h('span', { style:{ fontSize:11, color:'var(--green)', display:'flex', alignItems:'center', gap:4 } }, '📎 '+f.xmlNombre,
-        h('span', { onClick:()=>dlFile(f.xmlData,f.xmlNombre), style:{ color:'var(--blue)', cursor:'pointer', textDecoration:'underline' } }, 'descargar')),
+        h('span', { onClick:()=>dlStorage(f.xmlData,f.xmlNombre), style:{ color:'var(--blue)', cursor:'pointer', textDecoration:'underline' } }, 'descargar')),
     ),
     msg && h('div', { style:{ marginTop:8, fontSize:11, color:msg.startsWith('Error')?'var(--red)':'var(--t2)', padding:'6px 10px', background:'var(--bg2)', borderRadius:6 } }, msg),
     h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12, marginTop:14 } },
