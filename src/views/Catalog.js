@@ -3,6 +3,7 @@ import { h, useState, useRef } from '../lib/core.js';
 import { CATALOG_PRODUCTS } from '../lib/catalog.js';
 import { CATALOG_IMAGES } from '../lib/catalog_images.js';
 import { uid } from '../lib/utils.js';
+import { uploadImageToStorage, isBase64 } from '../lib/supabase.js';
 
 // Comprime imagen a máx 300px y calidad 50% para no saturar Supabase
 async function compressImage(dataURL, maxPx=300, quality=0.5) {
