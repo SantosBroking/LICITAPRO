@@ -18,7 +18,7 @@ const BASE_CSS = `
   table { width: 100%; border-collapse: collapse; margin-bottom: 20px; table-layout: fixed; }
   td { vertical-align: middle; overflow: hidden; }
   col.c-num  { width: 22px; }
-  col.c-img  { width: 62px; }
+  col.c-img  { width: 68px; }
   col.c-nom  { width: 30%; }
   col.c-desc { width: 20%; }
   col.c-cant { width: 38px; }
@@ -270,7 +270,7 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
     <tbody>
       <tr>
         <td style="text-align:center;color:#6b6862">1</td>
-        <td style="text-align:center;padding:4px">${(()=>{const foto=liveCatMap[p.vehiculoId]?.photo||p.foto||'';return foto?`<img src="${foto}" style="width:54px;height:44px;object-fit:contain;border-radius:3px;" />`:'';})()}</td>
+        <td style="text-align:center;padding:4px">${(()=>{const foto=liveCatMap[p.vehiculoId]?.photo||p.foto||'';return foto?`<img src="${foto}" style="width:58px;height:58px;object-fit:contain;border-radius:3px;" />`:'';})()}</td>
         <td><strong>Vehículo base con equipamiento</strong></td>
         <td>${p.tipo||''} ${p.marca||''} ${p.modelo||''} ${p.version||''} ${p.ano||''}</td>
         <td style="text-align:center">${qty}</td>
@@ -289,7 +289,7 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
             const num = rowNum++;
             return `<tr>
               <td style="text-align:center;color:#6b6862;font-size:10px">${num}</td>
-              <td style="text-align:center;padding:4px">${img ? `<img src="${img}" style="width:54px;height:54px;object-fit:contain;border-radius:3px;" />` : ''}</td>
+              <td style="text-align:center;padding:4px">${img ? `<img src="${img}" style="width:58px;height:58px;object-fit:contain;border-radius:3px;" />` : ''}</td>
               <td style="font-weight:600;font-size:11px">${comp.nom}</td>
               <td style="font-size:10px;color:#6b6862">${comp.desc||''}</td>
               <td style="text-align:center">${(e.cnts&&e.cnts[pi])!=null?(e.cnts[pi]||0):1}</td>
@@ -301,7 +301,7 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
           const num = rowNum++;
           return `<tr>
             <td style="text-align:center;color:#6b6862;font-size:10px">${num}</td>
-            <td style="text-align:center;padding:4px">${img ? `<img src="${img}" style="width:54px;height:54px;object-fit:contain;border-radius:3px;" />` : ''}</td>
+            <td style="text-align:center;padding:4px">${img ? `<img src="${img}" style="width:58px;height:58px;object-fit:contain;border-radius:3px;" />` : ''}</td>
             <td style="font-weight:600;font-size:11px">${e.nombre}</td>
             <td style="font-size:10px;color:#6b6862">${e.descripcion||''}</td>
             <td style="text-align:center">${(e.cnts&&e.cnts[pi])!=null?(e.cnts[pi]||0):1}</td>
