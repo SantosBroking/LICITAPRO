@@ -159,6 +159,10 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
       cot.partidas.map(p=>h('div', { key:p.id, className:'card', style:{ marginBottom:8, borderLeft:p.activo?'3px solid var(--blue)':'3px solid transparent', opacity:p.activo?1:.5 } },
         h('div', { style:{ display:'flex', alignItems:'center', gap:10, marginBottom:p.activo?12:0 } },
           h('input', { type:'checkbox', checked:p.activo, onChange:e=>updPartida(p.id,'activo',e.target.checked), style:{ width:15, height:15, cursor:'pointer', accentColor:'var(--blue)' } }),
+          (() => {
+            const vehFoto = p.foto || (window._lpConfig?.customProducts||[]).find(x=>x.id===p.vehiculoId)?.photo || '';
+            return vehFoto ? h('img', { src:vehFoto, style:{ width:36, height:28, objectFit:'contain', borderRadius:4, flexShrink:0 } }) : null;
+          })(),
           h('span', { style:{ fontWeight:600, fontSize:14, color:p.activo?'var(--blue)':'var(--t3)' } }, p.id),
           p.activo&&p.cantidad>0&&p.tipo && h('span', { style:{ fontSize:12, color:'var(--t2)' } }, p.cantidad,' × ',p.tipo,' ',p.marca,' ',p.modelo),
           !p.activo && h('span', { style:{ fontSize:12, color:'var(--t3)' } }, 'Inactiva'),

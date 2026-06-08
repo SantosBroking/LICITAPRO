@@ -143,10 +143,18 @@ export async function printCotizacionCliente({ project, cot, calc, config }) {
       imgCache[url] = await new Promise(r => { const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(blob); });
     } catch(e) { imgCache[url] = url; }
   };
-  // Recopilar y cargar todas las fotos de vehículos
-  const allFotos = (cot.partidas||[]).map(p => liveCatMap[p.vehiculoId]?.photo || p.foto || '').filter(Boolean);
+  // Recopilar fotos de vehículos — prioriza catálogo en vivo sobre snapshot guardado
+  const allFotos = (cot.partidas||[]).map(p => {
+    const live = liveCatMap[p.vehiculoId]?.photo || '';
+    return live || p.foto || '';
+  }).filter(Boolean);
   await Promise.all([...new Set(allFotos)].map(preloadImg));
-  const resolveImg = (url) => url ? (imgCache[url] || url) : '';
+  const resolveImg = (url) => {
+    if (!url) return '';
+    if (imgCache[url]) return imgCache[url];      // ya cargada como base64
+    if (url.startsWith('data:')) return url;      // ya es base64
+    return url;                                   // URL (fallback, se carga en el img)
+  };
 
   // Función para enriquecer cada entrada de equipo con datos actuales del catálogo
   const liveEq = (e) => {
