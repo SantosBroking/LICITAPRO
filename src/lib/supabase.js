@@ -14,16 +14,45 @@ window.__sb = sb; // diagnóstico
 const USER_KEY = 'lp_user';
 
 // Usuario hardcodeado — sin depender de Supabase Auth
+// ID del workspace compartido — todos los usuarios acceden a los mismos datos
+export const WORKSPACE_ID = '31daca2f-17ff-4ce1-83ca-99e2b31094b7';
+
 const USERS = [
-  { id: '31daca2f-17ff-4ce1-83ca-99e2b31094b7', email: 'santiago@brokingroup.com', password: 'Miscuates2804.' },
+  {
+    id:          'usr-santiago-001',
+    workspaceId: WORKSPACE_ID,
+    name:        'Santiago Mansur',
+    email:       'santiago@brokingroup.com',
+    password:    'Miscuates2804.',
+    role:        'admin',    // acceso total + configuración
+  },
+  {
+    id:          'usr-mauricio-001',
+    workspaceId: WORKSPACE_ID,
+    name:        'Mauricio Cruz',
+    email:       'mauricio@brokingroup.com',
+    password:    'LicitaPro2024!',
+    role:        'editor',   // puede crear, editar y ver, sin acceso a config
+  },
 ];
 
 export const authSb = {
   onAuthStateChange: (cb) => {
-    // Auto-login durante desarrollo
-    const AUTO_USER = { id: '31daca2f-17ff-4ce1-83ca-99e2b31094b7', email: 'santiago@brokingroup.com' };
-    localStorage.setItem(USER_KEY, JSON.stringify(AUTO_USER));
-    setTimeout(() => cb('INITIAL_SESSION', { user: AUTO_USER }), 50);
+    // Verificar si hay sesión activa en localStorage
+    const stored = localStorage.getItem(USER_KEY);
+    if (stored) {
+      try {
+        const user = JSON.parse(stored);
+        // Asegurar que el usuario guardado tenga workspaceId (compatibilidad)
+        if (!user.workspaceId) user.workspaceId = WORKSPACE_ID;
+        setTimeout(() => cb('INITIAL_SESSION', { user }), 50);
+      } catch(e) {
+        localStorage.removeItem(USER_KEY);
+        setTimeout(() => cb('INITIAL_SESSION', { user: null }), 50);
+      }
+    } else {
+      setTimeout(() => cb('INITIAL_SESSION', { user: null }), 50);
+    }
     return { data: { subscription: { unsubscribe: () => {} } } };
   }
 };
@@ -31,7 +60,7 @@ export const authSb = {
 export async function signIn(email, password) {
   const found = USERS.find(u => u.email === email && u.password === password);
   if (!found) throw new Error('Email o contraseña incorrectos');
-  const user = { id: found.id, email: found.email };
+  const user = { id: found.id, workspaceId: found.workspaceId, name: found.name, email: found.email, role: found.role };
   localStorage.setItem(USER_KEY, JSON.stringify(user));
   return { user };
 }

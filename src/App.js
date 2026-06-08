@@ -1,7 +1,7 @@
 // App.js — Estado global, navegación y CRUD
 import { h, useState, useEffect, useRef, useCallback } from './lib/core.js';
 import { DEFAULT_CONFIG } from './lib/constants.js';
-import { sb, authSb, signOut, dbLoad, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveAuditLog } from './lib/supabase.js';
+import { sb, authSb, signOut, WORKSPACE_ID, dbLoad, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveAuditLog } from './lib/supabase.js';
 import { uid, NOW } from './lib/utils.js';
 import { sendMonthlyReminders, shouldSendMonthlyReminder, currentMonthKey } from './lib/email_reminders.js';
 
@@ -40,7 +40,10 @@ export default function App() {
   const _userId     = useRef(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const MOBILE_NAV = NAV_ITEMS.slice(0, 5);
-  const getUID = () => user?.id || JSON.parse(localStorage.getItem("lp_user")||"null")?.id || "31daca2f-17ff-4ce1-83ca-99e2b31094b7";
+  // Siempre usar el workspaceId para acceder a los datos compartidos del equipo
+  const getUID = () => user?.workspaceId || user?.id || JSON.parse(localStorage.getItem("lp_user")||"null")?.workspaceId || "31daca2f-17ff-4ce1-83ca-99e2b31094b7";
+  const isAdmin = user?.role === 'admin' || !user?.role; // sin rol = admin (compat)
+  const userName = user?.name || user?.email?.split('@')[0] || 'Usuario';
 
   const reloadData = async () => {
     const uid = getUID();
