@@ -127,11 +127,27 @@ const fmtDate = d => {
 // ══════════════════════════════════════════════════════════════
 // 1. COTIZACIÓN CLIENTE
 // ══════════════════════════════════════════════════════════════
-export function printCotizacionCliente({ project, cot, calc, config }) {
+export async function printCotizacionCliente({ project, cot, calc, config }) {
   const emp = config?.empresa || {};
   // Catálogo en vivo: productos base + personalizados del config
   const liveCatMap = {};
   [...CATALOG_PRODUCTS, ...(config?.customProducts || [])].forEach(p => { liveCatMap[p.id] = p; });
+
+  // Pre-cargar fotos URL a base64 para que html2pdf pueda embebedlas
+  const imgCache = {};
+  const preloadImg = async (url) => {
+    if (!url || url.startsWith('data:') || imgCache[url]) return;
+    try {
+      const resp = await fetch(url);
+      const blob = await resp.blob();
+      imgCache[url] = await new Promise(r => { const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(blob); });
+    } catch(e) { imgCache[url] = url; }
+  };
+  // Recopilar y cargar todas las fotos de vehículos
+  const allFotos = (cot.partidas||[]).map(p => liveCatMap[p.vehiculoId]?.photo || p.foto || '').filter(Boolean);
+  await Promise.all([...new Set(allFotos)].map(preloadImg));
+  const resolveImg = (url) => url ? (imgCache[url] || url) : '';
+
   // Función para enriquecer cada entrada de equipo con datos actuales del catálogo
   const liveEq = (e) => {
     const live = liveCatMap[e.productoId];
@@ -236,7 +252,7 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
     <tbody>
       <tr>
         <td style="text-align:center;color:#6b6862">1</td>
-        <td style="text-align:center;padding:4px">${(()=>{const foto=liveCatMap[p.vehiculoId]?.photo||p.foto||'';return foto?`<img src="${foto}" style="width:54px;height:44px;object-fit:contain;border-radius:3px;" />`:'';})()}</td>
+        <td style="text-align:center;padding:4px">${(()=>{const foto=resolveImg(liveCatMap[p.vehiculoId]?.photo||p.foto||'');return foto?`<img src="${foto}" style="width:54px;height:44px;object-fit:contain;border-radius:3px;" />`:'';})()}</td>
         <td><strong>Vehículo base con equipamiento</strong></td>
         <td>${p.tipo||''} ${p.marca||''} ${p.modelo||''} ${p.version||''} ${p.ano||''}</td>
         <td style="text-align:center">${qty}</td>

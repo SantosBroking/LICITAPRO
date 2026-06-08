@@ -182,11 +182,10 @@ export default function CatalogView({ config, onSaveConfig }) {
 
   const saveProduct = async (prod) => {
     let safeProd = { ...prod };
-    // Si la foto es base64, comprimir y subir a Storage (si el bucket existe)
+    // Fotos del catálogo: guardar como base64 comprimido (no Storage)
+    // Son ~15KB comprimidas — OK en BD; Storage es para PDFs/XMLs grandes
     if (safeProd.photo && isBase64(safeProd.photo)) {
-      const compressed = await compressImage(safeProd.photo, 300, 0.5);
-      const url = await uploadImageToStorage(`catalog/${safeProd.id || ('custom-'+uid('prd'))}.jpg`, compressed);
-      safeProd.photo = url || compressed; // URL si subió a Storage, base64 comprimido como fallback
+      safeProd.photo = await compressImage(safeProd.photo, 300, 0.5);
     }
     const finalUpdated = customProds.find(x=>x.id===safeProd.id)
       ? customProds.map(x=>x.id===safeProd.id?safeProd:x)
