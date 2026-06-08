@@ -1,5 +1,6 @@
 // Companies.js — Empresas licitantes
 import { h, useState, useRef } from '../lib/core.js';
+import { uploadFileToStorage, isBase64 } from '../lib/supabase.js';
 import { sendReminderEmail, getRecipients } from '../lib/email_reminders.js';
 import { AIAnalyzerButton } from '../ui/AIAnalyzerButton.js';
 import { EMPRESA_BASE_DOCS } from '../lib/constants.js';
