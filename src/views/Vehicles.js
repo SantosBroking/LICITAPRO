@@ -1,7 +1,11 @@
 // Vehicles.js — Vehículos, Facturas, Acta entrega, Billing, Docs
 import { h, useState, useRef } from '../lib/core.js';
 import { analyzeFactura } from '../lib/ai_analyzer.js';
-import { uploadFileToStorage, uploadImageToStorage, isBase64, downloadFile as dlStorage } from '../lib/supabase.js';
+import { uploadFileToStorage as _uploadFile, uploadImageToStorage, isBase64, downloadFile as dlStorage } from '../lib/supabase.js';
+// Guard: si Storage no está disponible, devuelve null y el código cae a base64
+const uploadFileToStorage = async (path, file) => {
+  try { return await _uploadFile(path, file); } catch(e) { console.warn('Storage no disponible:', e); return null; }
+};
 import { DOC_CATEGORIES, EMPRESA_BASE_DOCS } from '../lib/constants.js';
 import { fmt, TODAY, NOW, uid, dlFile, fmtBytes } from '../lib/utils.js';
 import { Inp, Metric, EmptyState, ConfirmAction, NumInput } from '../ui/primitives.js';

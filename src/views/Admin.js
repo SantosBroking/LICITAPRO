@@ -2,7 +2,8 @@
 import { h, useState, useMemo } from '../lib/core.js';
 import { STATUSES, DEFAULT_CONFIG } from '../lib/constants.js';
 import { toExcel, shProjects, shVehicles, shFacturas, shPagos, shEntregas, shEmpresas, shAlertas, shAuditoria, shSumEjecutivo } from '../lib/excel.js';
-import { fmt, storageMB, TODAY } from '../lib/utils.js';
+import { fmt, storageMB, TODAY, uid } from '../lib/utils.js';
+import { uploadToStorage, base64ToBlob, isBase64, sb } from '../lib/supabase.js';
 import { Inp, Metric } from '../ui/primitives.js';
 
 export function Reports({ projects, vehicles, companies, audit }) {
