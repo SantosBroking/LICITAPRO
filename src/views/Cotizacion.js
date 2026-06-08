@@ -60,6 +60,12 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
     onUpdate({...project, cotizacion:newCot, montoEstimado:Math.round(calcN.ventaTotal)||project.montoEstimado});
   };
   const updPartida = (id,k,v) => updCot({...cot,partidas:cot.partidas.map(p=>p.id===id?{...p,[k]:v}:p)});
+  const selectVehiculo = (pid, veh) => updCot({...cot,partidas:cot.partidas.map(p=>p.id!==pid?p:{...p,
+    vehiculoId:veh?veh.id:null, foto:veh?veh.photo||'':'',
+    tipo:veh?veh.v_tipo||p.tipo:'', marca:veh?veh.v_marca||'':'',
+    modelo:veh?veh.v_modelo||'':'', version:veh?veh.v_version||'':'', ano:veh?Number(veh.v_ano)||p.ano:p.ano,
+  })});
+  const catalogVehiculos = [...CATALOG_PRODUCTS, ...(window._lpConfig?.customProducts||[])].filter(x=>x.esVehiculo);
   const updEquipo  = (eid,k,v) => updCot({...cot,equipo:cot.equipo.map(e=>e.id===eid?{...e,[k]:v}:e)});
   const updCnts = (eid,pi,v) => updCot({...cot,equipo:cot.equipo.map(e=>{ if(e.id!==eid)return e; const cnts=[...(e.cnts||[0,0,0,0,0])];cnts[pi]=Number(v)||0;return{...e,cnts}; })});
   const addEquipo = prod => {
@@ -135,6 +141,29 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
           !p.activo && h('span', { style:{ fontSize:12, color:'var(--t3)' } }, 'Inactiva'),
         ),
         p.activo && h('div', null,
+          catalogVehiculos.length > 0 && h('div', { style:{ marginBottom:12 } },
+            h('div', { style:{ fontSize:10, color:'var(--t2)', fontWeight:600, marginBottom:6 } }, 'Modelo de vehículo (catálogo)'),
+            h('div', { style:{ display:'flex', gap:8, overflowX:'auto', paddingBottom:4 } },
+              catalogVehiculos.map(veh => {
+                const sel = p.vehiculoId === veh.id;
+                return h('div', { key:veh.id, onClick:()=>selectVehiculo(p.id, sel?null:veh),
+                  style:{ flexShrink:0, width:90, cursor:'pointer', borderRadius:10, border:'2px solid '+(sel?'var(--blue)':'var(--b2)'),
+                    background:sel?'var(--blue-bg)':'var(--bg1)', padding:6, textAlign:'center', transition:'all .15s' } },
+                  veh.photo
+                    ? h('img', { src:veh.photo, style:{ width:56, height:44, objectFit:'contain', borderRadius:6, display:'block', margin:'0 auto 4px' } })
+                    : h('div', { style:{ width:56, height:44, display:'flex', alignItems:'center', justifyContent:'center', fontSize:24, margin:'0 auto 4px' } }, '🚗'),
+                  h('div', { style:{ fontSize:9, fontWeight:sel?600:400, color:sel?'var(--blue)':'var(--t1)', lineHeight:1.2, wordBreak:'break-word' } },
+                    veh.nom || (veh.v_marca+' '+veh.v_modelo)),
+                );
+              }),
+              h('div', { onClick:()=>selectVehiculo(p.id,null),
+                style:{ flexShrink:0, width:64, cursor:'pointer', borderRadius:10, border:'1px dashed var(--b2)',
+                  background:'transparent', padding:6, textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:4 } },
+                h('div', { style:{ fontSize:18, color:'var(--t3)' } }, '✏'),
+                h('div', { style:{ fontSize:9, color:'var(--t3)' } }, 'Manual'),
+              ),
+            ),
+          ),
           h('div', { style:{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr', gap:8, marginBottom:8 } },
             h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Tipo de vehículo'),
               h('select', { value:p.tipo||'', onChange:e=>updPartida(p.id,'tipo',e.target.value), style:{ fontSize:12, padding:'5px 7px' } },

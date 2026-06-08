@@ -105,6 +105,22 @@ function ProductForm({ prod, onSave, onCancel, existingCats, allProducts }) {
       h('span', { style:{ fontSize:11, color:'var(--t3)' } }, p.vis ? '(aparece en PDF del cliente)' : '(solo uso interno)'),
     ),
 
+    // ── Modelo de vehículo ──
+    h('div', { style:{ border:'1px solid var(--b1)', borderRadius:'var(--rl)', padding:14, marginBottom:14 } },
+      h('label', { style:{ display:'flex', gap:8, alignItems:'center', cursor:'pointer', marginBottom:p.esVehiculo?12:0 } },
+        h('input', { type:'checkbox', checked:!!p.esVehiculo, onChange:e=>set('esVehiculo',e.target.checked) }),
+        h('span', { style:{ fontSize:13, fontWeight:500 } }, '🚗 Es un modelo de vehículo'),
+        h('span', { style:{ fontSize:11, color:'var(--t3)', marginLeft:4 } }, '— aparece como opción rápida en las partidas de la cotización'),
+      ),
+      p.esVehiculo && h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))', gap:10 } },
+        h(Inp, { label:'Tipo', value:p.v_tipo||'', onChange:v=>set('v_tipo',v), placeholder:'Pickup patrulla' }),
+        h(Inp, { label:'Marca', value:p.v_marca||'', onChange:v=>set('v_marca',v), placeholder:'Nissan' }),
+        h(Inp, { label:'Modelo', value:p.v_modelo||'', onChange:v=>set('v_modelo',v), placeholder:'Frontier' }),
+        h(Inp, { label:'Versión', value:p.v_version||'', onChange:v=>set('v_version',v), placeholder:'LE TA 4x4' }),
+        h(Inp, { label:'Año', value:p.v_ano||'', onChange:v=>set('v_ano',v), placeholder:'2026' }),
+      ),
+    ),
+
     // ── Kit: este producto incluye varios productos ──
     h('div', { style:{ border:'1px solid var(--b1)', borderRadius:'var(--rl)', padding:14, marginBottom:14 } },
       h('div', { style:{ display:'flex', alignItems:'center', gap:10, marginBottom:(p.kitItems&&p.kitItems.length)||p._esKit?12:0 } },
