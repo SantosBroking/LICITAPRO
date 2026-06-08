@@ -158,6 +158,131 @@ function ProductForm({ prod, onSave, onCancel, existingCats, allProducts }) {
   );
 }
 
+
+// ── KitManager ────────────────────────────────────────────────
+function KitEditor({ kit, allProducts, existingCats, onSave, onCancel }) {
+  const isNew = !kit.id;
+  const [nom, setNom]         = useState(kit.nom || '');
+  const [cat, setCat]         = useState(kit.cat || existingCats[0] || '');
+  const [items, setItems]     = useState(kit.kitItems || []);
+  const [search, setSearch]   = useState('');
+
+  const toggleItem = (id) => setItems(prev => prev.includes(id) ? prev.filter(x=>x!==id) : [...prev, id]);
+
+  const doSave = () => {
+    if (!nom.trim()) { alert('El kit necesita un nombre.'); return; }
+    if (items.length === 0) { alert('Agrega al menos un producto al kit.'); return; }
+    onSave({ ...kit, id: kit.id || ('kit-'+uid('k')), nom, cat, kitItems: items, sub:'Kit', vis:true });
+  };
+
+  const candidates = allProducts
+    .filter(x => !(x.kitItems && x.kitItems.length) && x.id !== kit.id)
+    .filter(x => !search || x.nom.toLowerCase().includes(search.toLowerCase()) || (x.cat||'').toLowerCase().includes(search.toLowerCase()));
+
+  return h('div', { className:'card', style:{ maxWidth:680 } },
+    h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18 } },
+      h('div', { className:'page-title' }, isNew ? 'Nuevo kit' : 'Editar kit: '+kit.nom),
+      h('div', { style:{ display:'flex', gap:8 } },
+        h('button', { onClick:onCancel }, 'Cancelar'),
+        h('button', { className:'bp', onClick:doSave }, 'Guardar kit'),
+      ),
+    ),
+    h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:16 } },
+      h(Inp, { label:'Nombre del kit *', value:nom, onChange:setNom, placeholder:'Kit patrulla completo...' }),
+      h('div', null,
+        h('label', { style:{ display:'block', fontSize:12, color:'var(--t2)', marginBottom:5, fontWeight:500 } }, 'Categoría'),
+        h('select', { value:cat, onChange:e=>setCat(e.target.value), style:{ width:'100%', fontSize:13 } },
+          existingCats.map(c => h('option', { key:c, value:c }, c)),
+        ),
+      ),
+    ),
+    h('div', { style:{ marginBottom:10, display:'flex', alignItems:'center', gap:10 } },
+      h('div', { style:{ fontSize:13, fontWeight:500 } }, 'Productos del kit'),
+      h('span', { style:{ fontSize:11, color:'var(--blue)', fontWeight:500, background:'var(--blue-bg)', padding:'2px 8px', borderRadius:99 } }, items.length+' seleccionados'),
+    ),
+    h('input', { value:search, onChange:e=>setSearch(e.target.value), placeholder:'Buscar producto...', style:{ marginBottom:8, width:'100%', maxWidth:300 } }),
+    h('div', { style:{ maxHeight:320, overflowY:'auto', border:'1px solid var(--b1)', borderRadius:'var(--r)' } },
+      candidates.length === 0 && h('div', { style:{ padding:20, textAlign:'center', color:'var(--t3)', fontSize:12 } }, 'No hay productos.'),
+      candidates.map(x => {
+        const sel = items.includes(x.id);
+        return h('label', { key:x.id, style:{ display:'flex', alignItems:'center', gap:10, padding:'8px 14px', cursor:'pointer', borderBottom:'1px solid var(--b1)', background:sel?'var(--blue-bg)':'transparent' } },
+          h('input', { type:'checkbox', checked:sel, onChange:()=>toggleItem(x.id), style:{ accentColor:'var(--blue)' } }),
+          (x.photo || CATALOG_IMAGES[x.id]) && h('img', { src:x.photo||CATALOG_IMAGES[x.id], style:{ width:36, height:36, objectFit:'contain', borderRadius:4, flexShrink:0 } }),
+          h('div', null,
+            h('div', { style:{ fontSize:12, fontWeight:sel?600:400 } }, x.nom),
+            h('div', { style:{ fontSize:10, color:'var(--t3)' } }, x.cat),
+          ),
+        );
+      }),
+    ),
+  );
+}
+
+function KitManager({ allProducts, customProds, existingCats, onSaveKit, onDeleteKit, onRestoreKit }) {
+  const [editing, setEditing] = useState(null); // null | 'new' | kitObject
+
+  // Todos los kits: estáticos + custom (custom sobrescribe mismo id)
+  const staticKits = CATALOG_PRODUCTS.filter(p => p.kitItems && p.kitItems.length > 0);
+  const customKits = customProds.filter(p => p.kitItems && p.kitItems.length > 0);
+  const overrideIds = new Set(customKits.filter(p => CATALOG_PRODUCTS.find(x=>x.id===p.id)).map(p=>p.id));
+  const allKits = [
+    ...staticKits.map(k => customKits.find(x=>x.id===k.id) || k),
+    ...customKits.filter(p => !CATALOG_PRODUCTS.find(x=>x.id===p.id)),
+  ];
+
+  if (editing) {
+    return h(KitEditor, {
+      kit: editing === 'new' ? {} : editing,
+      allProducts,
+      existingCats,
+      onSave: (kit) => { onSaveKit(kit); setEditing(null); },
+      onCancel: () => setEditing(null),
+    });
+  }
+
+  return h('div', null,
+    h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 } },
+      h('div', null,
+        h('div', { className:'page-title' }, '🧩 Gestión de kits'),
+        h('div', { style:{ fontSize:12, color:'var(--t2)' } }, 'Los kits agrupan varios productos en la cotización. Se expanden automáticamente en el PDF.'),
+      ),
+      h('button', { className:'bp', onClick:()=>setEditing('new') }, '+ Nuevo kit'),
+    ),
+    allKits.length === 0 && h('div', { className:'card', style:{ textAlign:'center', padding:30, color:'var(--t2)', fontSize:13 } }, 'No hay kits. Crea uno con el botón de arriba.'),
+    h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))', gap:12 } },
+      allKits.map(k => {
+        const isOverride = overrideIds.has(k.id);
+        const isStaticOnly = !!CATALOG_PRODUCTS.find(x=>x.id===k.id) && !isOverride;
+        const comps = (k.kitItems||[]).map(id => allProducts.find(p=>p.id===id)).filter(Boolean);
+        return h('div', { key:k.id, className:'card' },
+          h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:10 } },
+            h('div', null,
+              h('div', { style:{ fontSize:14, fontWeight:600 } }, k.nom),
+              h('div', { style:{ fontSize:11, color:'var(--t2)', marginTop:2 } }, k.cat,
+                isOverride && h('span', { style:{ marginLeft:6, color:'var(--amber)', fontWeight:500 } }, '· personalizado'),
+                isStaticOnly && h('span', { style:{ marginLeft:6, color:'var(--t3)' } }, '· base'),
+              ),
+            ),
+            h('div', { style:{ display:'flex', gap:6, flexShrink:0 } },
+              h('button', { onClick:()=>setEditing({...k}),
+                style:{ fontSize:11, padding:'4px 10px', color:'var(--blue)', background:'var(--bg1)', border:'1px solid var(--blue-border)', borderRadius:'var(--r)', cursor:'pointer' } }, '✏ Editar'),
+              isOverride && h('button', { onClick:()=>{ if(confirm('¿Restaurar este kit a su versión original?')) onRestoreKit(k.id); },
+                style:{ fontSize:11, padding:'4px 10px', color:'var(--t2)', background:'var(--bg1)', border:'1px solid var(--b2)', borderRadius:'var(--r)', cursor:'pointer' } }, '↩ Restaurar'),
+              !isStaticOnly && !isOverride && h('button', { onClick:()=>{ if(confirm('¿Eliminar este kit?')) onDeleteKit(k.id); },
+                style:{ fontSize:11, padding:'4px 10px', color:'var(--red)', background:'var(--bg1)', border:'1px solid #E24B4A55', borderRadius:'var(--r)', cursor:'pointer' } }, '🗑 Eliminar'),
+            ),
+          ),
+          h('div', { style:{ fontSize:11, color:'var(--t3)', marginBottom:8 } }, comps.length + ' productos:'),
+          h('div', { style:{ display:'flex', flexWrap:'wrap', gap:4 } },
+            comps.map(c => h('span', { key:c.id, style:{ fontSize:10, padding:'2px 8px', background:'var(--bg2)', borderRadius:99, border:'1px solid var(--b1)' } }, c.nom)),
+            comps.length === 0 && h('span', { style:{ fontSize:11, color:'var(--t3)', fontStyle:'italic' } }, 'Sin componentes'),
+          ),
+        );
+      }),
+    ),
+  );
+}
+
 export default function CatalogView({ config, onSaveConfig }) {
   const customProds   = config?.customProducts || [];
   const hiddenProds   = config?.hiddenProducts  || [];
@@ -174,7 +299,8 @@ export default function CatalogView({ config, onSaveConfig }) {
 
   const [sel, setSel]       = useState(cats[0]);
   const [search, setSearch] = useState('');
-  const [form, setForm]     = useState(null); // null | 'new' | product
+  const [form, setForm]     = useState(null);
+  const [kitView, setKitView] = useState(false); // null | 'new' | product
 
   const prods = allProds.filter(p =>
     p.cat === sel && (!search || p.nom.toLowerCase().includes(search.toLowerCase()) || (p.sub||'').toLowerCase().includes(search.toLowerCase()))
@@ -193,6 +319,21 @@ export default function CatalogView({ config, onSaveConfig }) {
     await onSaveConfig({ ...config, customProducts: finalUpdated });
     setSel(safeProd.cat);
     setForm(null);
+  };
+
+  const saveKit = async (kit) => {
+    const finalUpdated = customProds.find(x=>x.id===kit.id)
+      ? customProds.map(x=>x.id===kit.id?kit:x)
+      : [...customProds, kit];
+    await onSaveConfig({ ...config, customProducts: finalUpdated });
+  };
+
+  const deleteKit = async (id) => {
+    await onSaveConfig({ ...config, customProducts: customProds.filter(x=>x.id!==id) });
+  };
+
+  const restoreKit = async (id) => {
+    await onSaveConfig({ ...config, customProducts: customProds.filter(x=>x.id!==id) });
   };
 
   const deleteProduct = async (id) => {
@@ -231,18 +372,22 @@ export default function CatalogView({ config, onSaveConfig }) {
   return h('div', null,
     h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 } },
       h('div', { className:'page-title' }, 'Catálogo de equipo MSMS'),
-      h('button', { className:'bp', onClick:()=>setForm('new') }, '+ Agregar producto'),
+      h('div', { style:{ display:'flex', gap:8 } },
+        h('button', { onClick:()=>{ setKitView(k=>!k); setForm(null); }, style:{ fontSize:13, padding:'7px 14px', borderRadius:'var(--r)', border:'1px solid var(--b2)', background:kitView?'var(--t1)':'var(--bg1)', color:kitView?'var(--bg1)':'var(--t1)', cursor:'pointer', fontWeight:500 } }, '🧩 Kits'),
+        !kitView && h('button', { className:'bp', onClick:()=>setForm('new') }, '+ Agregar producto'),
+      ),
     ),
-    h('input', { value:search, onChange:e=>setSearch(e.target.value), placeholder:'Buscar producto...', style:{ maxWidth:240, marginBottom:16, display:'block' } }),
-    hiddenProds.length > 0 && h('div', { style:{ marginBottom:12, padding:'8px 12px', background:'var(--amber-bg)', border:'1px solid var(--amber-border)', borderRadius:'var(--r)', fontSize:12, display:'flex', alignItems:'center', gap:10 } },
+    kitView && h(KitManager, { allProducts:allProds, customProds, existingCats:[...new Set(allProds.map(p=>p.cat))], onSaveKit:saveKit, onDeleteKit:deleteKit, onRestoreKit:restoreKit }),
+    !kitView && h('input', { value:search, onChange:e=>setSearch(e.target.value), placeholder:'Buscar producto...', style:{ maxWidth:240, marginBottom:16, display:'block' } }),
+    !kitView && hiddenProds.length > 0 && h('div', { style:{ marginBottom:12, padding:'8px 12px', background:'var(--amber-bg)', border:'1px solid var(--amber-border)', borderRadius:'var(--r)', fontSize:12, display:'flex', alignItems:'center', gap:10 } },
       h('span', null, '👁 '+hiddenProds.length+' producto(s) oculto(s) en esta categoría no aparecen.'),
       h('button', { onClick:async()=>{ if(confirm('¿Restaurar todos los productos ocultos?')) await onSaveConfig({...config, hiddenProducts:[]}); },
         style:{ fontSize:11, padding:'4px 10px', border:'1px solid var(--amber-border)', borderRadius:'var(--r)', background:'white', cursor:'pointer' } }, 'Mostrar todos'),
     ),
-    h('div', { style:{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:14 } },
+    !kitView && h('div', { style:{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:14 } },
       cats.map(c => h('button', { key:c, className:sel===c?'bp':'', onClick:()=>{ setSel(c); setSearch(''); }, style:{ fontSize:12, padding:'5px 12px' } }, c))
     ),
-    h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:12 } },
+    !kitView && h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:12 } },
       prods.map(prod => {
         const isCustom = !!customProds.find(x => x.id === prod.id);
         return h('div', { key:prod.id, className:'card', style:{ position:'relative' } },
