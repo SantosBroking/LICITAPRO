@@ -92,7 +92,7 @@ export default function App() {
       if (event === 'INITIAL_SESSION') {
         if (session?.user) {
           setUser(session.user);
-          _userId.current = session.user.id;
+          _userId.current = session.user.workspaceId || session.user.id;
           await loadData(session.user);
         }
         setLoading(false);
@@ -143,7 +143,7 @@ export default function App() {
   const handleSaveProject = useCallback(async (p, navigate) => {
     setProjects(prev => { const ex=prev.find(x=>x.id===p.id); return ex?prev.map(x=>x.id===p.id?p:x):[p,...prev]; });
     if (navigate) nav('project_detail', p.id);
-    try { await saveProject(p, user?.id); log(user,'guardó','proyecto',p.id,p.name); } catch(e){ console.error(e); }
+    try { await saveProject(p, getUID()); log(user,'guardó','proyecto',p.id,p.name); } catch(e){ console.error(e); }
   }, [user, nav, log]);
 
   const upProject = useCallback((updated) => {
@@ -152,7 +152,7 @@ export default function App() {
     if (_timer.current) clearTimeout(_timer.current);
     _timer.current = setTimeout(async () => {
       const toSave = _pending.current;
-      const uid = _userId.current || user?.id || JSON.parse(localStorage.getItem("lp_user")||"null")?.id || "31daca2f-17ff-4ce1-83ca-99e2b31094b7";
+      const uid = getUID();
       if (toSave && uid) { try { await saveProject(toSave, uid); } catch(e){ console.error(e); } }
     }, 800);
   }, [user]);
@@ -180,7 +180,7 @@ export default function App() {
 
   const handleSaveVehicle = useCallback(async (v) => {
     setVehicles(prev => { const ex=prev.find(x=>x.id===v.id); return ex?prev.map(x=>x.id===v.id?v:x):[...prev,v]; });
-    try { await saveVehicle(v, user?.id); } catch(e){ console.error(e); }
+    try { await saveVehicle(v, getUID()); } catch(e){ console.error(e); }
   }, [user]);
 
   const handleDeleteVehicle = useCallback(async (id) => {
@@ -190,7 +190,7 @@ export default function App() {
 
   const handleSaveConfig = useCallback(async (cfg) => {
     setConfig(cfg); window._lpConfig = cfg;
-    try { await saveConfig(cfg, user?.id); } catch(e){ console.error(e); throw e; }
+    try { await saveConfig(cfg, getUID()); } catch(e){ console.error(e); throw e; }
   }, [user]);
 
   if (loading)
