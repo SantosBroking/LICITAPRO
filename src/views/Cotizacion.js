@@ -68,6 +68,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
   const catalogVehiculos = [...CATALOG_PRODUCTS, ...(window._lpConfig?.customProducts||[])].filter(x=>x.esVehiculo);
   const updEquipo  = (eid,k,v) => updCot({...cot,equipo:cot.equipo.map(e=>e.id===eid?{...e,[k]:v}:e)});
   const updCnts = (eid,pi,v) => updCot({...cot,equipo:cot.equipo.map(e=>{ if(e.id!==eid)return e; const cnts=[...(e.cnts||new Array(cot.partidas.length).fill(0))];cnts[pi]=Number(v)||0;return{...e,cnts}; })});
+  const setAllCnts = (eid, val) => updCot({...cot, equipo:cot.equipo.map(e=>{ if(e.id!==eid)return e; const cnts=[...(e.cnts||new Array(cot.partidas.length).fill(0))]; cot.partidas.filter(p=>p.activo).forEach(p=>{ const pi=parseInt(p.id.replace('P',''))-1; if(pi>=0&&pi<cnts.length) cnts[pi]=val; }); return{...e,cnts}; })});
 
   const addPartida = () => {
     const nums = cot.partidas.map(p=>parseInt(p.id.replace('P',''))).filter(n=>!isNaN(n));
@@ -254,6 +255,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
         h('table', { style:{ fontSize:12, minWidth:700 } },
           h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b3)' } },
             h('td', { style:{ padding:'6px 4px', color:'var(--t2)', fontSize:10, width:30 } }, 'Usar'),
+            h('td', { style:{ padding:'6px 4px', color:'var(--t2)', fontSize:10, width:52 } }, 'Todas'),
             h('td', { style:{ padding:'6px 8px', color:'var(--t2)', fontSize:10 } }, 'Producto'),
             h('td', { style:{ padding:'6px 4px', color:'var(--t2)', fontSize:10, width:95 } }, 'Costo c/IVA'),
             ...cot.partidas.filter(p=>p.activo).map(p=>h('td',{key:p.id,style:{padding:'6px 4px',color:'var(--blue)',fontSize:10,width:52,textAlign:'center'}},p.id,h('br'),h('span',{style:{fontSize:9,color:'var(--t3)'}},p.cantidad,' uds'))),
@@ -266,7 +268,16 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
             const estBg=e.est==='Confirmado'?'#E1F5EE':e.est==='Vencido'?'#FCEBEB':'#FAEEDA';
             const estTx=e.est==='Confirmado'?'#085041':e.est==='Vencido'?'#791F1F':'#633806';
             return h('tr', { key:e.id, style:{ borderBottom:'.5px solid var(--b3)', opacity:e.usar?1:.45 } },
-              h('td', { style:{ padding:'6px 4px', textAlign:'center' } }, h('input', { type:'checkbox', checked:e.usar, onChange:ev=>updEquipo(e.id,'usar',ev.target.checked), style:{ width:14, height:14, accentColor:'var(--blue)' } })),
+              h('td', { style:{ padding:'6px 4px', textAlign:'center' } },
+                h('input', { type:'checkbox', checked:e.usar, onChange:ev=>updEquipo(e.id,'usar',ev.target.checked), style:{ width:14, height:14, accentColor:'var(--blue)' } }),
+              ),
+              h('td', { style:{ padding:'4px 4px', textAlign:'center' } }, (() => {
+                const activePis = cot.partidas.filter(p=>p.activo).map(p=>parseInt(p.id.replace('P',''))-1);
+                const todas1 = activePis.length>0 && activePis.every(pi=>(e.cnts&&e.cnts[pi])||0 > 0);
+                return h('button', { onClick:()=>setAllCnts(e.id, todas1?0:1), title:todas1?'Limpiar todas':'Poner 1 en todas las partidas activas',
+                  style:{ fontSize:10, padding:'2px 7px', borderRadius:6, border:'1px solid '+(todas1?'#E24B4A55':'var(--blue-border)'), color:todas1?'var(--red)':'var(--blue)', background:'transparent', cursor:'pointer', whiteSpace:'nowrap' } },
+                  todas1 ? '✗ Limpiar' : '✓ Todas');
+              })()),
               h('td', { style:{ padding:'6px 8px' } },
                 h('div', { style:{ fontWeight:e.usar?500:400 } }, e.nombre),
                 h('div', { style:{ fontSize:10, color:'var(--t2)' } }, e.cat),

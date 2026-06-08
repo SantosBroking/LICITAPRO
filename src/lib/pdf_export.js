@@ -260,7 +260,7 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
     <tbody>
       <tr>
         <td style="text-align:center;color:#6b6862">1</td>
-        <td style="text-align:center;padding:4px">${(()=>{const foto=resolveImg(liveCatMap[p.vehiculoId]?.photo||p.foto||'');return foto?`<img src="${foto}" style="width:54px;height:44px;object-fit:contain;border-radius:3px;" />`:'';})()}</td>
+        <td style="text-align:center;padding:4px">${(()=>{const foto=liveCatMap[p.vehiculoId]?.photo||p.foto||'';return foto?`<img src="${foto}" style="width:54px;height:44px;object-fit:contain;border-radius:3px;" />`:'';})()}</td>
         <td><strong>Vehículo base con equipamiento</strong></td>
         <td>${p.tipo||''} ${p.marca||''} ${p.modelo||''} ${p.version||''} ${p.ano||''}</td>
         <td style="text-align:center">${qty}</td>
