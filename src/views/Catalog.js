@@ -26,7 +26,7 @@ import { Inp } from '../ui/primitives.js';
 const CATS_BASE = [...new Set(CATALOG_PRODUCTS.map(p => p.cat))];
 const EMPTY_PROD = () => ({ id:'', cat:'', catNew:'', sub:'', nom:'', desc:'', prov:'MSMS CORP', vis:true, price:0, photo:'' });
 
-function ProductForm({ prod, onSave, onCancel, existingCats }) {
+function ProductForm({ prod, onSave, onCancel, existingCats, allProducts }) {
   const [p, sP] = useState({ ...EMPTY_PROD(), ...prod });
   const [preview, setPreview] = useState(prod.photo || '');
   const imgRef = useRef(null);
@@ -103,6 +103,34 @@ function ProductForm({ prod, onSave, onCancel, existingCats }) {
       h('input', { type:'checkbox', checked:p.vis, onChange:e=>set('vis',e.target.checked), id:'chk-vis' }),
       h('label', { htmlFor:'chk-vis', style:{ fontSize:13, cursor:'pointer' } }, 'Visible en cotización cliente'),
       h('span', { style:{ fontSize:11, color:'var(--t3)' } }, p.vis ? '(aparece en PDF del cliente)' : '(solo uso interno)'),
+    ),
+
+    // ── Kit: este producto incluye varios productos ──
+    h('div', { style:{ border:'1px solid var(--b1)', borderRadius:'var(--rl)', padding:14, marginBottom:14 } },
+      h('div', { style:{ display:'flex', alignItems:'center', gap:10, marginBottom:(p.kitItems&&p.kitItems.length)||p._esKit?12:0 } },
+        h('input', { type:'checkbox', id:'chk-kit',
+          checked: !!((p.kitItems && p.kitItems.length) || p._esKit),
+          onChange:e=>{ if(e.target.checked){ set('_esKit',true); if(!p.kitItems) set('kitItems',[]); } else { set('_esKit',false); set('kitItems',[]); } } }),
+        h('label', { htmlFor:'chk-kit', style:{ fontSize:13, cursor:'pointer', fontWeight:500 } }, 'Este producto es un kit (incluye varios productos)'),
+      ),
+      ((p.kitItems && p.kitItems.length) || p._esKit) && h('div', null,
+        h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:8 } }, 'Selecciona los productos que incluye este kit (' + ((p.kitItems||[]).length) + ' seleccionados):'),
+        h('div', { style:{ maxHeight:240, overflowY:'auto', border:'1px solid var(--b1)', borderRadius:'var(--r)', padding:'4px 0' } },
+          (allProducts||[])
+            .filter(x => x.id !== p.id && !(x.kitItems && x.kitItems.length))  // no kits anidados, no a sí mismo
+            .map(x => {
+              const sel = (p.kitItems||[]).includes(x.id);
+              return h('label', { key:x.id, style:{ display:'flex', alignItems:'center', gap:8, padding:'6px 12px', cursor:'pointer', fontSize:12, background:sel?'var(--bg2)':'transparent' } },
+                h('input', { type:'checkbox', checked:sel, onChange:()=>{
+                  const cur = p.kitItems || [];
+                  set('kitItems', sel ? cur.filter(id=>id!==x.id) : [...cur, x.id]);
+                } }),
+                h('span', { style:{ color:'var(--t3)', minWidth:54, fontSize:10 } }, x.cat),
+                h('span', null, x.nom),
+              );
+            }),
+        ),
+      ),
     ),
   );
 }

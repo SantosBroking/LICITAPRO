@@ -129,6 +129,12 @@ const fmtDate = d => {
 // ══════════════════════════════════════════════════════════════
 export function printCotizacionCliente({ project, cot, calc, config }) {
   const emp = config?.empresa || {};
+  // Mapa de kits efectivo: los kits editados en config sobrescriben los del catálogo base
+  const effKitMap = { ...KIT_MAP };
+  (config?.customProducts || []).forEach(p => {
+    if (p.kitItems && p.kitItems.length) effKitMap[p.id] = p.kitItems;
+    else if (p._esKit === false && effKitMap[p.id]) delete effKitMap[p.id]; // dejó de ser kit
+  });
   const activeParts = (cot.partidas || []).filter(p => p.activo && p.cantidad > 0);
 
   const partRows = activeParts.map(p => {
@@ -230,11 +236,12 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
       ${(() => {
         let rowNum = 2;
         return eqItems.map((e,i) => {
-        const kitItems = KIT_MAP[e.productoId];
+        const kitItems = effKitMap[e.productoId];
         if (kitItems && kitItems.length > 0) {
-          const comps = kitItems.map(kid => CATALOG_PRODUCTS.find(p => p.id === kid)).filter(Boolean);
+          const allCat = [...CATALOG_PRODUCTS, ...(config?.customProducts || [])];
+          const comps = kitItems.map(kid => allCat.find(p => p.id === kid)).filter(Boolean);
           return comps.map((comp, ci) => {
-            const img = CATALOG_IMAGES[comp.id];
+            const img = comp.photo || CATALOG_IMAGES[comp.id];
             const num = rowNum++;
             return `<tr>
               <td style="text-align:center;color:#6b6862;font-size:10px">${num}</td>
