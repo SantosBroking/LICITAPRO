@@ -188,7 +188,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
             h('td', { style:{ padding:'6px 4px', color:'var(--t2)', fontSize:10, width:115 } }, 'Estatus'),
             h('td', { style:{ padding:'6px 4px', width:24 } }),
           )),
-          h('tbody', null, cot.equipo.map(e=>{
+          h('tbody', null, [...cot.equipo].sort((a,b)=>(a.cat||'').localeCompare(b.cat||'','es',{numeric:true})).map(e=>{
             const days=daysOld(e.fechaCosto), ageC=days===null?'':days>120?'var(--red)':days>60?'var(--amber)':'';
             const estBg=e.est==='Confirmado'?'#E1F5EE':e.est==='Vencido'?'#FCEBEB':'#FAEEDA';
             const estTx=e.est==='Confirmado'?'#085041':e.est==='Vencido'?'#791F1F':'#633806';

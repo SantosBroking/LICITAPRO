@@ -153,7 +153,7 @@ export function printCotizacionCliente({ project, cot, calc, config }) {
     const subtotal = pvUnit * qty;
 
     // Equipo visible para el cliente
-    const eqItems = (cot.equipo||[]).filter(e => e.usar && e.vis && (e.cnts&&e.cnts[pi]>0));
+    const eqItems = (cot.equipo||[]).filter(e => e.usar && e.vis && (e.cnts&&e.cnts[pi]>0)).sort((a,b)=>(a.cat||'').localeCompare(b.cat||'','es',{numeric:true}));
 
     return { p, qty, pvUnit, subtotal, eqItems, pi };
   });
