@@ -13,7 +13,7 @@ export function EmpresaDocsCard({ company, onUpdate }) {
   const handleUpload = async (def, file) => {
     let fileData = null;
     if (def.storeFile) {
-      if (file.size>10*1024*1024){alert('Archivo muy grande (máx. 10MB). Para archivos grandes, comprime el PDF.');return;}
+      if (file.size>50*1024*1024){alert('Archivo muy grande (máx. 50MB). Comprime el PDF si es posible.');return;}
       try{
         const sp = `empresas/${company.id}/${def.id}-${file.name}`;
         const url = await uploadFileToStorage(sp, file);
@@ -43,7 +43,7 @@ export function EmpresaDocsCard({ company, onUpdate }) {
         const nuevas = [];
         for (const entry of pdfEntries) {
           const blob = await entry.async('blob');
-          if (blob.size > 10*1024*1024) { alert('Omitido (muy grande, máx 10MB): ' + entry.name); continue; }
+          if (blob.size > 50*1024*1024) { alert('Omitido (muy grande, máx 50MB): ' + entry.name); continue; }
           const nombre = entry.name.split('/').pop();
           const rf = new File([blob], nombre, {type:'application/pdf'});
           const sp = `empresas/${company.id}/reformas/${Date.now()}-${nombre}`;
@@ -57,7 +57,7 @@ export function EmpresaDocsCard({ company, onUpdate }) {
       return;
     }
     // PDF individual
-    if (file.size>10*1024*1024){alert('Archivo muy grande (máx. 10MB). Comprime el PDF.');return;}
+    if (file.size>50*1024*1024){alert('Archivo muy grande (máx. 50MB).');return;}
     let fileData=null;
     try{ const sp=`empresas/${company.id}/reformas/${Date.now()}-${file.name}`; const url=await uploadFileToStorage(sp,file); fileData=url||await fileToB64(file); }catch(e){ alert('Error: '+e.message); return; }
     const nueva={ id:'ref-'+Date.now(), name:file.name, fileData, fileSize:file.size, uploadDate:TODAY() };
