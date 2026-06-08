@@ -40,10 +40,11 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
   const [showCat, setShowCat]   = useState(false);
   const [catSel, setCatSel]     = useState('01 Imagen');
 
+  const yr = new Date().getFullYear();
+  const makeP = (id,activo) => ({id,activo,tipo:'',marca:'',modelo:'',ano:yr,version:'',cantidad:0,costoMSMS:0,modoPrecio:'Utilidad deseada $',techo:0,utilidadDeseada:0,utilidadPct:0});
+
   const cot = useMemo(()=>{
     const c=project.cotizacion||{};
-    const yr=new Date().getFullYear();
-    const makeP=(id,activo)=>({id,activo,tipo:'',marca:'',modelo:'',ano:yr,version:'',cantidad:0,costoMSMS:0,modoPrecio:'Utilidad deseada $',techo:0,utilidadDeseada:0,utilidadPct:0});
     return {
       version:c.version||'V1', folio:c.folio||'', municipio:c.municipio||'', fechaCotizacion:c.fechaCotizacion||TODAY(), vigenciaDias:c.vigenciaDias||20,
       condicionesComerciales:c.condicionesComerciales||'', agenciaProveedor:c.agenciaProveedor||'',
