@@ -38,13 +38,20 @@ const USERS = [
 
 export const authSb = {
   onAuthStateChange: (cb) => {
-    // Verificar si hay sesión activa en localStorage
     const stored = localStorage.getItem(USER_KEY);
     if (stored) {
       try {
-        const user = JSON.parse(stored);
-        // Asegurar que el usuario guardado tenga workspaceId (compatibilidad)
-        if (!user.workspaceId) user.workspaceId = WORKSPACE_ID;
+        let user = JSON.parse(stored);
+        // Si es sesión antigua (sin workspaceId o sin nombre), enriquecer con datos actuales
+        if (!user.workspaceId || !user.name) {
+          const found = USERS.find(u => u.email === user.email || u.id === user.id || u.workspaceId === user.id);
+          if (found) {
+            user = { id: found.id, workspaceId: found.workspaceId, name: found.name, email: found.email, role: found.role };
+            localStorage.setItem(USER_KEY, JSON.stringify(user));
+          } else {
+            user.workspaceId = user.workspaceId || WORKSPACE_ID;
+          }
+        }
         setTimeout(() => cb('INITIAL_SESSION', { user }), 50);
       } catch(e) {
         localStorage.removeItem(USER_KEY);
