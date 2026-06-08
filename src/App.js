@@ -61,7 +61,7 @@ export default function App() {
   useEffect(() => {
     const loadData = async (u) => {
       try {
-        const d = await dbLoad(u.id);
+        const d = await dbLoad(u.workspaceId || u.id);
         setProjects(d.projects || []);
         setVehicles(d.vehicles || []);
         setCompanies(d.companies || []);
@@ -200,7 +200,7 @@ export default function App() {
     setUser(u);
     setLoading(true);
     try {
-      const d = await dbLoad(u.id);
+      const d = await dbLoad(u.workspaceId || u.id);
       setProjects(d.projects || []);
       setVehicles(d.vehicles || []);
       setCompanies(d.companies || []);
