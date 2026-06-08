@@ -124,7 +124,7 @@ export function VehicleForm({ vehicle, projectId, onSave, onSaveMany, onCancel }
           vin: veh.vin || '',
           precioUnitario: precioSinIVA, iva: fac.iva || 0, precioTotal: fac.total || 0,
           equipamiento:'', statusDocs:'Pendiente', statusEntrega:'Pendiente', ubicacion:'', observaciones: veh.descripcion || '',
-          facturaAgencia:{ folio:fac.folio, fecha:fac.fecha, emisor:fac.emisor, receptor:fac.receptor, uuid:fac.uuid, subtotal:fac.subtotal, iva:fac.iva, total:fac.total, statusPago:'Pendiente', xmlNombre:file.name, xmlData: url || await file.text() },
+          facturaAgencia:{ folio:fac.folio, fecha:fac.fecha, emisor:fac.emisor, receptor:fac.receptor, uuid:fac.uuid, subtotal:fac.subtotal, iva:fac.iva, total:fac.total, statusPago:'Pendiente', xmlNombre:file.name, xmlData: url || text },
           facturaGobierno:{}, actaEntrega:{},
         });
       } catch(e) { setFactMsg('Error en '+file.name+': '+e.message); }
@@ -257,7 +257,7 @@ export function FacturaCard({ title, subtitle, color, data, onSave }) {
       // Subir a Storage (más eficiente que base64); fallback a base64 si el bucket no existe
       const storagePath = `vehiculos/xml-${Date.now()}-${file.name}`;
       const url = await uploadFileToStorage(storagePath, file);
-      sF(p => ({ ...p, ...d, xmlNombre:file.name, xmlData: url || await file.text(), xmlPath: url ? storagePath : null }));
+      sF(p => ({ ...p, ...d, xmlNombre:file.name, xmlData: url || text, xmlPath: url ? storagePath : null }));
       setMsg('✅ XML procesado: folio '+(d.folio||'—')+', total '+fmt(d.total)+(url?' · guardado en Storage':'')+'. Revisa y guarda.');
     } catch(e) { setMsg('Error al leer XML: '+e.message); }
   };
