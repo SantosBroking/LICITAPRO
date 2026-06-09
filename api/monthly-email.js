@@ -10,10 +10,7 @@ function mesActual() {
 
 module.exports = async function handler(req, res) {
   const apiKey = process.env.RESEND_API_KEY;
-
-  if (!apiKey) {
-    return res.status(500).json({ ok: false, error: 'RESEND_API_KEY no encontrada' });
-  }
+  if (!apiKey) return res.status(500).json({ ok: false, error: 'RESEND_API_KEY no encontrada' });
 
   const mes = mesActual();
   const html = `
@@ -34,26 +31,22 @@ module.exports = async function handler(req, res) {
     <p>Santiago Mansur<br>santiago@brokingroup.com</p>
   `;
 
-  try {
-    const response = await fetch(RESEND_API, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: 'Santiago Mansur <santiago@brokingroup.com>',
-        to: RECIPIENTS,
-        subject: `Solicitud de documentación para licitación — ${mes}`,
-        html,
-      }),
-    });
+  const response = await fetch(RESEND_API, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: 'Santiago Mansur <santiago@brokingroup.com>',
+      to: RECIPIENTS,
+      subject: `Solicitud de documentación para licitación — ${mes}`,
+      html,
+    }),
+  });
 
-    const data = await response.json();
-    if (!response.ok) throw new Error(JSON.stringify(data));
-
-    return res.status(200).json({ ok: true, id: data.id, mes });
-  } catch (err) {
-    return res.status(500).json({ ok: false, error: err.message });
-  }
+  const data = await response.json();
+  // Devolver respuesta completa de Resend para debug
+  return res.status(response.ok ? 200 : 500).json({ 
+    ok: response.ok, 
+    status: response.status,
+    resend: data 
+  });
 };
