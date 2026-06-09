@@ -1,7 +1,6 @@
 export const config = { runtime: 'edge' };
 
 const RESEND_API = 'https://api.resend.com/emails';
-
 const RECIPIENTS = ['mauricio@brokingroup.com'];
 
 function mesActual() {
@@ -12,8 +11,15 @@ function mesActual() {
 }
 
 export default async function handler(req) {
-  const mes = mesActual();
+  const apiKey = process.env.RESEND_API_KEY;
 
+  if (!apiKey) {
+    return new Response(JSON.stringify({ ok: false, error: 'RESEND_API_KEY no encontrada' }), {
+      status: 500, headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  const mes = mesActual();
   const html = `
     <p>Estimado equipo de Broking and Brands,</p>
     <p>Para integrarlos como proveedor en un proceso de licitación pública, necesitamos la siguiente documentación:</p>
@@ -36,7 +42,7 @@ export default async function handler(req) {
     const res = await fetch(RESEND_API, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -51,13 +57,11 @@ export default async function handler(req) {
     if (!res.ok) throw new Error(JSON.stringify(data));
 
     return new Response(JSON.stringify({ ok: true, id: data.id, mes }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
+      status: 200, headers: { 'Content-Type': 'application/json' }
     });
   } catch (err) {
     return new Response(JSON.stringify({ ok: false, error: err.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      status: 500, headers: { 'Content-Type': 'application/json' }
     });
   }
 }
