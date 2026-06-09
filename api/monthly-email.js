@@ -8,10 +8,9 @@ function mesActual() {
   return `${meses[now.getMonth()]} ${now.getFullYear()}`;
 }
 
-export default async function handler(req, res) {
-  console.log('RESEND_API_KEY existe:', !!process.env.RESEND_API_KEY);
-
+module.exports = async function handler(req, res) {
   const apiKey = process.env.RESEND_API_KEY;
+
   if (!apiKey) {
     return res.status(500).json({ ok: false, error: 'RESEND_API_KEY no encontrada' });
   }
@@ -36,7 +35,6 @@ export default async function handler(req, res) {
   `;
 
   try {
-    console.log('Enviando a Resend...');
     const response = await fetch(RESEND_API, {
       method: 'POST',
       headers: {
@@ -52,13 +50,10 @@ export default async function handler(req, res) {
     });
 
     const data = await response.json();
-    console.log('Respuesta Resend:', JSON.stringify(data));
-
     if (!response.ok) throw new Error(JSON.stringify(data));
 
     return res.status(200).json({ ok: true, id: data.id, mes });
   } catch (err) {
-    console.error('Error:', err.message);
     return res.status(500).json({ ok: false, error: err.message });
   }
-}
+};
