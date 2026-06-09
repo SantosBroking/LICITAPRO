@@ -1,5 +1,3 @@
-export const config = { runtime: 'edge' };
-
 const RESEND_API = 'https://api.resend.com/emails';
 const RECIPIENTS = ['mauricio@brokingroup.com'];
 
@@ -10,13 +8,12 @@ function mesActual() {
   return `${meses[now.getMonth()]} ${now.getFullYear()}`;
 }
 
-export default async function handler(req) {
-  const apiKey = process.env.RESEND_API_KEY;
+export default async function handler(req, res) {
+  console.log('RESEND_API_KEY existe:', !!process.env.RESEND_API_KEY);
 
+  const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
-    return new Response(JSON.stringify({ ok: false, error: 'RESEND_API_KEY no encontrada' }), {
-      status: 500, headers: { 'Content-Type': 'application/json' }
-    });
+    return res.status(500).json({ ok: false, error: 'RESEND_API_KEY no encontrada' });
   }
 
   const mes = mesActual();
@@ -39,7 +36,8 @@ export default async function handler(req) {
   `;
 
   try {
-    const res = await fetch(RESEND_API, {
+    console.log('Enviando a Resend...');
+    const response = await fetch(RESEND_API, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -53,15 +51,14 @@ export default async function handler(req) {
       }),
     });
 
-    const data = await res.json();
-    if (!res.ok) throw new Error(JSON.stringify(data));
+    const data = await response.json();
+    console.log('Respuesta Resend:', JSON.stringify(data));
 
-    return new Response(JSON.stringify({ ok: true, id: data.id, mes }), {
-      status: 200, headers: { 'Content-Type': 'application/json' }
-    });
+    if (!response.ok) throw new Error(JSON.stringify(data));
+
+    return res.status(200).json({ ok: true, id: data.id, mes });
   } catch (err) {
-    return new Response(JSON.stringify({ ok: false, error: err.message }), {
-      status: 500, headers: { 'Content-Type': 'application/json' }
-    });
+    console.error('Error:', err.message);
+    return res.status(500).json({ ok: false, error: err.message });
   }
 }
