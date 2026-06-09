@@ -2,9 +2,7 @@ export const config = { runtime: 'edge' };
 
 const RESEND_API = 'https://api.resend.com/emails';
 
-const RECIPIENTS = [
-  'mauricio@brokingroup.com',
-];
+const RECIPIENTS = ['mauricio@brokingroup.com'];
 
 function mesActual() {
   const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
@@ -14,12 +12,6 @@ function mesActual() {
 }
 
 export default async function handler(req) {
-  // Verificar cron secret para evitar llamadas no autorizadas
-  const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return new Response('Unauthorized', { status: 401 });
-  }
-
   const mes = mesActual();
 
   const html = `
