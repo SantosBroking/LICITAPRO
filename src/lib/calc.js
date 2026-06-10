@@ -81,7 +81,7 @@ export function calcCotizacion(cot) {
     const costoUnitSIVA = vehSIVA / qty + eqSIVA_unit;
     let pvUnitSIVA = 0;
     if (p.modoPrecio === 'Techo presupuestal') {
-      pvUnitSIVA = (p.techo || 0) > 0 ? (p.techo || 0) / (1 + IVA) : costoUnitSIVA;
+      pvUnitSIVA = (p.techo || 0) > 0 ? (p.techo || 0) / (1 + IVA) / qty : costoUnitSIVA;
     } else if (p.modoPrecio === 'Utilidad deseada $') {
       pvUnitSIVA = costoUnitSIVA + (p.utilidadDeseada || 0);
     } else { // % sobre costo

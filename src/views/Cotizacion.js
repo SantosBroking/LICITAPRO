@@ -225,7 +225,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
               )
             ),
             h('div', null,
-              h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, p.modoPrecio==='Techo presupuestal'?'Techo c/IVA ($)':p.modoPrecio==='Utilidad deseada %'?'Utilidad (%)':'Utilidad s/IVA ($)'),
+              h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, p.modoPrecio==='Techo presupuestal'?'Techo TOTAL partida c/IVA ($)':p.modoPrecio==='Utilidad deseada %'?'Utilidad (%)':'Utilidad s/IVA ($)'),
               h(NumInput, {
                 value:p.modoPrecio==='Utilidad deseada %'?Math.round((p.utilidadPct||0)*100):p.modoPrecio==='Techo presupuestal'?(p.techo||0):(p.utilidadDeseada||0),
                 onChange:v=>{ if(p.modoPrecio==='Utilidad deseada %')updPartida(p.id,'utilidadPct',v/100); else if(p.modoPrecio==='Techo presupuestal')updPartida(p.id,'techo',v); else updPartida(p.id,'utilidadDeseada',v); },
@@ -380,7 +380,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
               const eqSIVA=cot.equipo.filter(e=>e.usar).reduce((s,e)=>{const c=(e.cnts&&e.cnts[pi])||0;return s+(e.llevaIVA?(e.costoConIVA||0)/(1+IVA):(e.costoConIVA||0))*c;},0)*qty;
               const costoUnitSIVA=vehSIVA/qty+eqSIVA/qty;
               let pvUnitSIVA=0;
-              if(p.modoPrecio==='Techo presupuestal')pvUnitSIVA=(p.techo||0)>0?(p.techo||0)/(1+IVA):costoUnitSIVA;
+              if(p.modoPrecio==='Techo presupuestal')pvUnitSIVA=(p.techo||0)>0?(p.techo||0)/(1+IVA)/qty:costoUnitSIVA;
               else if(p.modoPrecio==='Utilidad deseada $')pvUnitSIVA=costoUnitSIVA+(p.utilidadDeseada||0);
               else pvUnitSIVA=costoUnitSIVA*(1+(p.utilidadPct||0));
               const pvCIVA=pvUnitSIVA*qty*(1+IVA), costTotalSIVA=vehSIVA+eqSIVA;

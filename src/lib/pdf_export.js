@@ -191,7 +191,7 @@ export async function printCotizacionCliente({ project, cot, calc, config }) {
     }, 0);
     const costoUnit = vehSIVA_unit + eqSIVA_unit;
     let pvUnit = 0;
-    if (p.modoPrecio === 'Techo presupuestal') pvUnit = (p.techo||0) > 0 ? (p.techo||0)/(1+IVA) : costoUnit;
+    if (p.modoPrecio === 'Techo presupuestal') pvUnit = (p.techo||0) > 0 ? (p.techo||0)/(1+IVA)/qty : costoUnit;
     else if (p.modoPrecio === 'Utilidad deseada %') pvUnit = costoUnit * (1 + (p.utilidadPct||0));
     else pvUnit = costoUnit + (p.utilidadDeseada||0);
     const subtotal = pvUnit * qty;
@@ -408,7 +408,7 @@ export function printResumenRetornos({ project, cot, calc }) {
       const eqSIVA_unit = (cot.equipo||[]).filter(e=>e.usar).reduce((s,e)=>{const cnt=(e.cnts&&e.cnts[pi])||0;return s+(e.llevaIVA?(e.costoConIVA||0)/(1+IVA):(e.costoConIVA||0))*cnt;},0);
       const costoUnit = vehSIVA_unit + eqSIVA_unit;
       let pvUnit = 0;
-      if(p.modoPrecio==='Techo presupuestal')pvUnit=(p.techo||0)>0?(p.techo||0)/(1+IVA):costoUnit;
+      if(p.modoPrecio==='Techo presupuestal')pvUnit=(p.techo||0)>0?(p.techo||0)/(1+IVA)/qty:costoUnit;
       else if(p.modoPrecio==='Utilidad deseada %')pvUnit=costoUnit*(1+(p.utilidadPct||0));
       else pvUnit=costoUnit+(p.utilidadDeseada||0);
       const pvCIVA_unit = pvUnit*(1+IVA);
@@ -574,7 +574,7 @@ export function printResumenInterno({ project, cot, calc }) {
         const eqSIVA_unit=(cot.equipo||[]).filter(e=>e.usar).reduce((s,e)=>{const cnt=(e.cnts&&e.cnts[pi])||0;return s+(e.llevaIVA?(e.costoConIVA||0)/(1+IVA):(e.costoConIVA||0))*cnt;},0);
         const costoUnit=vehSIVA_unit+eqSIVA_unit;
         let pvUnit=0;
-        if(p.modoPrecio==='Techo presupuestal')pvUnit=(p.techo||0)>0?(p.techo||0)/(1+IVA):costoUnit;
+        if(p.modoPrecio==='Techo presupuestal')pvUnit=(p.techo||0)>0?(p.techo||0)/(1+IVA)/qty:costoUnit;
         else if(p.modoPrecio==='Utilidad deseada %')pvUnit=costoUnit*(1+(p.utilidadPct||0));
         else pvUnit=costoUnit+(p.utilidadDeseada||0);
         const util=(pvUnit-costoUnit)*qty;
