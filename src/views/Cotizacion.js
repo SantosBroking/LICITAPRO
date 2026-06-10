@@ -89,7 +89,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
   };
   const addEquipo = prod => {
     if(cot.equipo.some(e=>e.productoId===prod.id))return;
-    updCot({...cot,equipo:[...cot.equipo,{id:uid('EQ'),productoId:prod.id,nombre:prod.nom,cat:prod.cat,usar:true,vis:prod.vis,costoConIVA:0,llevaIVA:prod.cat!=='08 Mano de obra',cnts:new Array(cot.partidas.length).fill(0),est:'Estimado',fechaCosto:TODAY(),notas:''}]});
+    updCot({...cot,equipo:[...cot.equipo,{id:uid('EQ'),productoId:prod.id,nombre:prod.nom,cat:prod.cat,usar:true,vis:prod.vis,costoConIVA:prod.price||0,llevaIVA:prod.cat!=='08 Mano de obra',cnts:new Array(cot.partidas.length).fill(0),est:'Estimado',fechaCosto:TODAY(),notas:''}]});
   };
   const removeEquipo  = eid => updCot({...cot,equipo:cot.equipo.filter(e=>e.id!==eid)});
   const addRetorno    = ()  => updCot({...cot,retornos:[...cot.retornos,{id:uid('RET'),nombre:'Retorno',base:'% sobre venta c/IVA',valor:0,activo:true,llevaIVA:false}]});
