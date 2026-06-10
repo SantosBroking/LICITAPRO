@@ -96,21 +96,23 @@ function openPrint(html, title) {
       return;
     }
     btn.textContent = 'Generando...'; btn.disabled = true;
-    // Quitar sombra/margen exterior solo durante la captura
-    const prevShadow = el.style.boxShadow, prevMargin = el.style.margin;
-    el.style.boxShadow = 'none'; el.style.margin = '0';
+    // Quitar sombra/margen/altura forzada y subir el scroll al inicio antes de capturar
+    const prevShadow = el.style.boxShadow, prevMargin = el.style.margin, prevMinH = el.style.minHeight;
+    el.style.boxShadow = 'none'; el.style.margin = '0'; el.style.minHeight = 'auto';
+    try { win.scrollTo(0, 0); } catch (e) {}
+    const restore = () => { el.style.boxShadow = prevShadow; el.style.margin = prevMargin; el.style.minHeight = prevMinH; };
     win.html2pdf().set({
       margin: 0,
       filename: fname,
       image: { type: 'jpeg', quality: 0.96 },
-      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', scrollX: 0, scrollY: 0 },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: ['css', 'legacy'], avoid: 'tr' },
+      pagebreak: { mode: ['css'], avoid: 'tr' },
     }).from(el).save().then(() => {
-      el.style.boxShadow = prevShadow; el.style.margin = prevMargin;
+      restore();
       btn.textContent = 'Descargar PDF'; btn.disabled = false;
     }).catch((e) => {
-      el.style.boxShadow = prevShadow; el.style.margin = prevMargin;
+      restore();
       btn.textContent = 'Descargar PDF'; btn.disabled = false;
       alert('Error al generar PDF: ' + (e.message || e));
     });
