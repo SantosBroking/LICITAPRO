@@ -57,28 +57,31 @@ export function getRecipients(company) {
 }
 
 export async function sendReminderEmail(company, config) {
-  const apiKey = config?.notif?.resendKey;
-  const from   = config?.notif?.fromEmail || 'LicitaPro <notificaciones@msms.com>';
-  const to     = getRecipients(company);
-
-  if (!apiKey)     throw new Error('Configura tu API Key de Resend en Configuración → 📧 Notificaciones');
+  const to = getRecipients(company);
   if (!to.length)  throw new Error(`La empresa "${company.name}" no tiene correos de notificación configurados`);
 
   const now     = new Date();
   const mesAnio = MESES[now.getMonth()] + ' ' + now.getFullYear();
   const subject = `Actualizar información — ${company.name || 'Empresa'} | ${mesAnio}`;
 
-  const res = await fetch(RESEND_API, {
+  // Se envía por el servidor (Resend bloquea llamadas directas desde el navegador)
+  const res = await fetch('/api/send-email', {
     method: 'POST',
-    headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${apiKey}` },
-    body: JSON.stringify({ from, to, subject, html: buildEmailHTML(company, mesAnio) }),
+    headers: { 'Content-Type':'application/json' },
+    body: JSON.stringify({
+      from: 'MSMS CORP <santiago@brokingroup.com>',
+      to,
+      subject,
+      html: buildEmailHTML(company, mesAnio),
+    }),
   });
 
-  if (!res.ok) {
-    const err = await res.json().catch(()=>({}));
-    throw new Error('Error de Resend: ' + (err.message || res.status));
+  const data = await res.json().catch(()=>({}));
+  if (!res.ok || !data.ok) {
+    const msg = data?.resend?.message || data?.error || ('HTTP ' + res.status);
+    throw new Error('Error al enviar: ' + msg);
   }
-  return await res.json();
+  return data.resend;
 }
 
 export async function sendMonthlyReminders(companies, config) {

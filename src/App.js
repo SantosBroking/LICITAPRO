@@ -68,7 +68,7 @@ export default function App() {
         if (d.config) { setConfig(d.config); window._lpConfig = d.config;
           // Auto-envío mensual si es día 1 y no se envió este mes
           const cfg = d.config;
-          if (cfg?.notif?.resendKey && shouldSendMonthlyReminder(cfg?.notif?.lastReminderSent)) {
+          if (shouldSendMonthlyReminder(cfg?.notif?.lastReminderSent)) {
             const comps = (d.companies || []);
             const withEmail = comps.filter(c => c.correoContador);
             if (withEmail.length > 0) {
