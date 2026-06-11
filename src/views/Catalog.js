@@ -390,8 +390,8 @@ export default function CatalogView({ config, onSaveConfig }) {
     !kitView && h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:12 } },
       prods.map(prod => {
         const isCustom = !!customProds.find(x => x.id === prod.id);
-        return h('div', { key:prod.id, className:'card', style:{ position:'relative' } },
-          h('div', { style:{ position:'absolute', top:8, right:8, display:'flex', gap:4 } },
+        return h('div', { key:prod.id, className:'card' },
+          h('div', { style:{ display:'flex', justifyContent:'flex-end', gap:4, marginBottom:8 } },
             h('button', { onClick:()=>setForm({...prod, photo: prod.photo || CATALOG_IMAGES[prod.id] || ''}),
               style:{ fontSize:11, padding:'4px 10px', color:'var(--blue)', background:'var(--bg1)', border:'1px solid var(--blue-border)', borderRadius:'var(--r)', cursor:'pointer' } }, '✏ Editar'),
             isCustom && CATALOG_PRODUCTS.find(x=>x.id===prod.id)
