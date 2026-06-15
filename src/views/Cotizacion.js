@@ -357,124 +357,136 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
 
     // ══ 4. CORRIDA FINANCIERA ══
     tab==='corrida' && h('div', null,
-      // ── Tabla cascada principal ──────────────────────────────
-      h('div', { className:'card', style:{ marginBottom:12, overflow:'hidden', padding:0 } },
-        h('div', { style:{ padding:'12px 20px', borderBottom:'.5px solid var(--b1)' } },
-          h('span', { style:{ fontSize:13, fontWeight:500 } }, 'Corrida financiera'),
-        ),
-        h('div', { style:{ overflowX:'auto' } },
-          h('table', { style:{ fontSize:12, width:'100%', borderCollapse:'collapse' } },
-            h('colgroup', null,
-              h('col', { style:{ width:'38%' } }),
-              ...activeParts.map(p=>h('col', { key:p.id, style:{ width: (42/activeParts.length)+'%' } })),
-              h('col', { style:{ width:'20%' } }),
-            ),
-            h('thead', null,
-              h('tr', { style:{ borderBottom:'.5px solid var(--b1)' } },
-                h('th', { style:{ padding:'8px 20px', textAlign:'left', fontSize:11, fontWeight:500, color:'var(--t2)', letterSpacing:'.4px' } }, 'CONCEPTO'),
-                ...activeParts.map(p=>h('th', { key:p.id, style:{ padding:'8px 12px', textAlign:'right', fontSize:11, fontWeight:500, color:'var(--blue)', letterSpacing:'.4px' } }, p.id,' ',[p.marca,p.modelo].filter(Boolean).join(' ').slice(0,18),' ×',p.cantidad)),
-                h('th', { style:{ padding:'8px 20px', textAlign:'right', fontSize:11, fontWeight:500, color:'var(--t2)', letterSpacing:'.4px' } }, 'TOTAL'),
-              )
-            ),
-            h('tbody', null,
-              // Sección VENTA
-              h('tr', { style:{ background:'var(--bg2)' } },
-                h('td', { colSpan: activeParts.length+2, style:{ padding:'6px 20px', fontSize:10, fontWeight:600, color:'var(--t2)', letterSpacing:'.4px' } }, 'VENTA'),
+      // ── Pre-cálculo por partida (evita re-calcular en cada celda) ──
+      (() => {
+        const pdata = activeParts.map(p => {
+          const pi = parseInt(p.id.replace('P',''))-1, qty = p.cantidad||0;
+          const vehCIVA = (p.costoMSMS||0)*qty;
+          const vehSIVA = vehCIVA/(1+IVA);
+          const eqCIVA  = cot.equipo.filter(e=>e.usar).reduce((s,e)=>{ const c=(e.cnts&&e.cnts[pi])||0; return s+(e.costoConIVA||0)*c; },0)*qty;
+          const eqSIVA  = cot.equipo.filter(e=>e.usar).reduce((s,e)=>{ const c=(e.cnts&&e.cnts[pi])||0; return s+(e.llevaIVA?(e.costoConIVA||0)/(1+IVA):(e.costoConIVA||0))*c; },0)*qty;
+          const costoUnitSIVA = qty>0 ? vehSIVA/qty + eqSIVA/qty : 0;
+          let pvUnitSIVA = 0;
+          if(p.modoPrecio==='Techo presupuestal') pvUnitSIVA=(p.techo||0)>0?(p.techo||0)/(1+IVA)/qty:costoUnitSIVA;
+          else if(p.modoPrecio==='Utilidad deseada $') pvUnitSIVA=costoUnitSIVA+(p.utilidadDeseada||0);
+          else pvUnitSIVA=costoUnitSIVA*(1+(p.utilidadPct||0));
+          const ventaSIVA = pvUnitSIVA*qty;
+          const ventaCIVA = ventaSIVA*(1+IVA);
+          const utilCoches = ventaSIVA - (vehSIVA+eqSIVA);
+          // costos del trato proporcionales a la venta de esta partida
+          const prop = calc.ventaTotal>0 ? ventaCIVA/calc.ventaTotal : 1/activeParts.length;
+          const ivaPartida = calc.ivaAUtilidad * prop;
+          return { p, qty, vehCIVA, eqCIVA, ventaCIVA, ventaSIVA, utilCoches, prop, ivaPartida };
+        });
+        const costoTrato = (item) => {
+          const val=Number(item.valor||0);
+          if(item.base==='% sobre venta c/IVA') return calc.ventaTotal*val/100;
+          if(item.base==='% sobre venta s/IVA') return calc.ventaSIVA*val/100;
+          if(item.base==='Monto fijo por unidad') return val*calc.unidades;
+          return val;
+        };
+        const costoTratoPart = (item, pd) => {
+          const val=Number(item.valor||0);
+          if(item.base==='% sobre venta c/IVA') return pd.ventaCIVA*val/100;
+          if(item.base==='% sobre venta s/IVA') return pd.ventaSIVA*val/100;
+          if(item.base==='Monto fijo por unidad') return val*(pd.qty||0);
+          return costoTrato(item)*pd.prop;
+        };
+        const retActivos  = cot.retornos.filter(r=>r.activo);
+        const fianzActivas= cot.fianzas.filter(f=>f.activo);
+        const col  = (c,bold,right) => ({ padding: right?'9px 20px':'9px 12px', textAlign:'right', color:c, fontWeight:bold?600:400 });
+        const colH = (c,sz) => ({ padding:'10px 20px', fontWeight:600, fontSize:sz||12, color:c });
+
+        return h('div', { className:'card', style:{ marginBottom:12, overflow:'hidden', padding:0 } },
+          h('div', { style:{ padding:'12px 20px', borderBottom:'.5px solid var(--b1)' } },
+            h('span', { style:{ fontSize:13, fontWeight:500 } }, 'Corrida financiera'),
+          ),
+          h('div', { style:{ overflowX:'auto' } },
+            h('table', { style:{ fontSize:12, width:'100%', borderCollapse:'collapse' } },
+              h('thead', null,
+                h('tr', { style:{ borderBottom:'.5px solid var(--b1)' } },
+                  h('th', { style:{ padding:'8px 20px', textAlign:'left', fontSize:11, fontWeight:500, color:'var(--t2)', letterSpacing:'.4px' } }, 'CONCEPTO'),
+                  ...pdata.map(({p})=>h('th', { key:p.id, style:{ padding:'8px 12px', textAlign:'right', fontSize:11, fontWeight:500, color:'var(--blue)', letterSpacing:'.4px' } }, p.id,' ',[p.marca,p.modelo].filter(Boolean).join(' ').slice(0,16),' ×',p.cantidad||0)),
+                  h('th', { style:{ padding:'8px 20px', textAlign:'right', fontSize:11, fontWeight:500, color:'var(--t2)', letterSpacing:'.4px' } }, 'TOTAL'),
+                )
               ),
-              h('tr', { style:{ borderBottom:'.5px solid var(--b1)' } },
-                h('td', { style:{ padding:'9px 20px', color:'var(--t2)' } }, 'Venta total c/IVA'),
-                ...activeParts.map(p=>{
-                  const pi=parseInt(p.id.replace('P',''))-1, qty=p.cantidad||0;
-                  const eqSIVA=cot.equipo.filter(e=>e.usar).reduce((s,e)=>{const c=(e.cnts&&e.cnts[pi])||0;return s+(e.llevaIVA?(e.costoConIVA||0)/(1+IVA):(e.costoConIVA||0))*c;},0)*qty;
-                  const vehSIVA=(p.costoMSMS||0)*qty/(1+IVA), costoUnitSIVA=vehSIVA/qty+eqSIVA/qty;
-                  let pvUnitSIVA=0;
-                  if(p.modoPrecio==='Techo presupuestal')pvUnitSIVA=(p.techo||0)>0?(p.techo||0)/(1+IVA)/qty:costoUnitSIVA;
-                  else if(p.modoPrecio==='Utilidad deseada $')pvUnitSIVA=costoUnitSIVA+(p.utilidadDeseada||0);
-                  else pvUnitSIVA=costoUnitSIVA*(1+(p.utilidadPct||0));
-                  return h('td', { key:p.id, style:{ padding:'9px 12px', textAlign:'right', fontWeight:500, color:'var(--blue)' } }, fmt(pvUnitSIVA*qty*(1+IVA)));
+              h('tbody', null,
+                // VENTA
+                h('tr', { style:{ background:'var(--bg2)' } },
+                  h('td', { colSpan:pdata.length+2, style:{ padding:'6px 20px', fontSize:10, fontWeight:600, color:'var(--t2)', letterSpacing:'.4px' } }, 'VENTA'),
+                ),
+                h('tr', { style:{ borderBottom:'.5px solid var(--b1)' } },
+                  h('td', { style:{ padding:'9px 20px', color:'var(--t2)' } }, 'Venta total c/IVA'),
+                  ...pdata.map(({p,ventaCIVA})=>h('td', { key:p.id, style:col('var(--blue)',true,false) }, fmt(ventaCIVA))),
+                  h('td', { style:col('var(--blue)',true,true) }, fmt(calc.ventaTotal)),
+                ),
+                // COSTOS
+                h('tr', { style:{ background:'var(--bg2)' } },
+                  h('td', { colSpan:pdata.length+2, style:{ padding:'6px 20px', fontSize:10, fontWeight:600, color:'var(--t2)', letterSpacing:'.4px' } }, 'COSTOS'),
+                ),
+                h('tr', null,
+                  h('td', { style:{ padding:'9px 20px', color:'var(--t2)' } }, 'Vehículos c/IVA'),
+                  ...pdata.map(({p,vehCIVA})=>h('td', { key:p.id, style:col('var(--t2)',false,false) }, fmt(vehCIVA))),
+                  h('td', { style:col('var(--t2)',false,true) }, fmt(calc.costoVehCIVA)),
+                ),
+                h('tr', { style:{ borderBottom:'.5px solid var(--b1)' } },
+                  h('td', { style:{ padding:'9px 20px', color:'var(--t2)' } }, 'Equipo c/IVA'),
+                  ...pdata.map(({p,eqCIVA})=>h('td', { key:p.id, style:col('var(--t2)',false,false) }, fmt(eqCIVA))),
+                  h('td', { style:col('var(--t2)',false,true) }, fmt(calc.costoEqCIVA)),
+                ),
+                // Utilidad de los coches
+                h('tr', { style:{ borderBottom:'.5px solid var(--b1)', background:'var(--green-bg,#f0fdf4)' } },
+                  h('td', { style:colH('var(--t1)') }, 'Utilidad de los coches'),
+                  ...pdata.map(({p,utilCoches})=>h('td', { key:p.id, style:col(utilCoches>=0?'var(--green)':'var(--red)',true,false) }, fmt(utilCoches))),
+                  h('td', { style:col(calc.utilBruta>=0?'var(--green)':'var(--red)',true,true) }, fmt(calc.utilBruta)),
+                ),
+                // COSTOS DEL TRATO
+                h('tr', { style:{ background:'var(--bg2)' } },
+                  h('td', { colSpan:pdata.length+2, style:{ padding:'6px 20px', fontSize:10, fontWeight:600, color:'var(--t2)', letterSpacing:'.4px' } }, 'COSTOS DEL TRATO'),
+                ),
+                ...retActivos.map(r=>{
+                  const tot=costoTrato(r);
+                  return h('tr', { key:r.id, style:{ borderBottom:'.5px solid var(--b3)' } },
+                    h('td', { style:{ padding:'9px 20px', color:'var(--t2)' } }, r.nombre, r.base.startsWith('%')?' ('+Number(r.valor||0)+'%)':''),
+                    ...pdata.map(pd=>h('td', { key:pd.p.id, style:col('var(--red)',false,false) }, '−'+fmt(costoTratoPart(r,pd)))),
+                    h('td', { style:col('var(--red)',false,true) }, '−'+fmt(tot)),
+                  );
                 }),
-                h('td', { style:{ padding:'9px 20px', textAlign:'right', fontWeight:500, color:'var(--blue)' } }, fmt(calc.ventaTotal)),
-              ),
-              // Sección COSTOS
-              h('tr', { style:{ background:'var(--bg2)' } },
-                h('td', { colSpan: activeParts.length+2, style:{ padding:'6px 20px', fontSize:10, fontWeight:600, color:'var(--t2)', letterSpacing:'.4px' } }, 'COSTOS'),
-              ),
-              h('tr', null,
-                h('td', { style:{ padding:'9px 20px', color:'var(--t2)' } }, 'Vehículos c/IVA'),
-                ...activeParts.map(p=>h('td', { key:p.id, style:{ padding:'9px 12px', textAlign:'right', color:'var(--t2)' } }, fmt((p.costoMSMS||0)*(p.cantidad||0)))),
-                h('td', { style:{ padding:'9px 20px', textAlign:'right', color:'var(--t2)' } }, fmt(calc.costoVehCIVA)),
-              ),
-              h('tr', { style:{ borderBottom:'.5px solid var(--b1)' } },
-                h('td', { style:{ padding:'9px 20px', color:'var(--t2)' } }, 'Equipo c/IVA'),
-                ...activeParts.map(p=>{
-                  const pi=parseInt(p.id.replace('P',''))-1, qty=p.cantidad||0;
-                  const eqCIVA=cot.equipo.filter(e=>e.usar).reduce((s,e)=>{const c=(e.cnts&&e.cnts[pi])||0;return s+(e.costoConIVA||0)*c;},0)*qty;
-                  return h('td', { key:p.id, style:{ padding:'9px 12px', textAlign:'right', color:'var(--t2)' } }, fmt(eqCIVA));
+                ...fianzActivas.map(f=>{
+                  const tot=costoTrato(f);
+                  return h('tr', { key:f.id, style:{ borderBottom:'.5px solid var(--b3)' } },
+                    h('td', { style:{ padding:'9px 20px', color:'var(--t2)' } }, f.nombre, f.base.startsWith('%')?' ('+Number(f.valor||0)+'%)':''),
+                    ...pdata.map(pd=>h('td', { key:pd.p.id, style:col('var(--red)',false,false) }, '−'+fmt(costoTratoPart(f,pd)))),
+                    h('td', { style:col('var(--red)',false,true) }, '−'+fmt(tot)),
+                  );
                 }),
-                h('td', { style:{ padding:'9px 20px', textAlign:'right', color:'var(--t2)' } }, fmt(calc.costoEqCIVA)),
-              ),
-              // Utilidad de los coches
-              h('tr', { style:{ borderBottom:'.5px solid var(--b1)', background:'var(--green-bg,#f0fdf4)' } },
-                h('td', { style:{ padding:'10px 20px', fontWeight:600 } }, 'Utilidad de los coches'),
-                ...activeParts.map(p=>{
-                  const pi=parseInt(p.id.replace('P',''))-1, qty=p.cantidad||0;
-                  const vehCIVA=(p.costoMSMS||0)*qty, vehSIVA=vehCIVA/(1+IVA);
-                  const eqCIVA=cot.equipo.filter(e=>e.usar).reduce((s,e)=>{const c=(e.cnts&&e.cnts[pi])||0;return s+(e.costoConIVA||0)*c;},0)*qty;
-                  const eqSIVA=cot.equipo.filter(e=>e.usar).reduce((s,e)=>{const c=(e.cnts&&e.cnts[pi])||0;return s+(e.llevaIVA?(e.costoConIVA||0)/(1+IVA):(e.costoConIVA||0))*c;},0)*qty;
-                  const costoUnitSIVA=vehSIVA/qty+eqSIVA/qty;
-                  let pvUnitSIVA=0;
-                  if(p.modoPrecio==='Techo presupuestal')pvUnitSIVA=(p.techo||0)>0?(p.techo||0)/(1+IVA)/qty:costoUnitSIVA;
-                  else if(p.modoPrecio==='Utilidad deseada $')pvUnitSIVA=costoUnitSIVA+(p.utilidadDeseada||0);
-                  else pvUnitSIVA=costoUnitSIVA*(1+(p.utilidadPct||0));
-                  const util=pvUnitSIVA*qty-(vehSIVA+eqSIVA);
-                  return h('td', { key:p.id, style:{ padding:'10px 12px', textAlign:'right', fontWeight:600, color:util>=0?'var(--green)':'var(--red)' } }, fmt(util));
-                }),
-                h('td', { style:{ padding:'10px 20px', textAlign:'right', fontWeight:600, color:calc.utilBruta>=0?'var(--green)':'var(--red)' } }, fmt(calc.utilBruta)),
-              ),
-              // Sección COSTOS DEL TRATO
-              h('tr', { style:{ background:'var(--bg2)' } },
-                h('td', { colSpan: activeParts.length+2, style:{ padding:'6px 20px', fontSize:10, fontWeight:600, color:'var(--t2)', letterSpacing:'.4px' } }, 'COSTOS DEL TRATO'),
-              ),
-              ...cot.retornos.filter(r=>r.activo).map(r=>{
-                const val=Number(r.valor||0);
-                const montoTotal=r.base==='% sobre venta c/IVA'?calc.ventaTotal*val/100:r.base==='% sobre venta s/IVA'?calc.ventaSIVA*val/100:r.base==='Monto fijo por unidad'?val*calc.unidades:val;
-                const porPartida=activeParts.length>0?montoTotal/activeParts.length:0;
-                return h('tr', { key:r.id, style:{ borderBottom:'.5px solid var(--b3)' } },
-                  h('td', { style:{ padding:'9px 20px', color:'var(--t2)' } }, r.nombre, r.base.startsWith('%')?' ('+val+'%)':''),
-                  ...activeParts.map(p=>h('td', { key:p.id, style:{ padding:'9px 12px', textAlign:'right', color:'var(--red)' } }, '−'+fmt(porPartida))),
-                  h('td', { style:{ padding:'9px 20px', textAlign:'right', color:'var(--red)' } }, '−'+fmt(montoTotal)),
-                );
-              }),
-              ...cot.fianzas.filter(f=>f.activo).map(f=>{
-                const val=Number(f.valor||0);
-                const montoTotal=f.base==='% sobre venta c/IVA'?calc.ventaTotal*val/100:f.base==='% sobre venta s/IVA'?calc.ventaSIVA*val/100:f.base==='Monto fijo por unidad'?val*calc.unidades:val;
-                const porPartida=activeParts.length>0?montoTotal/activeParts.length:0;
-                return h('tr', { key:f.id, style:{ borderBottom:'.5px solid var(--b3)' } },
-                  h('td', { style:{ padding:'9px 20px', color:'var(--t2)' } }, f.nombre, f.base.startsWith('%')?' ('+val+'%)':''),
-                  ...activeParts.map(p=>h('td', { key:p.id, style:{ padding:'9px 12px', textAlign:'right', color:'var(--red)' } }, '−'+fmt(porPartida))),
-                  h('td', { style:{ padding:'9px 20px', textAlign:'right', color:'var(--red)' } }, '−'+fmt(montoTotal)),
-                );
-              }),
-              h('tr', { style:{ borderBottom:'.5px solid var(--b1)' } },
-                h('td', { style:{ padding:'9px 20px', color:'var(--t2)' } }, 'IVA a utilidad ('+Math.round((cot.pctIvaUtil||.5)*100)+'%)'),
-                ...activeParts.map(p=>h('td', { key:p.id, style:{ padding:'9px 12px', textAlign:'right', color:'var(--green)' } }, '+'+fmt(calc.ivaAUtilidad/activeParts.length))),
-                h('td', { style:{ padding:'9px 20px', textAlign:'right', color:'var(--green)' } }, '+'+fmt(calc.ivaAUtilidad)),
-              ),
-              // Utilidad neta total
-              h('tr', { style:{ background:'var(--blue-bg,#eff6ff)' } },
-                h('td', { style:{ padding:'13px 20px', fontWeight:600, fontSize:14 } }, 'Utilidad neta'),
-                ...activeParts.map(()=>h('td', { style:{ padding:'13px 12px', textAlign:'right', color:'var(--t3)', fontSize:11 } }, '—')),
-                h('td', { style:{ padding:'13px 20px', textAlign:'right', fontWeight:600, fontSize:15, color:calc.utilNeta>=0?'var(--blue)':'var(--red)' } }, fmt(calc.utilNeta)),
-              ),
-              h('tr', { style:{ borderTop:'.5px solid var(--b1)' } },
-                h('td', { style:{ padding:'8px 20px', fontSize:12, color:'var(--t2)' } }, 'Margen neto s/costo'),
-                ...activeParts.map(()=>h('td', { style:{ padding:'8px 12px' } })),
-                h('td', { style:{ padding:'8px 20px', textAlign:'right', fontSize:12, fontWeight:500, color:calc.margenNeto>=.2?'var(--green)':calc.margenNeto>=.1?'var(--amber)':'var(--red)' } }, pctS(calc.margenNeto)),
+                h('tr', { style:{ borderBottom:'.5px solid var(--b1)' } },
+                  h('td', { style:{ padding:'9px 20px', color:'var(--t2)' } }, 'IVA a utilidad ('+Math.round((cot.pctIvaUtil||.5)*100)+'%)'),
+                  ...pdata.map(pd=>h('td', { key:pd.p.id, style:col('var(--green)',false,false) }, '+'+fmt(pd.ivaPartida))),
+                  h('td', { style:col('var(--green)',false,true) }, '+'+fmt(calc.ivaAUtilidad)),
+                ),
+                // Utilidad neta
+                h('tr', { style:{ background:'var(--blue-bg,#eff6ff)' } },
+                  h('td', { style:colH('var(--t1)',14) }, 'Utilidad neta'),
+                  ...pdata.map(pd=>{
+                    const utilNeta=pd.utilCoches
+                      - retActivos.reduce((s,r)=>s+costoTratoPart(r,pd),0)
+                      - fianzActivas.reduce((s,f)=>s+costoTratoPart(f,pd),0)
+                      + pd.ivaPartida;
+                    return h('td', { key:pd.p.id, style:col(utilNeta>=0?'var(--blue)':'var(--red)',true,false) }, fmt(utilNeta));
+                  }),
+                  h('td', { style:col(calc.utilNeta>=0?'var(--blue)':'var(--red)',true,true) }, fmt(calc.utilNeta)),
+                ),
+                h('tr', { style:{ borderTop:'.5px solid var(--b1)' } },
+                  h('td', { style:{ padding:'8px 20px', fontSize:12, color:'var(--t2)' } }, 'Margen neto s/costo'),
+                  ...pdata.map(pd=>h('td', { key:pd.p.id, style:{ padding:'8px 12px', textAlign:'right' } })),
+                  h('td', { style:{ padding:'8px 20px', textAlign:'right', fontSize:12, fontWeight:500, color:calc.margenNeto>=.2?'var(--green)':calc.margenNeto>=.1?'var(--amber)':'var(--red)' } }, pctS(calc.margenNeto)),
+                ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      })(),
       // ── Desglose de IVA + % al SAT ──────────────────────────
       h('div', { className:'card', style:{ marginBottom:12 } },
         h('div', { style:{ fontSize:13, fontWeight:500, marginBottom:10 } }, 'Desglose de IVA'),
