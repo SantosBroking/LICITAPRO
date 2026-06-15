@@ -13,20 +13,32 @@ import { AIAnalyzerButton } from '../ui/AIAnalyzerButton.js';
 
 const PROJ_TABS = [{id:'info',l:'Información'},{id:'cotizacion',l:'Cotización MSMS'},{id:'flujo',l:'Flujo de Pagos'},{id:'bases',l:'Bases'},{id:'vehiculos',l:'Vehículos'},{id:'facturacion',l:'Facturación'},{id:'docs',l:'Documentos'},{id:'preguntas',l:'Preguntas'},{id:'borrador',l:'Borrador'},{id:'activity',l:'Actividad'}];
 
+const GRUPOS = {
+  proyecciones: ['prospecto','analisis','preparacion','aclaraciones','presentada','evaluacion'],
+  nuestros:     ['ganada','contrato','entrega','facturado','cobrado'],
+  cerradas:     ['perdida','cancelada'],
+};
+
 export function ProjectsList({ projects, vehicles, onNav }) {
   const [view, setView]     = useState('table');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
   const [sort, setSort]     = useState('recent');
+  const [grupo, setGrupo]   = useState('todos');
   const visible = useMemo(() => {
     let list=[...projects];
     if(search){const q=search.toLowerCase();list=list.filter(p=>(p.name||'').toLowerCase().includes(q)||(p.dependencia||'').toLowerCase().includes(q)||(p.numLicitacion||'').toLowerCase().includes(q));}
+    if(grupo!=='todos')list=list.filter(p=>(GRUPOS[grupo]||[]).includes(p.status));
     if(status!=='all')list=list.filter(p=>p.status===status);
     if(sort==='recent')list.sort((a,b)=>b.id>a.id?1:-1);
     if(sort==='amount')list.sort((a,b)=>(b.montoEstimado||0)-(a.montoEstimado||0));
     if(sort==='deadline')list.sort((a,b)=>(daysUntil(a.fechaFallo)??9999)-(daysUntil(b.fechaFallo)??9999));
     return list;
-  },[projects,search,status,sort]);
+  },[projects,search,status,sort,grupo]);
+
+  const grpCount = id => id==='todos' ? projects.length : projects.filter(p=>(GRUPOS[id]||[]).includes(p.status)).length;
+  const kanbanCols = grupo==='todos' ? KANBAN_COLS : (GRUPOS[grupo]||KANBAN_COLS);
+  const sumaVisible = visible.reduce((s,p)=>s+(p.montoEstimado||0),0);
 
   if(projects.length===0) return h('div', null,
     h('div', { style:{ display:'flex', justifyContent:'space-between', marginBottom:20 } },
@@ -40,6 +52,15 @@ export function ProjectsList({ projects, vehicles, onNav }) {
     h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 } },
       h('div', { className:'page-title' }, 'Proyectos (',projects.length,')'),
       h('button', { className:'bp', onClick:()=>onNav('project_new') }, '+ Nuevo proyecto'),
+    ),
+    h('div', { style:{ display:'flex', gap:6, marginBottom:8, flexWrap:'wrap' } },
+      [['proyecciones','📈 Proyecciones'],['nuestros','✅ Ya nuestros'],['cerradas','Cerradas'],['todos','Todos']].map(g=>
+        h('button', { key:g[0], className: grupo===g[0]?'bp':'', onClick:()=>setGrupo(g[0]), style:{ fontSize:12, padding:'6px 14px' } }, g[1]+' ('+grpCount(g[0])+')')
+      )
+    ),
+    h('div', { style:{ fontSize:12, color:'var(--t2)', marginBottom:14 } },
+      'Suma de montos estimados: ', h('strong', { style:{ color:'var(--t1)' } }, fmt(sumaVisible)),
+      ' · ', visible.length, ' proyecto(s)'
     ),
     h('div', { style:{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' } },
       h('input', { value:search, onChange:e=>setSearch(e.target.value), placeholder:'Buscar...', style:{ maxWidth:220 } }),
@@ -81,7 +102,7 @@ export function ProjectsList({ projects, vehicles, onNav }) {
     ),
     view==='kanban' && h('div', { style:{ overflowX:'auto' } },
       h('div', { style:{ display:'flex', gap:12, minWidth:'max-content', paddingBottom:12 } },
-        KANBAN_COLS.map(colId => {
+        kanbanCols.map(colId => {
           const s=STATUSES.find(x=>x.id===colId), cols=visible.filter(p=>p.status===colId);
           return h('div', { key:colId, style:{ width:220, flexShrink:0 } },
             h('div', { style:{ fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:.5, color:s?.tx||'var(--t2)', background:s?.bg||'var(--bg2)', padding:'6px 12px', borderRadius:'var(--r)', marginBottom:8 } }, s?.label||colId,' (',cols.length,')'),
