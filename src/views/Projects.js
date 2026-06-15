@@ -444,6 +444,44 @@ function buildBorradorHTML(project, intro){
     +'</div>';
 }
 
+function buildBorradorText(project, intro){
+  var p=project, cot=p.cotizacion||{};
+  var st=STATUSES.find(function(s){return s.id===p.status;});
+  var stLabel=st?st.label:(p.status||'—');
+  var partidas=(cot.partidas||[]).filter(function(x){return x.activo && ((x.cantidad||0)>0 || x.tipo || x.vehiculoId);});
+  var equipo=cot.equipo||[];
+  var totalCoches=partidas.reduce(function(s,x){return s+(x.cantidad||0);},0);
+  var L=[];
+  if(intro){ L.push(intro); L.push(''); }
+  L.push(p.name||'Proyecto');
+  var enc=[p.dependencia,p.numLicitacion].filter(Boolean).join(' · '); if(enc) L.push(enc);
+  L.push('');
+  L.push('Status: '+stLabel);
+  L.push('Probabilidad de ganar: '+(p.probability!=null?(p.probability+'%'):'—'));
+  L.push('Tipo de procedimiento: '+(p.tipoProcedimiento||'—'));
+  L.push('Monto estimado: '+fmt(p.montoEstimado||0));
+  L.push('Total de vehículos: '+totalCoches);
+  L.push('');
+  L.push('FECHAS CLAVE');
+  var fechas=fechasBorrador(p);
+  if(fechas.length) fechas.forEach(function(r){ L.push('- '+r[0]+': '+r[1]); });
+  else L.push('- Sin fechas registradas');
+  L.push('');
+  L.push('VEHÍCULOS Y CARACTERÍSTICAS');
+  if(partidas.length){
+    partidas.forEach(function(x){
+      var pi=parseInt(String(x.id).replace('P',''),10)-1;
+      var carac=[x.tipo,[x.marca,x.modelo,x.ano,x.version].filter(Boolean).join(' ')].filter(Boolean).join(' — ');
+      L.push(x.id+' · '+(carac||'Vehículo sin definir')+' — '+(x.cantidad||0)+' unidad(es)');
+      var eqs=equipo.filter(function(e){return ((e.cnts&&e.cnts[pi])||0)>0;}).map(function(e){return e.nombre+(e.cnts[pi]>1?(' x'+e.cnts[pi]):'');});
+      if(eqs.length) L.push('   Equipamiento: '+eqs.join(', '));
+    });
+  } else L.push('Sin vehículos capturados.');
+  if(p.description){ L.push(''); L.push('DESCRIPCIÓN'); L.push(p.description); }
+  if(p.observaciones){ L.push(''); L.push('OBSERVACIONES'); L.push(p.observaciones); }
+  return L.join('\n');
+}
+
 function BorradorTab(props){
   var project=props.project, onUpdate=props.onUpdate, logFn=props.logFn;
   var toState=useState(project.borradorTo||''), to=toState[0], setTo=toState[1];
@@ -467,7 +505,24 @@ function BorradorTab(props){
     setSending(false);
   };
 
-  var copiar=function(){ try{ if(navigator.clipboard) navigator.clipboard.writeText(html); setMsg('📋 HTML copiado'); }catch(e){ setMsg('No se pudo copiar'); } };
+  var copiar=async function(){
+    var texto=buildBorradorText(project, intro);
+    try{
+      if(navigator.clipboard && window.ClipboardItem){
+        await navigator.clipboard.write([new ClipboardItem({
+          'text/html': new Blob([html],{type:'text/html'}),
+          'text/plain': new Blob([texto],{type:'text/plain'})
+        })]);
+        setMsg('📋 Copiado con formato — pégalo en tu correo');
+      } else if(navigator.clipboard){
+        await navigator.clipboard.writeText(texto);
+        setMsg('📋 Copiado como texto');
+      } else { setMsg('No se pudo copiar'); }
+    }catch(e){
+      try{ await navigator.clipboard.writeText(texto); setMsg('📋 Copiado como texto'); }
+      catch(e2){ setMsg('No se pudo copiar'); }
+    }
+  };
 
   return h('div', null,
     h('div', { className:'card', style:{ marginBottom:16 } },
