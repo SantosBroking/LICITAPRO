@@ -24,6 +24,11 @@ export function Metric({ label, value, sub, sc, icon }) {
 }
 
 export function Inp({ label, value, onChange, type, placeholder, options, textarea, hint }) {
+  const isNum = type === 'number';
+  const fmtI  = n => (n == null || n === '' || n === 0) ? '' : Number(n).toLocaleString('es-MX', { maximumFractionDigits:6 });
+  const parseI = s => { const n = Number(String(s).replace(/,/g, '')); return isNaN(n) ? 0 : n; };
+  const [locI, setLocI] = useState(isNum ? fmtI(value) : undefined);
+  useEffect(() => { if (isNum) setLocI(fmtI(value)); }, [value]);
   return h('div', { style:{ marginBottom:14 } },
     label && h('label', { style:{ display:'block', fontSize:12, color:'var(--t2)', marginBottom:5, fontWeight:500 } }, label),
     options
@@ -33,19 +38,34 @@ export function Inp({ label, value, onChange, type, placeholder, options, textar
         )
       : textarea
       ? h('textarea', { value:value||'', onChange:e=>onChange(e.target.value), placeholder:placeholder||'', rows:3, style:{ resize:'vertical' } })
-      : h('input', { type:type||'text', value:value==null?'':value, onChange:e=>onChange(e.target.value), placeholder:placeholder||'' }),
+      : isNum
+        ? h('input', { type:'text', inputMode:'decimal', value:locI||'', placeholder:placeholder||'0',
+            onChange: e => { if (/^[\d,\.]*$/.test(e.target.value)) setLocI(e.target.value); },
+            onBlur:  e => { const n = parseI(e.target.value); setLocI(fmtI(n)); onChange(n); },
+            style: { textAlign:'right', fontVariantNumeric:'tabular-nums' } })
+        : h('input', { type:type||'text', value:value==null?'':value, onChange:e=>onChange(e.target.value), placeholder:placeholder||'' }),
     hint && h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:4 } }, hint),
   );
 }
 
 export function NumInput({ value, onChange, style: st, placeholder }) {
-  const [local, setLocal] = useState(value===0||value===''||value==null?'':String(value));
-  useEffect(() => { setLocal(value===0||value===''||value==null?'':String(value)); }, [value]);
+  const fmt = n => n == null || n === '' || n === 0 ? '' : Number(n).toLocaleString('es-MX', { maximumFractionDigits: 6 });
+  const parse = s => { const n = Number(String(s).replace(/,/g,'')); return isNaN(n) ? 0 : n; };
+  const [local, setLocal] = useState(fmt(value));
+  useEffect(() => { setLocal(fmt(value)); }, [value]);
   return h('input', {
-    type:'number', value:local, placeholder:placeholder||'0',
-    onChange: e => setLocal(e.target.value),
-    onBlur: e => { const n=e.target.value===''?0:Number(e.target.value); setLocal(n===0?'':String(n)); onChange(n); },
-    style: st||{},
+    type: 'text', inputMode: 'decimal', value: local, placeholder: placeholder || '0',
+    onChange: e => {
+      const raw = e.target.value;
+      // Permitir solo dígitos, puntos y comas mientras escribe
+      if (/^[\d,\.]*$/.test(raw)) setLocal(raw);
+    },
+    onBlur: e => {
+      const n = parse(e.target.value);
+      setLocal(fmt(n));
+      onChange(n);
+    },
+    style: Object.assign({ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }, st || {}),
   });
 }
 
