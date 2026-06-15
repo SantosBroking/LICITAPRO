@@ -11,7 +11,7 @@ import { VehiclesTab, VehicleDetail, BillingTab, DocsTab } from './Vehicles.js';
 import Flujo from './Flujo.js';
 import { AIAnalyzerButton } from '../ui/AIAnalyzerButton.js';
 
-const PROJ_TABS = [{id:'info',l:'Información'},{id:'cotizacion',l:'Cotización MSMS'},{id:'flujo',l:'Flujo de Pagos'},{id:'bases',l:'Bases'},{id:'vehiculos',l:'Vehículos'},{id:'facturacion',l:'Facturación'},{id:'docs',l:'Documentos'},{id:'preguntas',l:'Preguntas'},{id:'activity',l:'Actividad'}];
+const PROJ_TABS = [{id:'info',l:'Información'},{id:'cotizacion',l:'Cotización MSMS'},{id:'flujo',l:'Flujo de Pagos'},{id:'bases',l:'Bases'},{id:'vehiculos',l:'Vehículos'},{id:'facturacion',l:'Facturación'},{id:'docs',l:'Documentos'},{id:'preguntas',l:'Preguntas'},{id:'borrador',l:'Borrador'},{id:'activity',l:'Actividad'}];
 
 export function ProjectsList({ projects, vehicles, onNav }) {
   const [view, setView]     = useState('table');
@@ -389,7 +389,101 @@ export function ProjectDetail({ project, vehicles, companies, config, onUpdate, 
             )
           ),
     ),
+    // Borrador
+    tab==='borrador' && h(BorradorTab, { project, config, onUpdate:updProject, logFn }),
     // Modal eliminar
     showDelete && h(DeleteConfirmModal, { title:'¿Eliminar proyecto?', message:'Vas a eliminar el proyecto "'+project.name+'".\n\nSe eliminarán también todos los vehículos asociados.', warning:'Esta acción no se puede deshacer.', confirmLabel:'Sí, eliminar proyecto', onConfirm:()=>{ onDelete(project.id); setShowDelete(false); onNav('projects'); }, onCancel:()=>setShowDelete(false) }),
+  );
+}
+
+// ── Pestaña Borrador: compila info de bases, fechas, vehículos, probabilidad y status; lo envía por correo al equipo ──
+function fechasBorrador(p){
+  return [['Publicación',p.fechaPublicacion],['Junta de aclaraciones',p.fechaAclaraciones],['Presentación de propuesta',p.fechaPropuesta],['Fallo',p.fechaFallo],['Contrato',p.fechaContrato]].filter(function(r){return r[1];});
+}
+
+function buildBorradorHTML(project, intro){
+  var p=project, cot=p.cotizacion||{};
+  var st=STATUSES.find(function(s){return s.id===p.status;});
+  var stLabel=st?st.label:(p.status||'—');
+  var partidas=(cot.partidas||[]).filter(function(x){return x.activo && ((x.cantidad||0)>0 || x.tipo || x.vehiculoId);});
+  var equipo=cot.equipo||[];
+  var totalCoches=partidas.reduce(function(s,x){return s+(x.cantidad||0);},0);
+  var esc=function(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');};
+
+  var fechasRows=fechasBorrador(p).map(function(r){return '<tr><td style="padding:4px 14px 4px 0;color:#666;">'+esc(r[0])+'</td><td style="padding:4px 0;font-weight:600;">'+esc(r[1])+'</td></tr>';}).join('');
+  if(!fechasRows) fechasRows='<tr><td style="padding:4px 0;color:#999;">Sin fechas registradas</td></tr>';
+
+  var partidasHtml=partidas.map(function(x){
+    var pi=parseInt(String(x.id).replace('P',''),10)-1;
+    var carac=[x.tipo,[x.marca,x.modelo,x.ano,x.version].filter(Boolean).join(' ')].filter(Boolean).join(' — ');
+    var eqs=equipo.filter(function(e){return ((e.cnts&&e.cnts[pi])||0)>0;}).map(function(e){return '<li>'+esc(e.nombre)+(e.cnts[pi]>1?(' × '+e.cnts[pi]):'')+'</li>';}).join('');
+    return '<div style="margin:10px 0;padding:12px 14px;border:1px solid #e5e5e5;border-radius:8px;">'
+      +'<div style="font-weight:600;margin-bottom:4px;">'+esc(x.id)+' · '+esc(carac||'Vehículo sin definir')+' — '+(x.cantidad||0)+' unidad(es)</div>'
+      +(eqs?('<div style="font-size:13px;color:#444;">Equipamiento:</div><ul style="margin:4px 0 0;padding-left:18px;font-size:13px;color:#444;">'+eqs+'</ul>'):'<div style="font-size:13px;color:#999;">Sin equipamiento capturado</div>')
+      +'</div>';
+  }).join('');
+  if(!partidasHtml) partidasHtml='<div style="color:#999;">No hay vehículos capturados en la cotización todavía.</div>';
+
+  return '<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;max-width:640px;">'
+    +(intro?('<p style="white-space:pre-wrap;">'+esc(intro)+'</p>'):'')
+    +'<h2 style="margin:0 0 4px;">'+esc(p.name||'Proyecto')+'</h2>'
+    +'<div style="color:#666;margin-bottom:14px;">'+esc(p.dependencia||'')+(p.numLicitacion?(' · '+esc(p.numLicitacion)):'')+'</div>'
+    +'<table style="border-collapse:collapse;margin-bottom:16px;font-size:14px;">'
+      +'<tr><td style="padding:4px 14px 4px 0;color:#666;">Status</td><td style="padding:4px 0;font-weight:600;">'+esc(stLabel)+'</td></tr>'
+      +'<tr><td style="padding:4px 14px 4px 0;color:#666;">Probabilidad de ganar</td><td style="padding:4px 0;font-weight:600;">'+(p.probability!=null?esc(p.probability)+'%':'—')+'</td></tr>'
+      +'<tr><td style="padding:4px 14px 4px 0;color:#666;">Tipo de procedimiento</td><td style="padding:4px 0;">'+esc(p.tipoProcedimiento||'—')+'</td></tr>'
+      +'<tr><td style="padding:4px 14px 4px 0;color:#666;">Monto estimado</td><td style="padding:4px 0;">'+esc(fmt(p.montoEstimado||0))+'</td></tr>'
+      +'<tr><td style="padding:4px 14px 4px 0;color:#666;">Total de vehículos</td><td style="padding:4px 0;font-weight:600;">'+totalCoches+'</td></tr>'
+    +'</table>'
+    +'<h3 style="margin:0 0 6px;">Fechas clave</h3>'
+    +'<table style="border-collapse:collapse;margin-bottom:16px;font-size:14px;">'+fechasRows+'</table>'
+    +'<h3 style="margin:0 0 6px;">Vehículos y características</h3>'
+    +partidasHtml
+    +(p.description?('<h3 style="margin:16px 0 6px;">Descripción</h3><p style="white-space:pre-wrap;font-size:14px;color:#333;">'+esc(p.description)+'</p>'):'')
+    +(p.observaciones?('<h3 style="margin:16px 0 6px;">Observaciones</h3><p style="white-space:pre-wrap;font-size:14px;color:#333;">'+esc(p.observaciones)+'</p>'):'')
+    +'</div>';
+}
+
+function BorradorTab(props){
+  var project=props.project, onUpdate=props.onUpdate, logFn=props.logFn;
+  var toState=useState(project.borradorTo||''), to=toState[0], setTo=toState[1];
+  var introState=useState(''), intro=introState[0], setIntro=introState[1];
+  var sendState=useState(false), sending=sendState[0], setSending=sendState[1];
+  var msgState=useState(''), msg=msgState[0], setMsg=msgState[1];
+  var html=buildBorradorHTML(project, intro);
+
+  var enviar=async function(){
+    var dest=to.split(/[\s,;]+/).filter(function(x){return x.indexOf('@')>-1;});
+    if(!dest.length){ setMsg('⚠ Pon al menos un correo válido del equipo'); return; }
+    setSending(true); setMsg('');
+    try{
+      var r=await fetch('/api/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:'MSMS CORP <santiago@brokingroup.com>',to:dest,subject:'Borrador de proyecto — '+(project.name||''),html:html})});
+      var d=await r.json().catch(function(){return {};});
+      if(!r.ok||!d.ok) throw new Error((d&&d.resend&&d.resend.message)||(d&&d.error)||('HTTP '+r.status));
+      setMsg('✅ Borrador enviado a: '+dest.join(', '));
+      if(onUpdate) onUpdate(Object.assign({},project,{borradorTo:to}));
+      if(logFn) logFn('Borrador del proyecto enviado por correo a '+dest.join(', '));
+    }catch(e){ setMsg('❌ '+(e.message||e)); }
+    setSending(false);
+  };
+
+  var copiar=function(){ try{ if(navigator.clipboard) navigator.clipboard.writeText(html); setMsg('📋 HTML copiado'); }catch(e){ setMsg('No se pudo copiar'); } };
+
+  return h('div', null,
+    h('div', { className:'card', style:{ marginBottom:16 } },
+      h('div', { style:{ fontSize:14, fontWeight:600, marginBottom:4 } }, 'Enviar borrador al equipo'),
+      h('div', { style:{ fontSize:12, color:'var(--t2)', marginBottom:12 } }, 'Compila la información de las bases, fechas clave, vehículos con sus características, probabilidad de ganar y status, y lo envía por correo.'),
+      h('label', { style:{ display:'block', fontSize:12, color:'var(--t2)', marginBottom:4 } }, 'Correos del equipo (separados por coma)'),
+      h('input', { value:to, onChange:function(e){setTo(e.target.value);}, placeholder:'martin@brokingroup.com, thiago@brokingroup.com', style:{ width:'100%', marginBottom:12 } }),
+      h('label', { style:{ display:'block', fontSize:12, color:'var(--t2)', marginBottom:4 } }, 'Mensaje breve (opcional)'),
+      h('textarea', { value:intro, onChange:function(e){setIntro(e.target.value);}, rows:2, placeholder:'Equipo, les comparto el borrador de este proyecto…', style:{ width:'100%', resize:'vertical', marginBottom:12 } }),
+      h('div', { style:{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' } },
+        h('button', { className:'bp', onClick:enviar, disabled:sending }, sending?'Enviando…':'📧 Enviar al equipo'),
+        h('button', { onClick:copiar }, 'Copiar'),
+        msg && h('span', { style:{ fontSize:12, color: msg[0]==='✅'?'#1D9E75':(msg[0]==='❌'?'#E24B4A':'var(--t2)') } }, msg),
+      ),
+    ),
+    h('div', { style:{ fontSize:12, color:'var(--t2)', marginBottom:6 } }, 'Vista previa del correo:'),
+    h('div', { className:'card', dangerouslySetInnerHTML:{ __html: html } }),
   );
 }
