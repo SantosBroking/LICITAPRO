@@ -357,111 +357,135 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
 
     // ══ 4. CORRIDA FINANCIERA ══
     tab==='corrida' && h('div', null,
-      // Total contrato
-      h('div', { className:'card', style:{ marginBottom:12, borderLeft:'3px solid var(--blue)' } },
-        h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center' } },
-          h('div', { style:{ fontSize:13, color:'var(--t2)' } }, 'TOTAL CONTRATO c/IVA'),
-          h('div', { style:{ fontSize:22, fontWeight:600, color:'var(--blue)' } }, fmt(calc.ventaTotal)),
+      // ── Tabla cascada principal ──────────────────────────────
+      h('div', { className:'card', style:{ marginBottom:12, overflow:'hidden', padding:0 } },
+        h('div', { style:{ padding:'12px 20px', borderBottom:'.5px solid var(--b1)' } },
+          h('span', { style:{ fontSize:13, fontWeight:500 } }, 'Corrida financiera'),
         ),
-        h('div', { style:{ fontSize:12, color:'var(--t3)', marginTop:4 } }, 'Venta s/IVA: ',fmt(calc.ventaSIVA),' · IVA cobrado: ',fmt(calc.ivaVenta)),
-      ),
-      // Tabla por partida
-      h('div', { className:'card', style:{ marginBottom:12 } },
-        h('div', { style:{ fontSize:13, fontWeight:500, marginBottom:10 } }, 'Por partida'),
         h('div', { style:{ overflowX:'auto' } },
-          h('table', { style:{ fontSize:12 } },
-            h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b3)' } },
-              ['Partida','Vehículo','Qty','Costo veh c/IVA','Equipo c/IVA','Costo total c/IVA','Venta c/IVA','Util. bruta s/IVA','Margen s/costo'].map(hd=>h('td',{key:hd,style:{padding:'6px 6px',color:'var(--t2)',fontSize:10}},hd))
-            )),
-            h('tbody', null, activeParts.map(p=>{
-              const pi=parseInt(p.id.replace('P',''))-1, qty=p.cantidad||0;
-              const vehCIVA=(p.costoMSMS||0)*qty, vehSIVA=vehCIVA/(1+IVA);
-              const eqCIVA=cot.equipo.filter(e=>e.usar).reduce((s,e)=>{const c=(e.cnts&&e.cnts[pi])||0;return s+(e.costoConIVA||0)*c;},0)*qty;
-              const eqSIVA=cot.equipo.filter(e=>e.usar).reduce((s,e)=>{const c=(e.cnts&&e.cnts[pi])||0;return s+(e.llevaIVA?(e.costoConIVA||0)/(1+IVA):(e.costoConIVA||0))*c;},0)*qty;
-              const costoUnitSIVA=vehSIVA/qty+eqSIVA/qty;
-              let pvUnitSIVA=0;
-              if(p.modoPrecio==='Techo presupuestal')pvUnitSIVA=(p.techo||0)>0?(p.techo||0)/(1+IVA)/qty:costoUnitSIVA;
-              else if(p.modoPrecio==='Utilidad deseada $')pvUnitSIVA=costoUnitSIVA+(p.utilidadDeseada||0);
-              else pvUnitSIVA=costoUnitSIVA*(1+(p.utilidadPct||0));
-              const pvCIVA=pvUnitSIVA*qty*(1+IVA), costTotalSIVA=vehSIVA+eqSIVA;
-              const util=pvUnitSIVA*qty-costTotalSIVA, margen=costTotalSIVA>0?util/costTotalSIVA:0;
-              return h('tr', { key:p.id, style:{ borderBottom:'.5px solid var(--b3)' } },
-                h('td', { style:{ padding:'9px 6px', fontWeight:600, color:'var(--blue)' } }, p.id),
-                h('td', { style:{ padding:'9px 6px', fontSize:11, color:'var(--t2)' } }, p.marca,' ',p.modelo, p.version?' · '+p.version:''),
-                h('td', { style:{ padding:'9px 6px', fontWeight:500 } }, qty),
-                h('td', { style:{ padding:'9px 6px' } }, fmt(vehCIVA)),
-                h('td', { style:{ padding:'9px 6px' } }, fmt(eqCIVA)),
-                h('td', { style:{ padding:'9px 6px' } }, fmt(vehCIVA+eqCIVA)),
-                h('td', { style:{ padding:'9px 6px', fontWeight:500, color:'var(--blue)' } }, fmt(pvCIVA)),
-                h('td', { style:{ padding:'9px 6px', color:util>0?'var(--green)':'var(--red)' } }, fmt(util)),
-                h('td', { style:{ padding:'9px 6px', fontWeight:500, color:margen>=.2?'var(--green)':margen>=.1?'var(--amber)':'var(--red)' } }, pctS(margen)),
-              );
-            })),
-            h('tfoot', null, h('tr', { style:{ borderTop:'1px solid var(--b2)', background:'var(--bg2)' } },
-              h('td', { colSpan:5, style:{ padding:'10px 6px', fontWeight:500, fontSize:12 } }, 'TOTALES PROYECTO'),
-              h('td', { style:{ padding:'10px 6px', fontWeight:600, fontSize:12 } }, fmt(calc.costoTotalCIVA)),
-              h('td', { style:{ padding:'10px 6px', fontWeight:600, color:'var(--blue)', fontSize:13 } }, fmt(calc.ventaTotal)),
-              h('td', { style:{ padding:'10px 6px', fontWeight:600, color:calc.utilBruta>0?'var(--green)':'var(--red)' } }, fmt(calc.utilBruta)),
-              h('td', { style:{ padding:'10px 6px', fontWeight:600, color:calc.margen>=.2?'var(--green)':calc.margen>=.1?'var(--amber)':'var(--red)' } }, pctS(calc.margen)),
-            )),
+          h('table', { style:{ fontSize:12, width:'100%', borderCollapse:'collapse' } },
+            h('colgroup', null,
+              h('col', { style:{ width:'38%' } }),
+              ...activeParts.map(p=>h('col', { key:p.id, style:{ width: (42/activeParts.length)+'%' } })),
+              h('col', { style:{ width:'20%' } }),
+            ),
+            h('thead', null,
+              h('tr', { style:{ borderBottom:'.5px solid var(--b1)' } },
+                h('th', { style:{ padding:'8px 20px', textAlign:'left', fontSize:11, fontWeight:500, color:'var(--t2)', letterSpacing:'.4px' } }, 'CONCEPTO'),
+                ...activeParts.map(p=>h('th', { key:p.id, style:{ padding:'8px 12px', textAlign:'right', fontSize:11, fontWeight:500, color:'var(--blue)', letterSpacing:'.4px' } }, p.id,' ',[p.marca,p.modelo].filter(Boolean).join(' ').slice(0,18),' ×',p.cantidad)),
+                h('th', { style:{ padding:'8px 20px', textAlign:'right', fontSize:11, fontWeight:500, color:'var(--t2)', letterSpacing:'.4px' } }, 'TOTAL'),
+              )
+            ),
+            h('tbody', null,
+              // Sección VENTA
+              h('tr', { style:{ background:'var(--bg2)' } },
+                h('td', { colSpan: activeParts.length+2, style:{ padding:'6px 20px', fontSize:10, fontWeight:600, color:'var(--t2)', letterSpacing:'.4px' } }, 'VENTA'),
+              ),
+              h('tr', { style:{ borderBottom:'.5px solid var(--b1)' } },
+                h('td', { style:{ padding:'9px 20px', color:'var(--t2)' } }, 'Venta total c/IVA'),
+                ...activeParts.map(p=>{
+                  const pi=parseInt(p.id.replace('P',''))-1, qty=p.cantidad||0;
+                  const eqSIVA=cot.equipo.filter(e=>e.usar).reduce((s,e)=>{const c=(e.cnts&&e.cnts[pi])||0;return s+(e.llevaIVA?(e.costoConIVA||0)/(1+IVA):(e.costoConIVA||0))*c;},0)*qty;
+                  const vehSIVA=(p.costoMSMS||0)*qty/(1+IVA), costoUnitSIVA=vehSIVA/qty+eqSIVA/qty;
+                  let pvUnitSIVA=0;
+                  if(p.modoPrecio==='Techo presupuestal')pvUnitSIVA=(p.techo||0)>0?(p.techo||0)/(1+IVA)/qty:costoUnitSIVA;
+                  else if(p.modoPrecio==='Utilidad deseada $')pvUnitSIVA=costoUnitSIVA+(p.utilidadDeseada||0);
+                  else pvUnitSIVA=costoUnitSIVA*(1+(p.utilidadPct||0));
+                  return h('td', { key:p.id, style:{ padding:'9px 12px', textAlign:'right', fontWeight:500, color:'var(--blue)' } }, fmt(pvUnitSIVA*qty*(1+IVA)));
+                }),
+                h('td', { style:{ padding:'9px 20px', textAlign:'right', fontWeight:500, color:'var(--blue)' } }, fmt(calc.ventaTotal)),
+              ),
+              // Sección COSTOS
+              h('tr', { style:{ background:'var(--bg2)' } },
+                h('td', { colSpan: activeParts.length+2, style:{ padding:'6px 20px', fontSize:10, fontWeight:600, color:'var(--t2)', letterSpacing:'.4px' } }, 'COSTOS'),
+              ),
+              h('tr', null,
+                h('td', { style:{ padding:'9px 20px', color:'var(--t2)' } }, 'Vehículos c/IVA'),
+                ...activeParts.map(p=>h('td', { key:p.id, style:{ padding:'9px 12px', textAlign:'right', color:'var(--t2)' } }, fmt((p.costoMSMS||0)*(p.cantidad||0)))),
+                h('td', { style:{ padding:'9px 20px', textAlign:'right', color:'var(--t2)' } }, fmt(calc.costoVehCIVA)),
+              ),
+              h('tr', { style:{ borderBottom:'.5px solid var(--b1)' } },
+                h('td', { style:{ padding:'9px 20px', color:'var(--t2)' } }, 'Equipo c/IVA'),
+                ...activeParts.map(p=>{
+                  const pi=parseInt(p.id.replace('P',''))-1, qty=p.cantidad||0;
+                  const eqCIVA=cot.equipo.filter(e=>e.usar).reduce((s,e)=>{const c=(e.cnts&&e.cnts[pi])||0;return s+(e.costoConIVA||0)*c;},0)*qty;
+                  return h('td', { key:p.id, style:{ padding:'9px 12px', textAlign:'right', color:'var(--t2)' } }, fmt(eqCIVA));
+                }),
+                h('td', { style:{ padding:'9px 20px', textAlign:'right', color:'var(--t2)' } }, fmt(calc.costoEqCIVA)),
+              ),
+              // Utilidad de los coches
+              h('tr', { style:{ borderBottom:'.5px solid var(--b1)', background:'var(--green-bg,#f0fdf4)' } },
+                h('td', { style:{ padding:'10px 20px', fontWeight:600 } }, 'Utilidad de los coches'),
+                ...activeParts.map(p=>{
+                  const pi=parseInt(p.id.replace('P',''))-1, qty=p.cantidad||0;
+                  const vehCIVA=(p.costoMSMS||0)*qty, vehSIVA=vehCIVA/(1+IVA);
+                  const eqCIVA=cot.equipo.filter(e=>e.usar).reduce((s,e)=>{const c=(e.cnts&&e.cnts[pi])||0;return s+(e.costoConIVA||0)*c;},0)*qty;
+                  const eqSIVA=cot.equipo.filter(e=>e.usar).reduce((s,e)=>{const c=(e.cnts&&e.cnts[pi])||0;return s+(e.llevaIVA?(e.costoConIVA||0)/(1+IVA):(e.costoConIVA||0))*c;},0)*qty;
+                  const costoUnitSIVA=vehSIVA/qty+eqSIVA/qty;
+                  let pvUnitSIVA=0;
+                  if(p.modoPrecio==='Techo presupuestal')pvUnitSIVA=(p.techo||0)>0?(p.techo||0)/(1+IVA)/qty:costoUnitSIVA;
+                  else if(p.modoPrecio==='Utilidad deseada $')pvUnitSIVA=costoUnitSIVA+(p.utilidadDeseada||0);
+                  else pvUnitSIVA=costoUnitSIVA*(1+(p.utilidadPct||0));
+                  const util=pvUnitSIVA*qty-(vehSIVA+eqSIVA);
+                  return h('td', { key:p.id, style:{ padding:'10px 12px', textAlign:'right', fontWeight:600, color:util>=0?'var(--green)':'var(--red)' } }, fmt(util));
+                }),
+                h('td', { style:{ padding:'10px 20px', textAlign:'right', fontWeight:600, color:calc.utilBruta>=0?'var(--green)':'var(--red)' } }, fmt(calc.utilBruta)),
+              ),
+              // Sección COSTOS DEL TRATO
+              h('tr', { style:{ background:'var(--bg2)' } },
+                h('td', { colSpan: activeParts.length+2, style:{ padding:'6px 20px', fontSize:10, fontWeight:600, color:'var(--t2)', letterSpacing:'.4px' } }, 'COSTOS DEL TRATO'),
+              ),
+              ...cot.retornos.filter(r=>r.activo).map(r=>{
+                const val=Number(r.valor||0);
+                const montoTotal=r.base==='% sobre venta c/IVA'?calc.ventaTotal*val/100:r.base==='% sobre venta s/IVA'?calc.ventaSIVA*val/100:r.base==='Monto fijo por unidad'?val*calc.unidades:val;
+                const porPartida=activeParts.length>0?montoTotal/activeParts.length:0;
+                return h('tr', { key:r.id, style:{ borderBottom:'.5px solid var(--b3)' } },
+                  h('td', { style:{ padding:'9px 20px', color:'var(--t2)' } }, r.nombre, r.base.startsWith('%')?' ('+val+'%)':''),
+                  ...activeParts.map(p=>h('td', { key:p.id, style:{ padding:'9px 12px', textAlign:'right', color:'var(--red)' } }, '−'+fmt(porPartida))),
+                  h('td', { style:{ padding:'9px 20px', textAlign:'right', color:'var(--red)' } }, '−'+fmt(montoTotal)),
+                );
+              }),
+              ...cot.fianzas.filter(f=>f.activo).map(f=>{
+                const val=Number(f.valor||0);
+                const montoTotal=f.base==='% sobre venta c/IVA'?calc.ventaTotal*val/100:f.base==='% sobre venta s/IVA'?calc.ventaSIVA*val/100:f.base==='Monto fijo por unidad'?val*calc.unidades:val;
+                const porPartida=activeParts.length>0?montoTotal/activeParts.length:0;
+                return h('tr', { key:f.id, style:{ borderBottom:'.5px solid var(--b3)' } },
+                  h('td', { style:{ padding:'9px 20px', color:'var(--t2)' } }, f.nombre, f.base.startsWith('%')?' ('+val+'%)':''),
+                  ...activeParts.map(p=>h('td', { key:p.id, style:{ padding:'9px 12px', textAlign:'right', color:'var(--red)' } }, '−'+fmt(porPartida))),
+                  h('td', { style:{ padding:'9px 20px', textAlign:'right', color:'var(--red)' } }, '−'+fmt(montoTotal)),
+                );
+              }),
+              h('tr', { style:{ borderBottom:'.5px solid var(--b1)' } },
+                h('td', { style:{ padding:'9px 20px', color:'var(--t2)' } }, 'IVA a utilidad ('+Math.round((cot.pctIvaUtil||.5)*100)+'%)'),
+                ...activeParts.map(p=>h('td', { key:p.id, style:{ padding:'9px 12px', textAlign:'right', color:'var(--green)' } }, '+'+fmt(calc.ivaAUtilidad/activeParts.length))),
+                h('td', { style:{ padding:'9px 20px', textAlign:'right', color:'var(--green)' } }, '+'+fmt(calc.ivaAUtilidad)),
+              ),
+              // Utilidad neta total
+              h('tr', { style:{ background:'var(--blue-bg,#eff6ff)' } },
+                h('td', { style:{ padding:'13px 20px', fontWeight:600, fontSize:14 } }, 'Utilidad neta'),
+                ...activeParts.map(()=>h('td', { style:{ padding:'13px 12px', textAlign:'right', color:'var(--t3)', fontSize:11 } }, '—')),
+                h('td', { style:{ padding:'13px 20px', textAlign:'right', fontWeight:600, fontSize:15, color:calc.utilNeta>=0?'var(--blue)':'var(--red)' } }, fmt(calc.utilNeta)),
+              ),
+              h('tr', { style:{ borderTop:'.5px solid var(--b1)' } },
+                h('td', { style:{ padding:'8px 20px', fontSize:12, color:'var(--t2)' } }, 'Margen neto s/costo'),
+                ...activeParts.map(()=>h('td', { style:{ padding:'8px 12px' } })),
+                h('td', { style:{ padding:'8px 20px', textAlign:'right', fontSize:12, fontWeight:500, color:calc.margenNeto>=.2?'var(--green)':calc.margenNeto>=.1?'var(--amber)':'var(--red)' } }, pctS(calc.margenNeto)),
+              ),
+            ),
+          ),
+        ),
+      ),
+      // ── Desglose de IVA + % al SAT ──────────────────────────
+      h('div', { className:'card', style:{ marginBottom:12 } },
+        h('div', { style:{ fontSize:13, fontWeight:500, marginBottom:10 } }, 'Desglose de IVA'),
+        [['IVA cobrado al cliente',fmt(calc.ivaVenta),'var(--t1)',false],['− IVA acreditable (costos)',fmt(calc.ivaAcreditable),'var(--t2)',false],['IVA sobrante',fmt(calc.ivaSobrante),'var(--t1)',true],['IVA pagado al SAT',fmt(calc.ivaAlSAT),'var(--t2)',false],['IVA a utilidad',fmt(calc.ivaAUtilidad),'var(--green)',false]].map(([l,v,c,bold])=>
+          h('div', { key:l, style:{ display:'flex', justifyContent:'space-between', fontSize:12, fontWeight:bold?600:400, padding:'7px 0', borderBottom:'.5px solid var(--b3)' } },
+            h('span', { style:{ color:'var(--t2)' } }, l), h('span', { style:{ color:c, fontWeight:bold?600:500 } }, v),
           )
         ),
-      ),
-      // Retornos + IVA
-      h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 } },
-        h('div', { className:'card' },
-          h('div', { style:{ fontSize:13, fontWeight:500, marginBottom:10 } }, 'Retornos desglosados'),
-          cot.retornos.filter(r=>r.activo).length===0
-            ? h('div', { style:{ fontSize:12, color:'var(--t3)' } }, 'Sin retornos.')
-            : h('div', null,
-                cot.retornos.filter(r=>r.activo).map(r=>{
-                  const val=Number(r.valor||0); let monto=0;
-                  if(r.base==='% sobre venta c/IVA')monto=calc.ventaTotal*val/100;
-                  else if(r.base==='% sobre venta s/IVA')monto=calc.ventaSIVA*val/100;
-                  else if(r.base==='Monto fijo total')monto=val;
-                  else if(r.base==='Monto fijo por unidad')monto=val*calc.unidades;
-                  return h('div', { key:r.id, style:{ display:'flex', justifyContent:'space-between', padding:'7px 0', borderBottom:'.5px solid var(--b3)', fontSize:12 } },
-                    h('span', null, r.nombre,' ', r.base.startsWith('%')?'('+val+'%)':''),
-                    h('span', { style:{ color:'var(--red)', fontWeight:500 } }, fmt(monto)),
-                  );
-                }),
-                h('div', { style:{ display:'flex', justifyContent:'space-between', paddingTop:8, fontSize:13, fontWeight:600 } },
-                  h('span', null, 'TOTAL RETORNOS'), h('span', { style:{ color:'var(--red)' } }, fmt(calc.totalRetornos)),
-                ),
-              ),
-        ),
-        h('div', { className:'card' },
-          h('div', { style:{ fontSize:13, fontWeight:500, marginBottom:10 } }, 'Desglose de IVAs'),
-          [['IVA cobrado al cliente',fmt(calc.ivaVenta),'var(--t1)',false],['− IVA acreditable (costos)',fmt(calc.ivaAcreditable),'var(--t2)',false],['IVA sobrante',fmt(calc.ivaSobrante),'var(--t1)',true],['IVA pagado al SAT',fmt(calc.ivaAlSAT),'var(--t2)',false],['IVA a utilidad',fmt(calc.ivaAUtilidad),'var(--green)',false]].map(([l,v,c,bold])=>
-            h('div', { key:l, style:{ display:'flex', justifyContent:'space-between', fontSize:12, fontWeight:bold?600:400, padding:'7px 0', borderBottom:'.5px solid var(--b3)' } },
-              h('span', { style:{ color:'var(--t2)' } }, l), h('span', { style:{ color:c, fontWeight:bold?600:500 } }, v),
-            )
-          ),
-          h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:12 } },
-            h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, '% al SAT'), h(NumInput, { value:Math.round((cot.pctIvaSat||.5)*100), onChange:v=>updCot({...cot,pctIvaSat:v/100,pctIvaUtil:1-v/100}), style:{ fontSize:12 } })),
-            h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, '% a utilidad'), h('input', { type:'number', value:Math.round((cot.pctIvaUtil||.5)*100), readOnly:true, style:{ fontSize:12, background:'var(--bg2)' } })),
-          ),
-        ),
-      ),
-      // Cascada utilidad
-      h('div', { className:'card' },
-        h('div', { style:{ fontSize:13, fontWeight:500, marginBottom:12 } }, 'Utilidad y desglose'),
-        h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:24 } },
-          h('div', null,
-            [['Utilidad bruta s/IVA',fmt(calc.utilBruta),calc.utilBruta>0?'var(--green)':'var(--red)',false],['+ IVA a utilidad',fmt(calc.ivaAUtilidad),'var(--t2)',false],['UTILIDAD NETA',fmt(calc.utilNeta),calc.utilNeta>0?'var(--green)':'var(--red)',true],['Margen neto s/costo',pctS(calc.margenNeto),calc.margenNeto>=.2?'var(--green)':calc.margenNeto>=.1?'var(--amber)':'var(--red)',false]].map(([l,v,c,bold])=>
-              h('div', { key:l, style:{ display:'flex', justifyContent:'space-between', fontSize:bold?14:13, fontWeight:bold?700:400, padding:bold?'12px 10px':'8px 0', borderBottom:'.5px solid var(--b3)', background:bold?'var(--bg2)':'transparent', borderRadius:bold?'var(--r)':'0', marginTop:bold?4:0 } },
-                h('span', { style:{ color:bold?'var(--t1)':'var(--t2)' } }, l), h('span', { style:{ color:c } }, v),
-              )
-            )
-          ),
-          h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:0, alignContent:'start' } },
-            [['Costo total s/IVA',fmt(calc.costoTotalSIVA),'var(--t2)'],['Costo total c/IVA',fmt(calc.costoTotalCIVA),'var(--t2)'],['Venta total s/IVA',fmt(calc.ventaSIVA),'var(--t1)'],['Venta total c/IVA',fmt(calc.ventaTotal),'var(--blue)'],['Unidades totales',calc.unidades+' uds','var(--t1)'],['Margen bruto s/costo',pctS(calc.margen),calc.margen>=.2?'var(--green)':'var(--amber)']].map(([l,v,c])=>
-              h('div', { key:l, style:{ padding:'8px 0', borderBottom:'.5px solid var(--b3)' } },
-                h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, l),
-                h('div', { style:{ fontSize:13, fontWeight:500, color:c } }, v),
-              )
-            )
-          ),
+        h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:12 } },
+          h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, '% al SAT'), h(NumInput, { value:Math.round((cot.pctIvaSat||.5)*100), onChange:v=>updCot({...cot,pctIvaSat:v/100,pctIvaUtil:1-v/100}), style:{ fontSize:12 } })),
+          h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, '% a utilidad'), h('input', { type:'text', value:Math.round((cot.pctIvaUtil||.5)*100)+'%', readOnly:true, style:{ fontSize:12, background:'var(--bg2)', textAlign:'right' } })),
         ),
       ),
       h(NavButtons),
