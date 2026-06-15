@@ -211,7 +211,7 @@ export default function App() {
 
   const content = ({
     dashboard:      h(Dashboard,     { projects, vehicles, companies, onNav:nav }),
-    projects:       h(ProjectsList,  { projects, vehicles, onNav:nav }),
+    projects:       h(ProjectsList,  { projects, vehicles, onNav:nav, onUpdate:p=>handleSaveProject(p,false) }),
     project_new:    h(ProjectForm,   { companies, config, onSave:handleSaveProject, onCancel:()=>nav('projects') }),
     project_detail: projDetailView,
     companies:      h(Companies,     { companies, setCompanies, projects, config, appConfig:config, onSave:async c=>{ const ex=companies.find(x=>x.id===c.id); setCompanies(ex?companies.map(x=>x.id===c.id?c:x):[...companies,c]); try{ await saveCompany(c, getUID()); log(user, ex?'actualizó':'creó', 'empresa', c.id, c.name); }catch(e){ console.error('Error guardando empresa:', e); } }, user, logFn:log }),

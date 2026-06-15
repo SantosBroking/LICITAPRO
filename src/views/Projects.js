@@ -19,7 +19,7 @@ const GRUPOS = {
   cerradas:     ['perdida','cancelada'],
 };
 
-export function ProjectsList({ projects, vehicles, onNav }) {
+export function ProjectsList({ projects, vehicles, onNav, onUpdate }) {
   const [view, setView]     = useState('table');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
@@ -84,6 +84,7 @@ export function ProjectsList({ projects, vehicles, onNav }) {
           )),
           h('tbody', null, visible.map(p => {
             const alF=alertLevel(p.fechaFallo);
+            const stRow=STATUSES.find(s=>s.id===p.status);
             return h('tr', { key:p.id, style:{ borderBottom:'.5px solid var(--b3)', cursor:'pointer' }, onClick:()=>onNav('project_detail',p.id) },
               h('td', { style:{ padding:'10px 6px', fontWeight:500, maxWidth:220 } },
                 h('div', { style:{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, p.name),
@@ -92,7 +93,14 @@ export function ProjectsList({ projects, vehicles, onNav }) {
               h('td', { style:{ padding:'10px 6px', color:'var(--t2)', fontSize:12 } }, p.dependencia||'—'),
               h('td', { style:{ padding:'10px 6px', fontSize:12, color:'var(--t2)' } }, p.company||'—'),
               h('td', { style:{ padding:'10px 6px', fontWeight:500 } }, fmt(p.montoEstimado)),
-              h('td', { style:{ padding:'10px 6px' } }, h(Badge, { statusId:p.status })),
+              h('td', { style:{ padding:'10px 6px' }, onClick:e=>e.stopPropagation() },
+                h('select', {
+                  value:p.status,
+                  onClick:e=>e.stopPropagation(),
+                  onChange:e=>{ e.stopPropagation(); onUpdate && onUpdate({...p, status:e.target.value}); },
+                  style:{ fontSize:12, fontWeight:600, padding:'4px 8px', borderRadius:'var(--r)', border:'1px solid '+(stRow?stRow.color:'var(--b1)'), background:stRow?stRow.bg:'var(--bg2)', color:stRow?stRow.tx:'var(--t1)', cursor:'pointer', maxWidth:170 }
+                }, STATUSES.map(s=>h('option',{key:s.id,value:s.id,style:{background:'#fff',color:'#18181b'}}, s.label)))
+              ),
               h('td', { style:{ padding:'10px 6px', fontSize:12, color:alF==='r'?'var(--red)':alF==='y'?'var(--amber)':'var(--t2)' } }, p.fechaFallo||'—'),
               h('td', { style:{ padding:'10px 6px' } }, h('button', { onClick:e=>{ e.stopPropagation(); onNav('project_detail',p.id); }, style:{ fontSize:11, padding:'3px 8px' } }, 'Abrir →')),
             );
