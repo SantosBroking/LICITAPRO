@@ -22,8 +22,8 @@ function liveEquipo(e) {
   return { ...e, nombre: live.nom || e.nombre, cat: live.cat || e.cat, vis: live.vis ?? e.vis };
 }
 
-const TABS = ['partidas','equipo','extras','corrida','agente'];
-const TAB_LABELS = { partidas:'1 · Partidas', equipo:'2 · Equipo', extras:'3 · Retornos e ISR', corrida:'4 · Corrida financiera', agente:'5 · Agente Claude' };
+const TABS = ['partidas','equipo','extras','corrida','unitario','agente'];
+const TAB_LABELS = { partidas:'1 · Partidas', equipo:'2 · Equipo', extras:'3 · Retornos e ISR', corrida:'4 · Corrida financiera', unitario:'5 · Unitario', agente:'6 · Agente Claude' };
 const BASES_RETORNO = ['% sobre venta c/IVA','% sobre venta s/IVA','Monto fijo total','Monto fijo por unidad'];
 const BASES_FIANZA  = ['% sobre venta c/IVA','% sobre venta s/IVA','Monto fijo total','Monto fijo por unidad'];
 const IVA = 0.16;
@@ -503,7 +503,90 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
       h(NavButtons),
     ),
 
-    // ══ 5. AGENTE ══
+    // ══ 5. UNITARIO ══
+    tab==='unitario' && h('div', null,
+      activeParts.length===0
+        ? h('div', { style:{ padding:20, color:'var(--t2)', fontSize:13 } }, 'No hay partidas activas con vehículos.')
+        : activeParts.map(p => {
+            const pi = parseInt(p.id.replace('P',''))-1, qty = p.cantidad||1;
+            const vehUnit  = (p.costoMSMS||0);
+            const eqUnit   = cot.equipo.filter(e=>e.usar).reduce((s,e)=>{ const c=(e.cnts&&e.cnts[pi])||0; return s+(e.costoConIVA||0)*c; },0);
+            const costoUnit= vehUnit + eqUnit;
+            // Costos del trato por unidad
+            const ventaTotalCIVA = (() => {
+              const eqSIVA = cot.equipo.filter(e=>e.usar).reduce((s,e)=>{ const c=(e.cnts&&e.cnts[pi])||0; return s+(e.llevaIVA?(e.costoConIVA||0)/(1+IVA):(e.costoConIVA||0))*c; },0)*qty;
+              const vehSIVA = vehUnit*qty/(1+IVA), costoUSIVA = vehSIVA/qty+eqSIVA/qty;
+              let pvUSIVA=0;
+              if(p.modoPrecio==='Techo presupuestal') pvUSIVA=(p.techo||0)>0?(p.techo||0)/(1+IVA)/qty:costoUSIVA;
+              else if(p.modoPrecio==='Utilidad deseada $') pvUSIVA=costoUSIVA+(p.utilidadDeseada||0);
+              else pvUSIVA=costoUSIVA*(1+(p.utilidadPct||0));
+              return pvUSIVA*qty*(1+IVA);
+            })();
+            const prop = calc.ventaTotal>0 ? ventaTotalCIVA/calc.ventaTotal : 1/activeParts.length;
+            const costoTratoPU = (item) => {
+              const val=Number(item.valor||0);
+              let tot=0;
+              if(item.base==='% sobre venta c/IVA') tot=ventaTotalCIVA*val/100;
+              else if(item.base==='% sobre venta s/IVA') tot=ventaTotalCIVA/1.16*val/100;
+              else if(item.base==='Monto fijo por unidad') tot=val*qty;
+              else tot=calc.ventaTotal>0?calc.ventaTotal*(item.base==='% sobre venta c/IVA'?val/100:0)*prop:val*prop;
+              return tot/qty;
+            };
+            const retActivos   = cot.retornos.filter(r=>r.activo);
+            const fianzActivas = cot.fianzas.filter(f=>f.activo);
+            const totalTratoUnit = [...retActivos,...fianzActivas].reduce((s,x)=>s+costoTratoPU(x),0);
+            const ivaUnit = (calc.ivaAUtilidad*prop)/qty;
+            // Precio de venta unitario
+            const eqSIVA = cot.equipo.filter(e=>e.usar).reduce((s,e)=>{ const c=(e.cnts&&e.cnts[pi])||0; return s+(e.llevaIVA?(e.costoConIVA||0)/(1+IVA):(e.costoConIVA||0))*c; },0);
+            const vehSIVA = vehUnit/(1+IVA), costoUSIVA2 = vehSIVA+eqSIVA;
+            let pvUSIVA2=0;
+            if(p.modoPrecio==='Techo presupuestal') pvUSIVA2=(p.techo||0)>0?(p.techo||0)/(1+IVA)/qty:costoUSIVA2;
+            else if(p.modoPrecio==='Utilidad deseada $') pvUSIVA2=costoUSIVA2+(p.utilidadDeseada||0);
+            else pvUSIVA2=costoUSIVA2*(1+(p.utilidadPct||0));
+            const precioVentaUnit = pvUSIVA2*(1+IVA);
+            const utilUnit = precioVentaUnit - costoUnit - totalTratoUnit + ivaUnit;
+            const color = v => v>=0?'var(--green)':'var(--red)';
+            const row = (label, val, c, bold, negativo) => h('div', { key:label,
+              style:{ display:'flex', justifyContent:'space-between', padding: bold?'11px 0':'8px 0',
+                borderBottom:'.5px solid var(--b3)', fontWeight:bold?600:400,
+                background: bold?'var(--bg2)':'transparent', borderRadius: bold?'var(--r)':'0',
+                paddingLeft: bold?8:0, paddingRight: bold?8:0, marginTop: bold?4:0 }},
+              h('span', { style:{ color: bold?'var(--t1)':'var(--t2)', fontSize: bold?13:12 } }, label),
+              h('span', { style:{ color: c||'var(--t1)', fontSize: bold?14:12, fontVariantNumeric:'tabular-nums' } },
+                negativo ? '−'+fmt(Math.abs(val)) : fmt(val)
+              ),
+            );
+            return h('div', { key:p.id, className:'card', style:{ marginBottom:12 } },
+              h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:12 } },
+                h('div', { style:{ fontSize:13, fontWeight:600 } }, p.id,' · ',[p.marca,p.modelo,p.version].filter(Boolean).join(' ')||'Vehículo sin definir'),
+                h('div', { style:{ fontSize:12, color:'var(--t2)' } }, qty,' unidad(es)'),
+              ),
+              row('Precio de venta unitario c/IVA', precioVentaUnit, 'var(--blue)', false, false),
+              h('div', { style:{ height:8 } }),
+              row('− Costo vehículo c/IVA', vehUnit, 'var(--t2)', false, true),
+              row('− Equipo c/IVA', eqUnit, 'var(--t2)', false, true),
+              ...retActivos.map(r => row('− '+r.nombre+(r.base.startsWith('%')?' ('+r.valor+'%)':''), costoTratoPU(r), 'var(--red)', false, true)),
+              ...fianzActivas.map(f => row('− '+f.nombre+(f.base.startsWith('%')?' ('+f.valor+'%)':''), costoTratoPU(f), 'var(--red)', false, true)),
+              row('+ IVA a utilidad ('+Math.round((cot.pctIvaUtil||.5)*100)+'%)', ivaUnit, 'var(--green)', false, false),
+              h('div', { style:{ height:4 } }),
+              row('Utilidad neta por unidad', utilUnit, color(utilUnit), true, false),
+              h('div', { style:{ display:'flex', gap:20, marginTop:12, paddingTop:10, borderTop:'.5px solid var(--b2)' } },
+                h('div', null,
+                  h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Margen neto s/costo'),
+                  h('div', { style:{ fontSize:13, fontWeight:500, color:utilUnit/(costoUnit||1)>=.1?'var(--green)':'var(--amber)' } },
+                    costoUnit>0 ? pctS(utilUnit/costoUnit) : '—'),
+                ),
+                h('div', null,
+                  h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Costo total por unidad'),
+                  h('div', { style:{ fontSize:13, fontWeight:500 } }, fmt(costoUnit+totalTratoUnit)),
+                ),
+              ),
+            );
+          }),
+      h(NavButtons),
+    ),
+
+    // ══ 6. AGENTE ══
     tab==='agente' && h('div', null,
       h('div', { className:'card' },
         h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:4 } }, 'Agente cotizador MSMS · Claude'),
