@@ -603,23 +603,26 @@ export function printOrdenCompra({ project, partidas, condiciones, folio: folioP
   const folio = folioParam || ('OC-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-5));
 
   const filasVeh = partidas.map(p => {
-    const qty = p.cantidad || 0;
-    const pu  = p.costoMSMS || 0;
-    const sub = pu * qty;
+    const qty    = p.cantidad || 0;
+    const puCIVA = p.costoMSMS || 0;          // precio c/IVA que da el usuario
+    const puSIVA = puCIVA / (1 + IVA);        // precio s/IVA para desglosar
+    const subCIVA = puCIVA * qty;
     const veh = [p.marca, p.modelo, p.version, p.ano].filter(Boolean).join(' ');
     return `
       <tr>
         <td style="font-size:11px;font-weight:500">${esc(p.tipo||'')}</td>
         <td style="font-size:11px">${esc(veh)}</td>
         <td style="text-align:center;font-weight:600">${qty}</td>
-        <td style="text-align:right">${fmt(pu)}</td>
-        <td style="text-align:right;font-weight:600">${fmt(sub)}</td>
+        <td style="text-align:right">${fmt(puSIVA)}</td>
+        <td style="text-align:right;font-weight:600">${fmt(subCIVA)}</td>
       </tr>`;
   }).join('');
 
-  const totalSIVA = partidas.reduce((s,p)=>(p.costoMSMS||0)*(p.cantidad||0)+s, 0);
-  const totalIVA  = totalSIVA * IVA;
-  const total     = totalSIVA + totalIVA;
+  // costoMSMS ya viene c/IVA — el total c/IVA es directo
+  const totalCIVA = partidas.reduce((s,p)=>(p.costoMSMS||0)*(p.cantidad||0)+s, 0);
+  const totalSIVA = totalCIVA / (1 + IVA);
+  const totalIVA  = totalCIVA - totalSIVA;
+  const total     = totalCIVA;
 
   // Condiciones: array de { label, value } — value vacío = espacio en blanco
   const filasCondiciones = (condiciones||[]).map(c => `
