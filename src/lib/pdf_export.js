@@ -595,3 +595,139 @@ export function printResumenInterno({ project, cot, calc }) {
 
   openPrint(html);
 }
+
+// ── Orden de Compra ───────────────────────────────────────────
+export function printOrdenCompra({ project, partidas, condiciones }) {
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const hoy = new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'});
+  const folio = 'OC-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-5);
+
+  const filasVeh = partidas.map(p => {
+    const qty = p.cantidad || 0;
+    const pu  = p.costoMSMS || 0;
+    const sub = pu * qty;
+    const veh = [p.marca, p.modelo, p.version, p.ano].filter(Boolean).join(' ');
+    return `
+      <tr>
+        <td style="font-size:11px;font-weight:500">${esc(p.tipo||'')}</td>
+        <td style="font-size:11px">${esc(veh)}</td>
+        <td style="text-align:center;font-weight:600">${qty}</td>
+        <td style="text-align:right">${fmt(pu)}</td>
+        <td style="text-align:right;font-weight:600">${fmt(sub)}</td>
+      </tr>`;
+  }).join('');
+
+  const totalSIVA = partidas.reduce((s,p)=>(p.costoMSMS||0)*(p.cantidad||0)+s, 0);
+  const totalIVA  = totalSIVA * IVA;
+  const total     = totalSIVA + totalIVA;
+
+  // Condiciones: array de { label, value } — value vacío = espacio en blanco
+  const filasCondiciones = (condiciones||[]).map(c => `
+    <tr>
+      <td style="font-size:10px;color:#6b6862;width:35%;padding:9px 10px;border-bottom:.5px solid #e0ddd8">${esc(c.label)}</td>
+      <td style="font-size:11px;font-weight:${c.value?'500':'400'};color:${c.value?'#1a1917':'#b0a89f'};padding:9px 10px;border-bottom:.5px solid #e0ddd8">${esc(c.value||'_______________________________')}</td>
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>Orden de Compra — ${esc(project.name)}</title>
+<style>
+${BASE_CSS}
+.oc-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; padding-bottom:16px; border-bottom:2px solid #1a1917; }
+.oc-folio  { text-align:right; }
+.oc-folio .num { font-size:22px; font-weight:700; letter-spacing:1px; color:#1a1917; }
+.oc-folio .lbl { font-size:10px; color:#6b6862; text-transform:uppercase; letter-spacing:.5px; }
+.cond-table { width:100%; border-collapse:collapse; margin-bottom:20px; border:.5px solid #e0ddd8; border-radius:6px; overflow:hidden; }
+.sign-grid  { display:grid; grid-template-columns:1fr 1fr; gap:40px; margin-top:40px; }
+.sign-box   { border-top:1.5px solid #1a1917; padding-top:8px; }
+.sign-label { font-size:10px; color:#6b6862; text-transform:uppercase; letter-spacing:.5px; }
+.sign-name  { font-size:11px; font-weight:500; margin-top:4px; }
+</style></head><body>
+<div class="sheet">
+
+  <div class="oc-header">
+    <div>
+      <div style="font-size:13px;font-weight:700;letter-spacing:.5px">BROKING AND BRANDS GROUP S.A. DE C.V.</div>
+      <div style="font-size:10px;color:#6b6862;margin-top:2px">BBG1007304K0 · Pedregal 23, Piso 1, Lomas de Chapultepec, CDMX</div>
+      <div style="font-size:10px;color:#6b6862">5544432786 · santiago@brokingroup.com</div>
+    </div>
+    <div class="oc-folio">
+      <div class="lbl">Orden de Compra</div>
+      <div class="num">${esc(folio)}</div>
+      <div style="font-size:10px;color:#6b6862;margin-top:2px">${hoy}</div>
+    </div>
+  </div>
+
+  <div class="grid2" style="margin-bottom:20px">
+    <div>
+      <div class="label">Proveedor</div>
+      <div class="value">${esc(project.cotizacion?.agenciaProveedor||'Grupo Surman')}</div>
+    </div>
+    <div>
+      <div class="label">Proyecto / Licitación</div>
+      <div class="value">${esc(project.name)}</div>
+      ${project.numLicitacion?`<div style="font-size:10px;color:#6b6862;margin-top:2px">${esc(project.numLicitacion)}</div>`:''}
+    </div>
+    <div>
+      <div class="label">Cliente final</div>
+      <div class="value">${esc(project.dependencia||'—')}</div>
+    </div>
+    <div>
+      <div class="label">Responsable</div>
+      <div class="value">${esc(project.responsable||'—')}</div>
+    </div>
+  </div>
+
+  <h2>Vehículos solicitados</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Tipo</th><th>Vehículo</th><th style="text-align:center;width:50px">Cant.</th>
+        <th style="text-align:right;width:100px">P. Unit s/IVA</th>
+        <th style="text-align:right;width:110px">Subtotal s/IVA</th>
+      </tr>
+    </thead>
+    <tbody>${filasVeh}</tbody>
+    <tfoot>
+      <tr class="total-row">
+        <td colspan="3"></td>
+        <td style="text-align:right;font-size:10px;color:#6b6862">Subtotal s/IVA</td>
+        <td style="text-align:right">${fmt(totalSIVA)}</td>
+      </tr>
+      <tr>
+        <td colspan="3"></td>
+        <td style="text-align:right;font-size:10px;color:#6b6862">IVA (16%)</td>
+        <td style="text-align:right">${fmt(totalIVA)}</td>
+      </tr>
+      <tr class="total-row">
+        <td colspan="3"></td>
+        <td style="text-align:right;font-size:12px">TOTAL c/IVA</td>
+        <td style="text-align:right;font-size:14px;color:#3b6cf4">${fmt(total)}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <h2>Condiciones de compra</h2>
+  <table class="cond-table"><tbody>${filasCondiciones}</tbody></table>
+
+  <div class="sign-grid">
+    <div class="sign-box">
+      <div class="sign-label">Autoriza</div>
+      <div class="sign-name">${esc(project.responsable||'Santiago Mansur')}</div>
+      <div style="font-size:10px;color:#6b6862">Broking and Brands Group</div>
+    </div>
+    <div class="sign-box">
+      <div class="sign-label">Recibe y acepta</div>
+      <div class="sign-name">&nbsp;</div>
+      <div style="font-size:10px;color:#6b6862">${esc(project.cotizacion?.agenciaProveedor||'Proveedor')}</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>Orden de Compra ${esc(folio)} — ${esc(project.name)}</span>
+    <span>Generado: ${hoy}</span>
+  </div>
+
+</div></body></html>`;
+
+  openPrint(html);
+}

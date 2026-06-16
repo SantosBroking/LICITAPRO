@@ -1,4 +1,4 @@
-import { printCotizacionCliente, printResumenRetornos, printResumenInterno } from '../lib/pdf_export.js';
+import { printCotizacionCliente, printResumenRetornos, printResumenInterno, printOrdenCompra } from '../lib/pdf_export.js';
 import { calcCotizacion } from '../lib/calc.js';
 // Projects.js — Lista, formulario y detalle de proyecto
 import { h, useState, useMemo, useCallback, useRef } from '../lib/core.js';
@@ -220,6 +220,7 @@ export function ProjectForm({ project, companies, config, onSave, onCancel }) {
 export function ProjectDetail({ project, vehicles, companies, config, onSaveConfig, onUpdate, onDelete, onSave, onNav, user, logFn, activeTab, setActiveTab }) {
   const [showEdit, setShowEdit]     = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+  const [showOC, setShowOC]         = useState(false);
   const [note, setNote]             = useState('');
   const [pregunta, setPregunta]     = useState('');
   const [cotTab, setCotTab]         = useState('partidas');
@@ -402,6 +403,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
         h('button', { onClick:async ()=>{ const c=cotRef.current; const cc=calcCotizacion(c); await printCotizacionCliente({project,cot:c,calc:cc,config:window._lpConfig}); }, style:{ fontSize:11, padding:'5px 12px', border:'.5px solid var(--blue)44', color:'var(--blue)', background:'#3b6cf408' } }, '📄 Cotización cliente'),
         h('button', { onClick:()=>{ const c=project.cotizacion||{}; const cc=calcCotizacion(c); printResumenRetornos({project,cot:c,calc:cc}); }, style:{ fontSize:11, padding:'5px 12px', border:'.5px solid var(--amber)44', color:'var(--amber)', background:'#d9770608' } }, '📋 Resumen retornos'),
         h('button', { onClick:()=>{ const c=project.cotizacion||{}; const cc=calcCotizacion(c); printResumenInterno({project,cot:c,calc:cc}); }, style:{ fontSize:11, padding:'5px 12px', border:'.5px solid var(--t3)44', color:'var(--t2)' } }, '🔒 Resumen interno'),
+        h('button', { onClick:()=>setShowOC(true), style:{ fontSize:11, padding:'5px 12px', border:'.5px solid #1D9E7544', color:'#1D9E75', background:'#1D9E7508' } }, '🛒 Orden de compra'),
       ),
       h(CotizacionTab, { project, onUpdate:(updated)=>{ cotRef.current=updated.cotizacion||{}; updProject(updated); }, activeTab:cotTab, setActiveTab:setCotTab, config, onSaveConfig }),
     ),
@@ -438,6 +440,8 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
     ),
     // Borrador
     tab==='borrador' && h(BorradorTab, { project, config, onUpdate:updProject, logFn }),
+    // Modal Orden de Compra
+    showOC && h(OCModal, { project, onClose:()=>setShowOC(false) }),
     // Modal eliminar
     showDelete && h(DeleteConfirmModal, { title:'¿Eliminar proyecto?', message:'Vas a eliminar el proyecto "'+project.name+'".\n\nSe eliminarán también todos los vehículos asociados.', warning:'Esta acción no se puede deshacer.', confirmLabel:'Sí, eliminar proyecto', onConfirm:()=>{ onDelete(project.id); setShowDelete(false); onNav('projects'); }, onCancel:()=>setShowDelete(false) }),
   );
@@ -587,5 +591,78 @@ function BorradorTab(props){
     ),
     h('div', { style:{ fontSize:12, color:'var(--t2)', marginBottom:6 } }, 'Vista previa del correo:'),
     h('div', { className:'card', dangerouslySetInnerHTML:{ __html: html } }),
+  );
+}
+
+// ── Modal Orden de Compra ─────────────────────────────────────
+function OCModal({ project, onClose }) {
+  const cot = project.cotizacion || {};
+  const partidas = (cot.partidas || []).filter(p => p.activo && (p.cantidad||0) > 0);
+
+  // Selección de partidas
+  const [selParts, setSelParts] = useState(partidas.map(p => p.id));
+  const togglePart = id => setSelParts(s => s.includes(id) ? s.filter(x=>x!==id) : [...s, id]);
+
+  // Condiciones editables — defaults comunes, el usuario puede editar cada valor
+  const DEFAULT_CONDS = [
+    { id:'forma_pago',   label:'Forma de pago',            value:'' },
+    { id:'anticipo',     label:'Anticipo',                 value:'' },
+    { id:'plazo',        label:'Plazo de entrega',         value:'' },
+    { id:'lugar',        label:'Lugar de entrega',         value:'' },
+    { id:'garantia',     label:'Garantía',                 value:'' },
+    { id:'vigencia',     label:'Vigencia de la OC',        value:'' },
+    { id:'facturacion',  label:'Condiciones de facturación',value:'' },
+    { id:'penalizacion', label:'Penalización por retraso', value:'' },
+    { id:'notas',        label:'Notas adicionales',        value:'' },
+  ];
+  const saved = project.ocCondiciones;
+  const [conds, setConds] = useState(saved || DEFAULT_CONDS);
+  const updCond = (id, val) => setConds(cs => cs.map(c => c.id===id ? {...c, value:val} : c));
+
+  const generar = () => {
+    const partidasSel = partidas.filter(p => selParts.includes(p.id));
+    if (!partidasSel.length) { alert('Selecciona al menos una partida.'); return; }
+    printOrdenCompra({ project, partidas: partidasSel, condiciones: conds });
+  };
+
+  return h('div', { style:{ position:'fixed', inset:0, zIndex:9999, background:'rgba(0,0,0,.45)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 },
+    onClick: e => { if(e.target===e.currentTarget) onClose(); } },
+    h('div', { style:{ background:'var(--bg1)', borderRadius:'var(--rl)', width:'100%', maxWidth:620, maxHeight:'90vh', overflow:'auto', padding:24, display:'flex', flexDirection:'column', gap:16 } },
+
+      h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center' } },
+        h('div', { style:{ fontSize:15, fontWeight:600 } }, '🛒 Orden de Compra'),
+        h('button', { onClick:onClose, style:{ background:'transparent', border:'none', fontSize:18, cursor:'pointer', color:'var(--t2)' } }, '✕'),
+      ),
+
+      // Selector de partidas
+      h('div', null,
+        h('div', { style:{ fontSize:12, fontWeight:500, color:'var(--t2)', marginBottom:8, textTransform:'uppercase', letterSpacing:'.4px' } }, 'Vehículos a incluir'),
+        partidas.length === 0
+          ? h('div', { style:{ fontSize:12, color:'var(--t3)', padding:'10px 0' } }, 'No hay partidas activas con vehículos en esta cotización.')
+          : partidas.map(p => h('label', { key:p.id, style:{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', marginBottom:6, borderRadius:'var(--r)', border:'.5px solid var(--b2)', cursor:'pointer', background: selParts.includes(p.id)?'var(--bg2)':'transparent' } },
+              h('input', { type:'checkbox', checked:selParts.includes(p.id), onChange:()=>togglePart(p.id), style:{ width:15, height:15, accentColor:'var(--blue)', flexShrink:0 } }),
+              h('div', null,
+                h('div', { style:{ fontSize:13, fontWeight:500 } }, p.id,' · ',[p.marca,p.modelo,p.version].filter(Boolean).join(' ')||'Vehículo sin definir'),
+                h('div', { style:{ fontSize:11, color:'var(--t2)' } }, (p.cantidad||0),' unidad(es) · ',(p.tipo||'')),
+              ),
+            ))
+      ),
+
+      // Condiciones editables
+      h('div', null,
+        h('div', { style:{ fontSize:12, fontWeight:500, color:'var(--t2)', marginBottom:8, textTransform:'uppercase', letterSpacing:'.4px' } }, 'Condiciones de compra'),
+        h('div', { style:{ display:'flex', flexDirection:'column', gap:6 } },
+          conds.map(c => h('div', { key:c.id, style:{ display:'grid', gridTemplateColumns:'160px 1fr', gap:8, alignItems:'center' } },
+            h('div', { style:{ fontSize:12, color:'var(--t2)' } }, c.label),
+            h('input', { value:c.value, placeholder:'Escribe aquí…', onChange:e=>updCond(c.id, e.target.value), style:{ fontSize:12, padding:'6px 10px' } }),
+          ))
+        ),
+      ),
+
+      h('div', { style:{ display:'flex', gap:8, justifyContent:'flex-end', paddingTop:8, borderTop:'.5px solid var(--b2)' } },
+        h('button', { onClick:onClose }, 'Cancelar'),
+        h('button', { className:'bp', onClick:generar }, '📄 Generar OC'),
+      ),
+    ),
   );
 }
