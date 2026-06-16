@@ -305,6 +305,24 @@ export function ProjectDetail({ project, vehicles, companies, config, onUpdate, 
       ),
       h('div', { style:{ display:'flex', gap:8 } },
         h('button', { onClick:()=>setShowEdit(true) }, 'Editar'),
+        h('button', { onClick:async ()=>{
+          const now = new Date().toISOString().slice(0,10);
+          const newId = 'proj-'+Date.now();
+          const copia = {
+            ...project,
+            id: newId,
+            name: 'Copia de '+project.name,
+            status: 'prospecto',
+            createdAt: now,
+            updatedAt: now,
+            // resetear folio y fechas de seguimiento sensibles
+            folio: undefined,
+            fechaFallo: undefined,
+            fechaContrato: undefined,
+          };
+          await onUpdate(copia);
+          onNav('project_detail', newId);
+        }}, '⧉ Duplicar'),
         h('button', { onClick:()=>setShowDelete(true), style:{ color:'#E24B4A' } }, 'Eliminar'),
       ),
     ),
