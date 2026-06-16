@@ -112,9 +112,9 @@ export default function Dashboard({ projects, vehicles, companies, onNav, onUpda
               h('div', { style:{ fontWeight:500, fontSize:13, flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, p.name),
               h(Badge, { statusId:p.status }),
             ),
-            h('div', { style:{ display:'flex', justifyContent:'space-between', fontSize:11, color:'var(--t2)' } },
-              h('span', null, p.dependencia||p.company||'—'),
-              h('span', { style:{ color:alF==='r'?'var(--red)':alF==='y'?'var(--amber)':'var(--t2)', fontWeight:alF?500:400 } }, p.fechaFallo||fmt(p.montoEstimado)||'—'),
+            h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', fontSize:11, color:'var(--t2)', gap:8 } },
+              h('span', { style:{ flex:1, minWidth:0, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden', lineHeight:1.3 } }, p.dependencia||p.company||'—'),
+              h('span', { style:{ flexShrink:0, whiteSpace:'nowrap', textAlign:'right', color:alF==='r'?'var(--red)':alF==='y'?'var(--amber)':'var(--t2)', fontWeight:alF?500:400 } }, p.fechaFallo||fmt(p.montoEstimado)||'—'),
             ),
           );
         })
