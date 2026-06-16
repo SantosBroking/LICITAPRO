@@ -28,7 +28,7 @@ const BASES_RETORNO = ['% sobre venta c/IVA','% sobre venta s/IVA','Monto fijo t
 const BASES_FIANZA  = ['% sobre venta c/IVA','% sobre venta s/IVA','Monto fijo total','Monto fijo por unidad'];
 const IVA = 0.16;
 
-export default function CotizacionTab({ project, onUpdate, activeTab, setActiveTab }) {
+export default function CotizacionTab({ project, onUpdate, activeTab, setActiveTab, config, onSaveConfig }) {
   const [_localTab, _setLocalTab] = useState(activeTab||'partidas');
   useEffect(()=>{ if(activeTab&&activeTab!==_localTab)_setLocalTab(activeTab); },[activeTab]);
   const tab    = activeTab||_localTab;
@@ -309,11 +309,12 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
               if(!newProdForm.nom.trim()){ alert('Ponle un nombre al producto.'); return; }
               const id='custom-prd-'+Date.now();
               const prod={ id, nom:newProdForm.nom.trim(), sub:newProdForm.sub||'', cat:catSel, price:newProdForm.price||0, photo:newProdForm.photo||'', esVehiculo:false, vis:true };
-              // Guardar en Supabase config (igual que el Catálogo)
-              const cfg=window._lpConfig||{};
-              const customs=[...(cfg.customProducts||[]).filter(x=>x.id!==id),prod];
-              window._lpConfig={...cfg,customProducts:customs};
-              try{ const {saveConfig}=await import('../lib/supabase.js'); await saveConfig({...cfg,customProducts:customs}); }catch(e){ console.warn('No se pudo guardar en Supabase:',e); }
+              const cfg = config || window._lpConfig || {};
+              const customs = [...(cfg.customProducts||[]).filter(x=>x.id!==id), prod];
+              const newCfg = {...cfg, customProducts:customs};
+              window._lpConfig = newCfg;
+              if(onSaveConfig) await onSaveConfig(newCfg);
+              else { try{ const {saveConfig}=await import('../lib/supabase.js'); await saveConfig(newCfg); }catch(e){ console.warn('Error guardando:',e); } }
               // Agregar al equipo de esta cotización
               addEquipo(prod);
               setNewProdForm(null);

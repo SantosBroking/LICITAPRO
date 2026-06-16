@@ -206,7 +206,7 @@ export default function App() {
 
   const currentProject = projects.find(p=>p.id===projId);
   const projDetailView = currentProject
-    ? h(ProjectDetail, { project:currentProject, vehicles, companies, config, onUpdate:upProject, onSave:handleSaveProject, onDelete:handleDeleteProject, onNav:nav, user, logFn:log, activeTab:projTab, setActiveTab:setProjTab })
+    ? h(ProjectDetail, { project:currentProject, vehicles, companies, config, onSaveConfig:handleSaveConfig, onUpdate:upProject, onSave:handleSaveProject, onDelete:handleDeleteProject, onNav:nav, user, logFn:log, activeTab:projTab, setActiveTab:setProjTab })
     : h('div', { className:'empty' }, h('h3', null, 'Proyecto no encontrado'), h('button', { onClick:()=>nav('projects') }, '← Volver'));
 
   const content = ({
