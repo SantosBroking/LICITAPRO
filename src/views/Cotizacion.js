@@ -272,11 +272,43 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
               h(NumInput, { value:newProdForm.price||0, onChange:v=>setNewProdForm({...newProdForm,price:v}), style:{ fontSize:12 } }),
             ),
           ),
+          // Foto
+          h('div', { style:{ marginBottom:10 } },
+            h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:4 } }, 'Foto del producto (opcional)'),
+            h('div', { style:{ display:'flex', gap:8, alignItems:'center' } },
+              newProdForm.photo && h('img', { src:newProdForm.photo, style:{ width:52, height:52, objectFit:'contain', borderRadius:6, border:'.5px solid var(--b2)', background:'#fff' } }),
+              h('div', { style:{ display:'flex', flexDirection:'column', gap:4 } },
+                h('label', { style:{ fontSize:11, padding:'5px 12px', border:'.5px solid var(--b2)', borderRadius:'var(--r)', cursor:'pointer', background:'var(--bg1)', color:'var(--t1)', display:'inline-block' } },
+                  newProdForm.photo ? '🔄 Cambiar foto' : '📷 Agregar foto',
+                  h('input', { type:'file', accept:'image/*', capture:'environment', style:{ display:'none' },
+                    onChange: async e => {
+                      const file = e.target.files[0]; if(!file) return;
+                      const reader = new FileReader();
+                      reader.onload = async ev => {
+                        // Comprimir a 300px / 50% como el Catálogo principal
+                        const img = new Image();
+                        img.onload = () => {
+                          const maxPx=300, scale=Math.min(1,maxPx/Math.max(img.width,img.height));
+                          const c=document.createElement('canvas');
+                          c.width=Math.round(img.width*scale); c.height=Math.round(img.height*scale);
+                          c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+                          setNewProdForm(f=>({...f,photo:c.toDataURL('image/jpeg',0.5)}));
+                        };
+                        img.src=ev.target.result;
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }),
+                ),
+                newProdForm.photo && h('button', { style:{ fontSize:11, color:'var(--red)', padding:'2px 0', border:'none', background:'transparent', cursor:'pointer' }, onClick:()=>setNewProdForm(f=>({...f,photo:''})) }, '✕ Quitar foto'),
+              ),
+            ),
+          ),
           h('div', { style:{ display:'flex', gap:8, alignItems:'center' } },
             h('button', { className:'bp', style:{ fontSize:12, padding:'6px 14px' }, onClick:async ()=>{
               if(!newProdForm.nom.trim()){ alert('Ponle un nombre al producto.'); return; }
               const id='custom-prd-'+Date.now();
-              const prod={ id, nom:newProdForm.nom.trim(), sub:newProdForm.sub||'', cat:catSel, price:newProdForm.price||0, esVehiculo:false, vis:true };
+              const prod={ id, nom:newProdForm.nom.trim(), sub:newProdForm.sub||'', cat:catSel, price:newProdForm.price||0, photo:newProdForm.photo||'', esVehiculo:false, vis:true };
               // Guardar en Supabase config (igual que el Catálogo)
               const cfg=window._lpConfig||{};
               const customs=[...(cfg.customProducts||[]).filter(x=>x.id!==id),prod];
