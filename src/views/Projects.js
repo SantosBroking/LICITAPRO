@@ -599,44 +599,78 @@ function OCModal({ project, onClose }) {
   const cot = project.cotizacion || {};
   const partidas = (cot.partidas || []).filter(p => p.activo && (p.cantidad||0) > 0);
 
+  // Proveedor editable
+  const [proveedor, setProveedor] = useState(cot.agenciaProveedor || 'Grupo Surman');
+
   // Selección de partidas
   const [selParts, setSelParts] = useState(partidas.map(p => p.id));
   const togglePart = id => setSelParts(s => s.includes(id) ? s.filter(x=>x!==id) : [...s, id]);
 
-  // Condiciones editables — defaults comunes, el usuario puede editar cada valor
+  // Direcciones guardadas en localStorage
+  const ADDR_KEY = 'lp_oc_addresses';
+  const loadAddrs = () => { try { return JSON.parse(localStorage.getItem(ADDR_KEY)||'[]'); } catch{ return []; } };
+  const [addresses, setAddresses] = useState(loadAddrs);
+  const [newAddr, setNewAddr] = useState('');
+  const [showAddrInput, setShowAddrInput] = useState(false);
+
+  const saveAddr = () => {
+    const v = newAddr.trim(); if(!v) return;
+    const updated = [v, ...addresses.filter(a=>a!==v)].slice(0,10);
+    localStorage.setItem(ADDR_KEY, JSON.stringify(updated));
+    setAddresses(updated);
+    updCond('lugar', v);
+    setNewAddr(''); setShowAddrInput(false);
+  };
+  const deleteAddr = addr => {
+    const updated = addresses.filter(a=>a!==addr);
+    localStorage.setItem(ADDR_KEY, JSON.stringify(updated));
+    setAddresses(updated);
+  };
+
+  // Condiciones editables
   const DEFAULT_CONDS = [
-    { id:'forma_pago',   label:'Forma de pago',            value:'' },
-    { id:'anticipo',     label:'Anticipo',                 value:'' },
-    { id:'plazo',        label:'Plazo de entrega',         value:'' },
-    { id:'lugar',        label:'Lugar de entrega',         value:'' },
-    { id:'garantia',     label:'Garantía',                 value:'' },
-    { id:'vigencia',     label:'Vigencia de la OC',        value:'' },
-    { id:'facturacion',  label:'Condiciones de facturación',value:'' },
-    { id:'penalizacion', label:'Penalización por retraso', value:'' },
-    { id:'notas',        label:'Notas adicionales',        value:'' },
+    { id:'forma_pago',   label:'Forma de pago',             value:'' },
+    { id:'anticipo',     label:'Anticipo',                  value:'' },
+    { id:'plazo',        label:'Plazo de entrega',          value:'' },
+    { id:'lugar',        label:'Lugar de entrega',          value:'' },
+    { id:'garantia',     label:'Garantía',                  value:'' },
+    { id:'vigencia',     label:'Vigencia de la OC',         value:'' },
+    { id:'facturacion',  label:'Condiciones de facturación', value:'' },
+    { id:'penalizacion', label:'Penalización por retraso',  value:'' },
+    { id:'notas',        label:'Notas adicionales',         value:'' },
   ];
-  const saved = project.ocCondiciones;
-  const [conds, setConds] = useState(saved || DEFAULT_CONDS);
+  const [conds, setConds] = useState(project.ocCondiciones || DEFAULT_CONDS);
   const updCond = (id, val) => setConds(cs => cs.map(c => c.id===id ? {...c, value:val} : c));
+  const lugarVal = conds.find(c=>c.id==='lugar')?.value || '';
 
   const generar = () => {
     const partidasSel = partidas.filter(p => selParts.includes(p.id));
     if (!partidasSel.length) { alert('Selecciona al menos una partida.'); return; }
-    printOrdenCompra({ project, partidas: partidasSel, condiciones: conds });
+    printOrdenCompra({ project:{ ...project, cotizacion:{ ...cot, agenciaProveedor:proveedor } }, partidas: partidasSel, condiciones: conds });
   };
+
+  const inputStyle = { fontSize:12, padding:'6px 10px' };
+  const secLabel = { fontSize:12, fontWeight:500, color:'var(--t2)', marginBottom:8, textTransform:'uppercase', letterSpacing:'.4px' };
 
   return h('div', { style:{ position:'fixed', inset:0, zIndex:9999, background:'rgba(0,0,0,.45)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 },
     onClick: e => { if(e.target===e.currentTarget) onClose(); } },
-    h('div', { style:{ background:'var(--bg1)', borderRadius:'var(--rl)', width:'100%', maxWidth:620, maxHeight:'90vh', overflow:'auto', padding:24, display:'flex', flexDirection:'column', gap:16 } },
+    h('div', { style:{ background:'var(--bg1)', borderRadius:'var(--rl)', width:'100%', maxWidth:640, maxHeight:'92vh', overflow:'auto', padding:24, display:'flex', flexDirection:'column', gap:16 } },
 
+      // Header
       h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center' } },
         h('div', { style:{ fontSize:15, fontWeight:600 } }, '🛒 Orden de Compra'),
         h('button', { onClick:onClose, style:{ background:'transparent', border:'none', fontSize:18, cursor:'pointer', color:'var(--t2)' } }, '✕'),
       ),
 
+      // Proveedor
+      h('div', null,
+        h('div', { style:secLabel }, 'Proveedor'),
+        h('input', { value:proveedor, onChange:e=>setProveedor(e.target.value), placeholder:'Ej: Grupo Surman', style:{ ...inputStyle, width:'100%' } }),
+      ),
+
       // Selector de partidas
       h('div', null,
-        h('div', { style:{ fontSize:12, fontWeight:500, color:'var(--t2)', marginBottom:8, textTransform:'uppercase', letterSpacing:'.4px' } }, 'Vehículos a incluir'),
+        h('div', { style:secLabel }, 'Vehículos a incluir'),
         partidas.length === 0
           ? h('div', { style:{ fontSize:12, color:'var(--t3)', padding:'10px 0' } }, 'No hay partidas activas con vehículos en esta cotización.')
           : partidas.map(p => h('label', { key:p.id, style:{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', marginBottom:6, borderRadius:'var(--r)', border:'.5px solid var(--b2)', cursor:'pointer', background: selParts.includes(p.id)?'var(--bg2)':'transparent' } },
@@ -648,14 +682,42 @@ function OCModal({ project, onClose }) {
             ))
       ),
 
-      // Condiciones editables
+      // Condiciones
       h('div', null,
-        h('div', { style:{ fontSize:12, fontWeight:500, color:'var(--t2)', marginBottom:8, textTransform:'uppercase', letterSpacing:'.4px' } }, 'Condiciones de compra'),
+        h('div', { style:secLabel }, 'Condiciones de compra'),
         h('div', { style:{ display:'flex', flexDirection:'column', gap:6 } },
-          conds.map(c => h('div', { key:c.id, style:{ display:'grid', gridTemplateColumns:'160px 1fr', gap:8, alignItems:'center' } },
-            h('div', { style:{ fontSize:12, color:'var(--t2)' } }, c.label),
-            h('input', { value:c.value, placeholder:'Escribe aquí…', onChange:e=>updCond(c.id, e.target.value), style:{ fontSize:12, padding:'6px 10px' } }),
-          ))
+          conds.map(c => {
+            // Campo especial: Lugar de entrega
+            if (c.id === 'lugar') return h('div', { key:'lugar' },
+              h('div', { style:{ display:'grid', gridTemplateColumns:'160px 1fr', gap:8, alignItems:'flex-start', marginBottom:4 } },
+                h('div', { style:{ fontSize:12, color:'var(--t2)', paddingTop:7 } }, c.label),
+                h('div', null,
+                  // Dirección actual
+                  h('input', { value:lugarVal, onChange:e=>updCond('lugar',e.target.value), placeholder:'Selecciona o escribe…', style:{ ...inputStyle, width:'100%', marginBottom:4 } }),
+                  // Direcciones guardadas
+                  addresses.length > 0 && h('div', { style:{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:4 } },
+                    addresses.map(a => h('div', { key:a, style:{ display:'flex', alignItems:'center', gap:2, background:'var(--bg2)', border:'.5px solid var(--b2)', borderRadius:'var(--r)', padding:'2px 6px 2px 8px', cursor:'pointer' } },
+                      h('span', { style:{ fontSize:11, color: a===lugarVal?'var(--blue)':'var(--t2)', fontWeight: a===lugarVal?500:400 }, onClick:()=>updCond('lugar',a) }, a.length>40?a.slice(0,38)+'…':a),
+                      h('button', { onClick:()=>deleteAddr(a), style:{ background:'transparent', border:'none', color:'var(--t3)', cursor:'pointer', fontSize:12, padding:'0 2px', lineHeight:1 } }, '✕'),
+                    ))
+                  ),
+                  // Nueva dirección
+                  showAddrInput
+                    ? h('div', { style:{ display:'flex', gap:4 } },
+                        h('input', { value:newAddr, onChange:e=>setNewAddr(e.target.value), placeholder:'Escribe la dirección completa…', style:{ ...inputStyle, flex:1 }, onKeyDown:e=>{ if(e.key==='Enter') saveAddr(); if(e.key==='Escape') setShowAddrInput(false); } }),
+                        h('button', { onClick:saveAddr, className:'bp', style:{ fontSize:11, padding:'5px 10px' } }, 'Guardar'),
+                        h('button', { onClick:()=>setShowAddrInput(false), style:{ fontSize:11, padding:'5px 10px' } }, 'Cancelar'),
+                      )
+                    : h('button', { onClick:()=>setShowAddrInput(true), style:{ fontSize:11, color:'var(--blue)', background:'transparent', border:'none', padding:0, cursor:'pointer' } }, '+ Guardar dirección'),
+                ),
+              ),
+            );
+            // Resto de campos normales
+            return h('div', { key:c.id, style:{ display:'grid', gridTemplateColumns:'160px 1fr', gap:8, alignItems:'center' } },
+              h('div', { style:{ fontSize:12, color:'var(--t2)' } }, c.label),
+              h('input', { value:c.value, placeholder:'Escribe aquí…', onChange:e=>updCond(c.id, e.target.value), style:inputStyle }),
+            );
+          })
         ),
       ),
 
