@@ -414,7 +414,43 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
     // Facturación
     tab==='facturacion' && h(BillingTab, { project, vehicles:pVehicles, onNav:(view,id)=>{ if(view==='vehicle_detail')setSelVehicle(id); } }),
     // Documentos
-    tab==='docs' && h(DocsTab, { project, onUpdate:updProject, user, logFn }),
+    tab==='docs' && h('div', null,
+      // Órdenes de Compra generadas
+      (project.ordenesCompra||[]).length > 0 && h('div', { className:'card', style:{ marginBottom:14 } },
+        h('div', { style:{ fontSize:13, fontWeight:500, marginBottom:10 } }, '🛒 Órdenes de Compra'),
+        h('table', { style:{ fontSize:12, width:'100%', borderCollapse:'collapse' } },
+          h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b2)' } },
+            ['Folio','Fecha','Proveedor','Vehículos','Acciones'].map(h2=>h('th',{key:h2,style:{padding:'6px 8px',textAlign:'left',fontSize:10,fontWeight:500,color:'var(--t2)',letterSpacing:'.4px'}},h2))
+          )),
+          h('tbody', null, [...(project.ordenesCompra||[])].reverse().map(oc=>
+            h('tr', { key:oc.id, style:{ borderBottom:'.5px solid var(--b3)' } },
+              h('td', { style:{ padding:'9px 8px', fontWeight:500, color:'var(--blue)', fontFamily:'monospace', fontSize:11 } }, oc.folio),
+              h('td', { style:{ padding:'9px 8px', color:'var(--t2)', fontSize:11 } }, oc.fecha),
+              h('td', { style:{ padding:'9px 8px' } }, oc.proveedor||'—'),
+              h('td', { style:{ padding:'9px 8px', fontSize:11, color:'var(--t2)' } },
+                (oc.partidas||[]).map(p=>`${p.id} · ${p.vehiculo||''} ×${p.cantidad}`).join(' | ')
+              ),
+              h('td', { style:{ padding:'9px 8px' } },
+                h('button', { style:{ fontSize:11, color:'var(--blue)', padding:'3px 8px' },
+                  onClick:()=>{
+                    const cot2=project.cotizacion||{};
+                    const parts=(oc.partidas||[]).map(op=>{
+                      const orig=(cot2.partidas||[]).find(p=>p.id===op.id)||{};
+                      return {...orig,...op, costoMSMS:op.precioUnit||orig.costoMSMS||0};
+                    });
+                    printOrdenCompra({ project:{...project,cotizacion:{...cot2,agenciaProveedor:oc.proveedor}}, partidas:parts, condiciones:oc.condiciones||[] });
+                  }
+                }, '📄 Reimprimir'),
+                h('button', { style:{ fontSize:11, color:'var(--red)', padding:'3px 8px', marginLeft:4 },
+                  onClick:()=>{ if(confirm('¿Eliminar OC '+oc.folio+'?')) updProject({...project,ordenesCompra:(project.ordenesCompra||[]).filter(o=>o.id!==oc.id)}); }
+                }, 'Eliminar'),
+              ),
+            )
+          )),
+        ),
+      ),
+      h(DocsTab, { project, onUpdate:updProject, user, logFn }),
+    ),
     // Preguntas
     tab==='preguntas' && h('div', null,
       h('div', { className:'card', style:{ marginBottom:16 } },
@@ -441,7 +477,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
     // Borrador
     tab==='borrador' && h(BorradorTab, { project, config, onUpdate:updProject, logFn }),
     // Modal Orden de Compra
-    showOC && h(OCModal, { project, onClose:()=>setShowOC(false) }),
+    showOC && h(OCModal, { project, onUpdate:updProject, onClose:()=>setShowOC(false) }),
     // Modal eliminar
     showDelete && h(DeleteConfirmModal, { title:'¿Eliminar proyecto?', message:'Vas a eliminar el proyecto "'+project.name+'".\n\nSe eliminarán también todos los vehículos asociados.', warning:'Esta acción no se puede deshacer.', confirmLabel:'Sí, eliminar proyecto', onConfirm:()=>{ onDelete(project.id); setShowDelete(false); onNav('projects'); }, onCancel:()=>setShowDelete(false) }),
   );
@@ -595,7 +631,7 @@ function BorradorTab(props){
 }
 
 // ── Modal Orden de Compra ─────────────────────────────────────
-function OCModal({ project, onClose }) {
+function OCModal({ project, onUpdate, onClose }) {
   const cot = project.cotizacion || {};
   const partidas = (cot.partidas || []).filter(p => p.activo && (p.cantidad||0) > 0);
 
@@ -627,9 +663,9 @@ function OCModal({ project, onClose }) {
     setAddresses(updated);
   };
 
-  // Condiciones editables
+  // Condiciones editables — forma de pago con default
   const DEFAULT_CONDS = [
-    { id:'forma_pago',   label:'Forma de pago',             value:'' },
+    { id:'forma_pago',   label:'Forma de pago',             value:'Transferencia electrónica' },
     { id:'anticipo',     label:'Anticipo',                  value:'' },
     { id:'plazo',        label:'Plazo de entrega',          value:'' },
     { id:'lugar',        label:'Lugar de entrega',          value:'' },
@@ -643,10 +679,24 @@ function OCModal({ project, onClose }) {
   const updCond = (id, val) => setConds(cs => cs.map(c => c.id===id ? {...c, value:val} : c));
   const lugarVal = conds.find(c=>c.id==='lugar')?.value || '';
 
+  const folio = 'OC-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-5);
+
   const generar = () => {
     const partidasSel = partidas.filter(p => selParts.includes(p.id));
     if (!partidasSel.length) { alert('Selecciona al menos una partida.'); return; }
-    printOrdenCompra({ project:{ ...project, cotizacion:{ ...cot, agenciaProveedor:proveedor } }, partidas: partidasSel, condiciones: conds });
+    const proyConProv = { ...project, cotizacion:{ ...cot, agenciaProveedor:proveedor } };
+    // Guardar OC en el expediente del proyecto
+    const nuevaOC = {
+      id: folio,
+      folio,
+      fecha: new Date().toISOString().slice(0,10),
+      proveedor,
+      partidas: partidasSel.map(p=>({ id:p.id, vehiculo:[p.marca,p.modelo,p.version].filter(Boolean).join(' '), tipo:p.tipo, cantidad:p.cantidad, precioUnit:p.costoMSMS||0 })),
+      condiciones: conds,
+    };
+    const ocs = [...(project.ordenesCompra||[]).filter(o=>o.id!==folio), nuevaOC];
+    onUpdate({ ...project, ordenesCompra: ocs, ocCondiciones: conds });
+    printOrdenCompra({ project: proyConProv, partidas: partidasSel, condiciones: conds });
   };
 
   const inputStyle = { fontSize:12, padding:'6px 10px' };
