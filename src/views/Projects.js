@@ -679,11 +679,10 @@ function OCModal({ project, onUpdate, onClose }) {
   const updCond = (id, val) => setConds(cs => cs.map(c => c.id===id ? {...c, value:val} : c));
   const lugarVal = conds.find(c=>c.id==='lugar')?.value || '';
 
-  const folio = 'OC-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-5);
-
   const generar = () => {
     const partidasSel = partidas.filter(p => selParts.includes(p.id));
     if (!partidasSel.length) { alert('Selecciona al menos una partida.'); return; }
+    const folio = 'OC-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-5);
     const proyConProv = { ...project, cotizacion:{ ...cot, agenciaProveedor:proveedor } };
     // Guardar OC en el expediente del proyecto
     const nuevaOC = {
