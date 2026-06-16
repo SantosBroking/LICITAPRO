@@ -39,6 +39,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
   const [aiResp, setAiResp]     = useState('');
   const [showCat, setShowCat]   = useState(false);
   const [catSel, setCatSel]     = useState('01 Imagen');
+  const [newProdForm, setNewProdForm] = useState(null);
 
   const yr = new Date().getFullYear();
   const makeP = (id,activo) => ({id,activo,tipo:'',marca:'',modelo:'',ano:yr,version:'',cantidad:0,costoMSMS:0,modoPrecio:'Utilidad deseada $',techo:0,utilidadDeseada:0,utilidadPct:0});
@@ -246,8 +247,47 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
       ),
       showCat && h('div', { className:'card', style:{ marginBottom:12 } },
         h('div', { style:{ fontSize:13, fontWeight:500, marginBottom:8 } }, 'Catálogo — clic en + para agregar'),
-        h('div', { style:{ display:'flex', gap:5, flexWrap:'wrap', marginBottom:8 } },
-          cats.map(c=>h('button',{key:c,style:{fontSize:11,padding:'4px 10px',background:catSel===c?'var(--t1)':'transparent',color:catSel===c?'var(--bg1)':'var(--t2)',border:'.5px solid var(--b2)',borderRadius:'var(--r)'},onClick:()=>setCatSel(c)},c))
+        // Pestañas de categoría + botón Nuevo en la categoría activa
+        h('div', { style:{ display:'flex', gap:5, flexWrap:'wrap', marginBottom:8, alignItems:'center' } },
+          cats.map(c=>h('button',{key:c,style:{fontSize:11,padding:'4px 10px',background:catSel===c?'var(--t1)':'transparent',color:catSel===c?'var(--bg1)':'var(--t2)',border:'.5px solid var(--b2)',borderRadius:'var(--r)'},onClick:()=>{setCatSel(c);setNewProdForm(null);}},c)),
+          h('button', {
+            style:{ fontSize:11, padding:'4px 12px', color:'var(--blue)', border:'.5px solid var(--blue)', borderRadius:'var(--r)', marginLeft:4 },
+            onClick:()=>setNewProdForm(newProdForm?null:{ nom:'', sub:'', price:0, cat:catSel }),
+          }, newProdForm?'✕ Cancelar':'+ Nuevo en '+catSel),
+        ),
+        // Mini-formulario inline para producto nuevo
+        newProdForm && h('div', { style:{ background:'var(--bg2)', border:'.5px solid var(--blue)44', borderRadius:'var(--r)', padding:'12px 14px', marginBottom:10 } },
+          h('div', { style:{ fontSize:12, fontWeight:500, marginBottom:8, color:'var(--blue)' } }, 'Nuevo producto en '+catSel),
+          h('div', { style:{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', gap:8, marginBottom:8 } },
+            h('div', null,
+              h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Nombre *'),
+              h('input', { value:newProdForm.nom, placeholder:'Ej: Torreta LED amber', onChange:e=>setNewProdForm({...newProdForm,nom:e.target.value}), style:{ fontSize:12 } }),
+            ),
+            h('div', null,
+              h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Subcategoría'),
+              h('input', { value:newProdForm.sub||'', placeholder:'Ej: Iluminación', onChange:e=>setNewProdForm({...newProdForm,sub:e.target.value}), style:{ fontSize:12 } }),
+            ),
+            h('div', null,
+              h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Precio base c/IVA'),
+              h(NumInput, { value:newProdForm.price||0, onChange:v=>setNewProdForm({...newProdForm,price:v}), style:{ fontSize:12 } }),
+            ),
+          ),
+          h('div', { style:{ display:'flex', gap:8, alignItems:'center' } },
+            h('button', { className:'bp', style:{ fontSize:12, padding:'6px 14px' }, onClick:async ()=>{
+              if(!newProdForm.nom.trim()){ alert('Ponle un nombre al producto.'); return; }
+              const id='custom-prd-'+Date.now();
+              const prod={ id, nom:newProdForm.nom.trim(), sub:newProdForm.sub||'', cat:catSel, price:newProdForm.price||0, esVehiculo:false, vis:true };
+              // Guardar en Supabase config (igual que el Catálogo)
+              const cfg=window._lpConfig||{};
+              const customs=[...(cfg.customProducts||[]).filter(x=>x.id!==id),prod];
+              window._lpConfig={...cfg,customProducts:customs};
+              try{ const {saveConfig}=await import('../lib/supabase.js'); await saveConfig({...cfg,customProducts:customs}); }catch(e){ console.warn('No se pudo guardar en Supabase:',e); }
+              // Agregar al equipo de esta cotización
+              addEquipo(prod);
+              setNewProdForm(null);
+            }}, 'Crear y agregar'),
+            h('span', { style:{ fontSize:11, color:'var(--t2)' } }, 'Se guardará en el Catálogo de la app'),
+          ),
         ),
         h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:5 } },
           allCatalog.filter(p=>p.cat===catSel).map(prod=>{
