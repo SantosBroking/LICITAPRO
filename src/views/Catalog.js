@@ -1,5 +1,6 @@
 // Catalog.js — Catálogo de equipo MSMS con productos personalizados
 import { h, useState, useRef } from '../lib/core.js';
+import { NumInput } from '../ui/primitives.js';
 import { CATALOG_PRODUCTS } from '../lib/catalog.js';
 import { CATALOG_IMAGES } from '../lib/catalog_images.js';
 import { uid } from '../lib/utils.js';
@@ -100,7 +101,7 @@ function ProductForm({ prod, onSave, onCancel, existingCats, allProducts }) {
       h(Inp, { label:'Proveedor', value:p.prov, onChange:v=>set('prov',v), placeholder:'MSMS CORP' }),
       h('div', { style:{ marginBottom:14 } },
         h('label', { style:{ display:'block', fontSize:12, color:'var(--t2)', marginBottom:5, fontWeight:500 } }, 'Precio base (con IVA)'),
-        h(NumInputFmt, { value:p.price||0, onChange:v=>set('price',v) }),
+        h(NumInput, { value:p.price||0, onChange:v=>set('price',v) }),
       ),
     ),
     h('div', { style:{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:'var(--bg2)', borderRadius:'var(--r)', marginBottom:14 } },
