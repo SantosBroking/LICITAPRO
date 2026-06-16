@@ -695,7 +695,7 @@ function OCModal({ project, onUpdate, onClose }) {
     };
     const ocs = [...(project.ordenesCompra||[]).filter(o=>o.id!==folio), nuevaOC];
     onUpdate({ ...project, ordenesCompra: ocs, ocCondiciones: conds });
-    printOrdenCompra({ project: proyConProv, partidas: partidasSel, condiciones: conds });
+    printOrdenCompra({ project: proyConProv, partidas: partidasSel, condiciones: conds, folio });
   };
 
   const inputStyle = { fontSize:12, padding:'6px 10px' };

@@ -597,10 +597,10 @@ export function printResumenInterno({ project, cot, calc }) {
 }
 
 // ── Orden de Compra ───────────────────────────────────────────
-export function printOrdenCompra({ project, partidas, condiciones }) {
+export function printOrdenCompra({ project, partidas, condiciones, folio: folioParam }) {
   const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const hoy = new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'});
-  const folio = 'OC-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-5);
+  const folio = folioParam || ('OC-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-5));
 
   const filasVeh = partidas.map(p => {
     const qty = p.cantidad || 0;
