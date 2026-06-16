@@ -205,7 +205,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
               ),
             ),
           ),
-          h('div', { style:{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr', gap:8, marginBottom:8 } },
+          h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(110px, 1fr))', gap:8, marginBottom:8 } },
             h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Tipo de vehículo'),
               h('select', { value:p.tipo||'', onChange:e=>updPartida(p.id,'tipo',e.target.value), style:{ fontSize:12, padding:'5px 7px' } },
                 h('option', { value:'' }, '— Seleccionar —'),
@@ -217,7 +217,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
             h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Año'), h('input', { type:'number', value:p.ano||'', onChange:e=>updPartida(p.id,'ano',Number(e.target.value)), style:{ fontSize:12 } })),
             h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Versión'), h('input', { value:p.version||'', onChange:e=>updPartida(p.id,'version',e.target.value), style:{ fontSize:12 } })),
           ),
-          h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:8 } },
+          h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(120px, 1fr))', gap:8 } },
             h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Cantidad'), h(NumInput, { value:p.cantidad, onChange:v=>updPartida(p.id,'cantidad',v), style:{ fontSize:13, padding:'6px 8px', fontWeight:500 } })),
             h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Costo MSMS c/IVA ($)'), h(NumInput, { value:p.costoMSMS, onChange:v=>updPartida(p.id,'costoMSMS',v), style:{ fontSize:13, padding:'6px 8px' } })),
             h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Modo de precio'),
@@ -258,7 +258,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
         // Mini-formulario inline para producto nuevo
         newProdForm && h('div', { style:{ background:'var(--bg2)', border:'.5px solid var(--blue)44', borderRadius:'var(--r)', padding:'12px 14px', marginBottom:10 } },
           h('div', { style:{ fontSize:12, fontWeight:500, marginBottom:8, color:'var(--blue)' } }, 'Nuevo producto en '+catSel),
-          h('div', { style:{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', gap:8, marginBottom:8 } },
+          h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))', gap:8, marginBottom:8 } },
             h('div', null,
               h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Nombre *'),
               h('input', { value:newProdForm.nom, placeholder:'Ej: Torreta LED amber', onChange:e=>setNewProdForm({...newProdForm,nom:e.target.value}), style:{ fontSize:12 } }),
@@ -322,7 +322,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
             h('span', { style:{ fontSize:11, color:'var(--t2)' } }, 'Se guardará en el Catálogo de la app'),
           ),
         ),
-        h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:5 } },
+        h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))', gap:6 } },
           allCatalog.filter(p=>p.cat===catSel).map(prod=>{
             const ya=cot.equipo.some(e=>e.productoId===prod.id);
             return h('div', { key:prod.id, style:{ padding:'7px 10px', background:ya?'#E1F5EE':'var(--bg2)', borderRadius:'var(--r)', border:'.5px solid var(--b3)', display:'flex', justifyContent:'space-between', alignItems:'center', gap:6 } },
