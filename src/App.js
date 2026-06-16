@@ -42,6 +42,7 @@ export default function App() {
   const MOBILE_NAV = NAV_ITEMS.slice(0, 5);
   // Siempre usar el workspaceId para acceder a los datos compartidos del equipo
   const getUID = () => user?.workspaceId || user?.id || JSON.parse(localStorage.getItem("lp_user")||"null")?.workspaceId || "31daca2f-17ff-4ce1-83ca-99e2b31094b7";
+  window._lpGetUID = getUID;
   const isAdmin = user?.role === 'admin' || !user?.role; // sin rol = admin (compat)
   const userName = user?.name || user?.email?.split('@')[0] || 'Usuario';
 

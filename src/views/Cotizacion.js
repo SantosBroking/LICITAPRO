@@ -309,12 +309,14 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
               if(!newProdForm.nom.trim()){ alert('Ponle un nombre al producto.'); return; }
               const id='custom-prd-'+Date.now();
               const prod={ id, nom:newProdForm.nom.trim(), sub:newProdForm.sub||'', cat:catSel, price:newProdForm.price||0, photo:newProdForm.photo||'', esVehiculo:false, vis:true };
+              console.log('[NuevoProd] onSaveConfig:', typeof onSaveConfig, '| config:', !!config, '| prod:', prod);
               const cfg = config || window._lpConfig || {};
               const customs = [...(cfg.customProducts||[]).filter(x=>x.id!==id), prod];
               const newCfg = {...cfg, customProducts:customs};
               window._lpConfig = newCfg;
-              if(onSaveConfig) await onSaveConfig(newCfg);
-              else { try{ const {saveConfig}=await import('../lib/supabase.js'); await saveConfig(newCfg); }catch(e){ console.warn('Error guardando:',e); } }
+              console.log('[NuevoProd] guardando customProducts:', customs.length, 'productos');
+              if(onSaveConfig) { await onSaveConfig(newCfg); console.log('[NuevoProd] onSaveConfig OK'); }
+              else { console.warn('[NuevoProd] onSaveConfig no disponible, usando saveConfig directo'); try{ const {saveConfig}=await import('../lib/supabase.js'); const uid=(window._lpGetUID&&window._lpGetUID())||'31daca2f-17ff-4ce1-83ca-99e2b31094b7'; await saveConfig(newCfg, uid); console.log('[NuevoProd] saveConfig directo OK, uid:',uid); }catch(e){ console.warn('Error guardando:',e); } }
               // Agregar al equipo de esta cotización
               addEquipo(prod);
               setNewProdForm(null);
