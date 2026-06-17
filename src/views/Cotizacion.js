@@ -42,7 +42,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
   const [newProdForm, setNewProdForm] = useState(null);
 
   const yr = new Date().getFullYear();
-  const makeP = (id,activo) => ({id,activo,tipo:'',marca:'',modelo:'',ano:yr,version:'',cantidad:0,costoMSMS:0,modoPrecio:'Utilidad deseada $',techo:0,utilidadDeseada:0,utilidadPct:0});
+  const makeP = (id,activo) => ({id,activo,tipo:'',marca:'',modelo:'',ano:yr,version:'',cantidad:0,precioLista:0,costoMSMS:0,modoPrecio:'Utilidad deseada $',techo:0,utilidadDeseada:0,utilidadPct:0});
 
   const cot = useMemo(()=>{
     const c=project.cotizacion||{};
@@ -219,7 +219,11 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
           ),
           h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(120px, 1fr))', gap:8 } },
             h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Cantidad'), h(NumInput, { value:p.cantidad, onChange:v=>updPartida(p.id,'cantidad',v), style:{ fontSize:13, padding:'6px 8px', fontWeight:500 } })),
-            h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Costo MSMS c/IVA ($)'), h(NumInput, { value:p.costoMSMS, onChange:v=>updPartida(p.id,'costoMSMS',v), style:{ fontSize:13, padding:'6px 8px' } })),
+            h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Precio lista c/IVA ($)'), h(NumInput, { value:p.precioLista||0, onChange:v=>updPartida(p.id,'precioLista',v), style:{ fontSize:13, padding:'6px 8px' } })),
+            h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Costo MSMS / flotilla c/IVA ($)'),
+              h(NumInput, { value:p.costoMSMS, onChange:v=>updPartida(p.id,'costoMSMS',v), style:{ fontSize:13, padding:'6px 8px' } }),
+              (p.precioLista>0 && p.costoMSMS>0 && p.precioLista>p.costoMSMS) && h('div', { style:{ fontSize:10, color:'#1D9E75', marginTop:2 } }, 'Ahorro vs lista: ',fmt(p.precioLista-p.costoMSMS),' (',Math.round((1-p.costoMSMS/p.precioLista)*100),'%)'),
+            ),
             h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Modo de precio'),
               h('select', { value:p.modoPrecio||'Utilidad deseada $', onChange:e=>updPartida(p.id,'modoPrecio',e.target.value), style:{ fontSize:11, padding:'6px 5px' } },
                 ['Utilidad deseada $','Utilidad deseada %','Techo presupuestal'].map(o=>h('option',{key:o},o))
