@@ -66,6 +66,8 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
     vehiculoId:veh?veh.id:null, foto:veh?veh.photo||'':'',
     tipo:veh?veh.v_tipo||p.tipo:'', marca:veh?veh.v_marca||'':'',
     modelo:veh?veh.v_modelo||'':'', version:veh?veh.v_version||'':'', ano:veh?Number(veh.v_ano)||p.ano:p.ano,
+    // Jala el precio base del catálogo como precio de lista (solo si la partida no tiene uno ya)
+    precioLista: veh ? (p.precioLista>0 ? p.precioLista : (veh.price||0)) : p.precioLista,
   })});
   const catalogVehiculos = [...CATALOG_PRODUCTS, ...(window._lpConfig?.customProducts||[])].filter(x=>x.esVehiculo);
   const updEquipo  = (eid,k,v) => updCot({...cot,equipo:cot.equipo.map(e=>e.id===eid?{...e,[k]:v}:e)});
