@@ -217,7 +217,7 @@ export function ProjectForm({ project, companies, config, onSave, onCancel }) {
   );
 }
 
-export function ProjectDetail({ project, vehicles, companies, config, onSaveConfig, onUpdate, onDelete, onSave, onNav, user, logFn, activeTab, setActiveTab }) {
+export function ProjectDetail({ project, vehicles, companies, config, onSaveConfig, onSaveCompany, onUpdate, onDelete, onSave, onNav, user, logFn, activeTab, setActiveTab }) {
   const [showEdit, setShowEdit]     = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [showOC, setShowOC]         = useState(false);
@@ -438,7 +438,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
                       const orig=(cot2.partidas||[]).find(p=>p.id===op.id)||{};
                       return {...orig,...op, costoMSMS:op.precioUnit||orig.costoMSMS||0};
                     });
-                    printOrdenCompra({ project:{...project,rfcCliente:oc.rfcCliente||project.rfcCliente,cotizacion:{...cot2,agenciaProveedor:oc.proveedor}}, partidas:parts, condiciones:oc.condiciones||[], folio:oc.folio });
+                    printOrdenCompra({ project:{...project,ocProveedor:{name:oc.proveedor,rfc:oc.proveedorRfc,address:oc.proveedorAddress},cotizacion:{...cot2,agenciaProveedor:oc.proveedor}}, partidas:parts, condiciones:oc.condiciones||[], folio:oc.folio });
                   }
                 }, '📄 Reimprimir'),
                 h('button', { style:{ fontSize:11, color:'var(--red)', padding:'3px 8px', marginLeft:4 },
@@ -477,7 +477,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
     // Borrador
     tab==='borrador' && h(BorradorTab, { project, config, onUpdate:updProject, logFn }),
     // Modal Orden de Compra
-    showOC && h(OCModal, { project, config, onSaveConfig, onUpdate:updProject, onClose:()=>setShowOC(false) }),
+    showOC && h(OCModal, { project, companies, config, onSaveConfig, onSaveCompany, onUpdate:updProject, onClose:()=>setShowOC(false) }),
     // Modal eliminar
     showDelete && h(DeleteConfirmModal, { title:'¿Eliminar proyecto?', message:'Vas a eliminar el proyecto "'+project.name+'".\n\nSe eliminarán también todos los vehículos asociados.', warning:'Esta acción no se puede deshacer.', confirmLabel:'Sí, eliminar proyecto', onConfirm:()=>{ onDelete(project.id); setShowDelete(false); onNav('projects'); }, onCancel:()=>setShowDelete(false) }),
   );
@@ -631,14 +631,63 @@ function BorradorTab(props){
 }
 
 // ── Modal Orden de Compra ─────────────────────────────────────
-function OCModal({ project, config, onSaveConfig, onUpdate, onClose }) {
+function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUpdate, onClose }) {
   const cot = project.cotizacion || {};
   const partidas = (cot.partidas || []).filter(p => p.activo && (p.cantidad||0) > 0);
 
-  // Proveedor editable
-  const [proveedor, setProveedor] = useState(cot.agenciaProveedor || 'Grupo Surman');
-  // RFC del cliente (recordado por proyecto)
-  const [rfcCliente, setRfcCliente] = useState(project.rfcCliente || '');
+  // Empresas guardadas (desde companies global)
+  const empresas = companies || [];
+  // Proveedor: puede venir de una empresa guardada o escrito a mano
+  const provGuardado = project.ocProveedor || {};
+  const [prov, setProv] = useState({
+    name: provGuardado.name || cot.agenciaProveedor || '',
+    rfc:  provGuardado.rfc  || '',
+    address: provGuardado.address || '',
+  });
+  const setProvField = (k,v) => setProv(p=>({...p,[k]:v}));
+
+  // Seleccionar empresa guardada → llena los datos del proveedor
+  const selectEmpresa = id => {
+    const e = empresas.find(x=>x.id===id);
+    if (e) setProv({ name:e.name||'', rfc:e.rfc||'', address:e.address||'' });
+  };
+
+  // Analizar Constancia de Situación Fiscal
+  const [analizando, setAnalizando] = useState(false);
+  const [analMsg, setAnalMsg] = useState('');
+  const analizarConstancia = async (file) => {
+    if (!file) return;
+    setAnalizando(true); setAnalMsg('Analizando constancia…');
+    try {
+      const c2 = config || window._lpConfig || {};
+      const apiKey = (c2.ia||{}).openaiKey;
+      if (!apiKey) { setAnalMsg('❌ Agrega tu API Key de Anthropic en Configuración → 🤖 IA'); setAnalizando(false); return; }
+      const { analyzeDocument } = await import('../lib/ai_analyzer.js');
+      const data = await analyzeDocument(file, 'constancia', apiKey);
+      const nuevo = {
+        name: data.razonSocial || prov.name,
+        rfc:  data.rfc || prov.rfc,
+        address: [data.domicilioFiscal, data.codigoPostal, data.ciudad, data.estado].filter(Boolean).join(', ') || prov.address,
+      };
+      setProv(nuevo);
+      // Guardar como empresa en la base (si no existe ese RFC) para tenerla en el desplegable
+      if (nuevo.rfc && onSaveCompany) {
+        const yaExiste = empresas.find(e=>e.rfc===nuevo.rfc);
+        if (!yaExiste) {
+          await onSaveCompany({ id:'emp-'+Date.now(), name:nuevo.name, rfc:nuevo.rfc, address:nuevo.address, regimen:data.regimenFiscal||'', cp:data.codigoPostal||'', ciudad:data.ciudad||'', estado:data.estado||'', situacion:data.estatus||'' });
+          setAnalMsg('✓ Datos extraídos y empresa guardada');
+        } else {
+          setAnalMsg('✓ Datos extraídos (empresa ya estaba guardada)');
+        }
+      } else {
+        setAnalMsg('✓ Datos extraídos');
+      }
+    } catch(e) {
+      setAnalMsg('❌ '+(e.message||'Error al analizar'));
+    }
+    setAnalizando(false);
+    setTimeout(()=>setAnalMsg(''), 5000);
+  };
 
   // Selección de partidas
   const [selParts, setSelParts] = useState(partidas.map(p => p.id));
@@ -720,19 +769,20 @@ function OCModal({ project, config, onSaveConfig, onUpdate, onClose }) {
     const partidasSel = partidas.filter(p => selParts.includes(p.id));
     if (!partidasSel.length) { alert('Selecciona al menos una partida.'); return; }
     const folio = 'OC-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-5);
-    const proyConProv = { ...project, rfcCliente, cotizacion:{ ...cot, agenciaProveedor:proveedor } };
+    const proyConProv = { ...project, ocProveedor: prov, cotizacion:{ ...cot, agenciaProveedor:prov.name } };
     // Guardar OC en el expediente del proyecto
     const nuevaOC = {
       id: folio,
       folio,
       fecha: new Date().toISOString().slice(0,10),
-      proveedor,
-      rfcCliente,
+      proveedor: prov.name,
+      proveedorRfc: prov.rfc,
+      proveedorAddress: prov.address,
       partidas: partidasSel.map(p=>({ id:p.id, vehiculo:[p.marca,p.modelo,p.version].filter(Boolean).join(' '), tipo:p.tipo, cantidad:p.cantidad, precioUnit:p.costoMSMS||0 })),
       condiciones: conds,
     };
     const ocs = [...(project.ordenesCompra||[]).filter(o=>o.id!==folio), nuevaOC];
-    onUpdate({ ...project, rfcCliente, ordenesCompra: ocs, ocCondiciones: conds });
+    onUpdate({ ...project, ocProveedor: prov, ordenesCompra: ocs, ocCondiciones: conds });
     printOrdenCompra({ project: proyConProv, partidas: partidasSel, condiciones: conds, folio });
   };
 
@@ -749,15 +799,36 @@ function OCModal({ project, config, onSaveConfig, onUpdate, onClose }) {
         h('button', { onClick:onClose, style:{ background:'transparent', border:'none', fontSize:18, cursor:'pointer', color:'var(--t2)' } }, '✕'),
       ),
 
-      // Proveedor
-      h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:12 } },
-        h('div', null,
-          h('div', { style:secLabel }, 'Proveedor'),
-          h('input', { value:proveedor, onChange:e=>setProveedor(e.target.value), placeholder:'Ej: Grupo Surman', style:{ ...inputStyle, width:'100%' } }),
+      // Proveedor (datos de la empresa que vende — Surman, etc.)
+      h('div', null,
+        h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8, gap:8, flexWrap:'wrap' } },
+          h('div', { style:{ ...secLabel, marginBottom:0 } }, 'Proveedor (vendedor)'),
+          h('label', { style:{ fontSize:11, padding:'5px 12px', border:'.5px solid var(--blue)', color:'var(--blue)', borderRadius:'var(--r)', cursor: analizando?'wait':'pointer', background:'#3b6cf408' } },
+            analizando ? '⏳ Analizando…' : '📄 Analizar constancia (CSF)',
+            h('input', { type:'file', accept:'application/pdf,image/*', style:{ display:'none' }, disabled:analizando, onChange:e=>{ analizarConstancia(e.target.files[0]); e.target.value=''; } }),
+          ),
         ),
-        h('div', null,
-          h('div', { style:secLabel }, 'RFC del proveedor'),
-          h('input', { value:rfcCliente, onChange:e=>setRfcCliente(e.target.value.toUpperCase()), placeholder:'Ej: SME050105T59', maxLength:13, style:{ ...inputStyle, width:'100%', textTransform:'uppercase' } }),
+        empresas.length > 0 && h('select', {
+          value:'', onChange:e=>{ if(e.target.value) selectEmpresa(e.target.value); },
+          style:{ ...inputStyle, width:'100%', marginBottom:8, color:'var(--t2)' }
+        },
+          h('option', { value:'' }, '— Elegir empresa guardada —'),
+          empresas.map(e=>h('option', { key:e.id, value:e.id }, e.name+(e.rfc?(' · '+e.rfc):''))),
+        ),
+        analMsg && h('div', { style:{ fontSize:11, color: analMsg[0]==='❌'?'#E24B4A':'#1D9E75', marginBottom:8 } }, analMsg),
+        h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:8 } },
+          h('div', null,
+            h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Empresa / Razón social'),
+            h('input', { value:prov.name, onChange:e=>setProvField('name',e.target.value), placeholder:'Ej: Grupo Surman', style:{ ...inputStyle, width:'100%' } }),
+          ),
+          h('div', null,
+            h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'RFC'),
+            h('input', { value:prov.rfc, onChange:e=>setProvField('rfc',e.target.value.toUpperCase()), placeholder:'Ej: SME050105T59', maxLength:13, style:{ ...inputStyle, width:'100%', textTransform:'uppercase' } }),
+          ),
+        ),
+        h('div', { style:{ marginTop:8 } },
+          h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Domicilio fiscal'),
+          h('input', { value:prov.address, onChange:e=>setProvField('address',e.target.value), placeholder:'Calle, número, colonia, CP, ciudad', style:{ ...inputStyle, width:'100%' } }),
         ),
       ),
 

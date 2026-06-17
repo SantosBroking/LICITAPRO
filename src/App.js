@@ -207,7 +207,7 @@ export default function App() {
 
   const currentProject = projects.find(p=>p.id===projId);
   const projDetailView = currentProject
-    ? h(ProjectDetail, { project:currentProject, vehicles, companies, config, onSaveConfig:handleSaveConfig, onUpdate:upProject, onSave:handleSaveProject, onDelete:handleDeleteProject, onNav:nav, user, logFn:log, activeTab:projTab, setActiveTab:setProjTab })
+    ? h(ProjectDetail, { project:currentProject, vehicles, companies, config, onSaveConfig:handleSaveConfig, onSaveCompany:async c=>{ const ex=companies.find(x=>x.id===c.id||x.rfc===c.rfc); setCompanies(ex?companies.map(x=>(x.id===c.id||x.rfc===c.rfc)?{...x,...c}:x):[...companies,c]); try{ await saveCompany(c, getUID()); log(user, ex?'actualizó':'creó', 'empresa', c.id, c.name); }catch(e){ console.error('Error guardando empresa:', e); } }, onUpdate:upProject, onSave:handleSaveProject, onDelete:handleDeleteProject, onNav:nav, user, logFn:log, activeTab:projTab, setActiveTab:setProjTab })
     : h('div', { className:'empty' }, h('h3', null, 'Proyecto no encontrado'), h('button', { onClick:()=>nav('projects') }, '← Volver'));
 
   const content = ({

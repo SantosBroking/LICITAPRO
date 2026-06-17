@@ -663,8 +663,9 @@ ${BASE_CSS}
   <div class="grid2" style="margin-bottom:20px">
     <div>
       <div class="label">Proveedor</div>
-      <div class="value">${esc(project.cotizacion?.agenciaProveedor||'Grupo Surman')}</div>
-      ${project.rfcCliente?`<div style="font-size:10px;color:#6b6862;margin-top:2px">RFC: ${esc(project.rfcCliente)}</div>`:''}
+      <div class="value">${esc(project.ocProveedor?.name || project.cotizacion?.agenciaProveedor || 'Grupo Surman')}</div>
+      ${project.ocProveedor?.rfc?`<div style="font-size:10px;color:#6b6862;margin-top:2px">RFC: ${esc(project.ocProveedor.rfc)}</div>`:''}
+      ${project.ocProveedor?.address?`<div style="font-size:10px;color:#6b6862;margin-top:1px">${esc(project.ocProveedor.address)}</div>`:''}
     </div>
     <div>
       <div class="label">Proyecto / Licitación</div>
