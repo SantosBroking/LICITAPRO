@@ -673,6 +673,7 @@ ${BASE_CSS}
     <div>
       <div class="label">Cliente final</div>
       <div class="value">${esc(project.dependencia||'—')}</div>
+      ${project.rfcCliente?`<div style="font-size:10px;color:#6b6862;margin-top:2px">RFC: ${esc(project.rfcCliente)}</div>`:''}
     </div>
     <div>
       <div class="label">Responsable</div>

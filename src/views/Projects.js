@@ -438,7 +438,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
                       const orig=(cot2.partidas||[]).find(p=>p.id===op.id)||{};
                       return {...orig,...op, costoMSMS:op.precioUnit||orig.costoMSMS||0};
                     });
-                    printOrdenCompra({ project:{...project,cotizacion:{...cot2,agenciaProveedor:oc.proveedor}}, partidas:parts, condiciones:oc.condiciones||[] });
+                    printOrdenCompra({ project:{...project,rfcCliente:oc.rfcCliente||project.rfcCliente,cotizacion:{...cot2,agenciaProveedor:oc.proveedor}}, partidas:parts, condiciones:oc.condiciones||[], folio:oc.folio });
                   }
                 }, '📄 Reimprimir'),
                 h('button', { style:{ fontSize:11, color:'var(--red)', padding:'3px 8px', marginLeft:4 },
@@ -637,6 +637,8 @@ function OCModal({ project, config, onSaveConfig, onUpdate, onClose }) {
 
   // Proveedor editable
   const [proveedor, setProveedor] = useState(cot.agenciaProveedor || 'Grupo Surman');
+  // RFC del cliente (recordado por proyecto)
+  const [rfcCliente, setRfcCliente] = useState(project.rfcCliente || '');
 
   // Selección de partidas
   const [selParts, setSelParts] = useState(partidas.map(p => p.id));
@@ -718,18 +720,19 @@ function OCModal({ project, config, onSaveConfig, onUpdate, onClose }) {
     const partidasSel = partidas.filter(p => selParts.includes(p.id));
     if (!partidasSel.length) { alert('Selecciona al menos una partida.'); return; }
     const folio = 'OC-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-5);
-    const proyConProv = { ...project, cotizacion:{ ...cot, agenciaProveedor:proveedor } };
+    const proyConProv = { ...project, rfcCliente, cotizacion:{ ...cot, agenciaProveedor:proveedor } };
     // Guardar OC en el expediente del proyecto
     const nuevaOC = {
       id: folio,
       folio,
       fecha: new Date().toISOString().slice(0,10),
       proveedor,
+      rfcCliente,
       partidas: partidasSel.map(p=>({ id:p.id, vehiculo:[p.marca,p.modelo,p.version].filter(Boolean).join(' '), tipo:p.tipo, cantidad:p.cantidad, precioUnit:p.costoMSMS||0 })),
       condiciones: conds,
     };
     const ocs = [...(project.ordenesCompra||[]).filter(o=>o.id!==folio), nuevaOC];
-    onUpdate({ ...project, ordenesCompra: ocs, ocCondiciones: conds });
+    onUpdate({ ...project, rfcCliente, ordenesCompra: ocs, ocCondiciones: conds });
     printOrdenCompra({ project: proyConProv, partidas: partidasSel, condiciones: conds, folio });
   };
 
@@ -747,9 +750,15 @@ function OCModal({ project, config, onSaveConfig, onUpdate, onClose }) {
       ),
 
       // Proveedor
-      h('div', null,
-        h('div', { style:secLabel }, 'Proveedor'),
-        h('input', { value:proveedor, onChange:e=>setProveedor(e.target.value), placeholder:'Ej: Grupo Surman', style:{ ...inputStyle, width:'100%' } }),
+      h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:12 } },
+        h('div', null,
+          h('div', { style:secLabel }, 'Proveedor'),
+          h('input', { value:proveedor, onChange:e=>setProveedor(e.target.value), placeholder:'Ej: Grupo Surman', style:{ ...inputStyle, width:'100%' } }),
+        ),
+        h('div', null,
+          h('div', { style:secLabel }, 'RFC del cliente'),
+          h('input', { value:rfcCliente, onChange:e=>setRfcCliente(e.target.value.toUpperCase()), placeholder:'Ej: XAXX010101000', maxLength:13, style:{ ...inputStyle, width:'100%', textTransform:'uppercase' } }),
+        ),
       ),
 
       // Selector de partidas
