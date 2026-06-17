@@ -477,7 +477,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
     // Borrador
     tab==='borrador' && h(BorradorTab, { project, config, onUpdate:updProject, logFn }),
     // Modal Orden de Compra
-    showOC && h(OCModal, { project, onUpdate:updProject, onClose:()=>setShowOC(false) }),
+    showOC && h(OCModal, { project, config, onSaveConfig, onUpdate:updProject, onClose:()=>setShowOC(false) }),
     // Modal eliminar
     showDelete && h(DeleteConfirmModal, { title:'¿Eliminar proyecto?', message:'Vas a eliminar el proyecto "'+project.name+'".\n\nSe eliminarán también todos los vehículos asociados.', warning:'Esta acción no se puede deshacer.', confirmLabel:'Sí, eliminar proyecto', onConfirm:()=>{ onDelete(project.id); setShowDelete(false); onNav('projects'); }, onCancel:()=>setShowDelete(false) }),
   );
@@ -631,7 +631,7 @@ function BorradorTab(props){
 }
 
 // ── Modal Orden de Compra ─────────────────────────────────────
-function OCModal({ project, onUpdate, onClose }) {
+function OCModal({ project, config, onSaveConfig, onUpdate, onClose }) {
   const cot = project.cotizacion || {};
   const partidas = (cot.partidas || []).filter(p => p.activo && (p.cantidad||0) > 0);
 
@@ -642,25 +642,34 @@ function OCModal({ project, onUpdate, onClose }) {
   const [selParts, setSelParts] = useState(partidas.map(p => p.id));
   const togglePart = id => setSelParts(s => s.includes(id) ? s.filter(x=>x!==id) : [...s, id]);
 
-  // Direcciones guardadas en localStorage
-  const ADDR_KEY = 'lp_oc_addresses';
-  const loadAddrs = () => { try { return JSON.parse(localStorage.getItem(ADDR_KEY)||'[]'); } catch{ return []; } };
-  const [addresses, setAddresses] = useState(loadAddrs);
+  // Config global (Supabase) — compartida entre proyectos y dispositivos
+  const cfg = config || window._lpConfig || {};
+  const ocCfg = cfg.ocSettings || {};
+
+  // Direcciones guardadas en config global
+  const [addresses, setAddresses] = useState(ocCfg.direcciones || []);
   const [newAddr, setNewAddr] = useState('');
   const [showAddrInput, setShowAddrInput] = useState(false);
 
-  const saveAddr = () => {
+  const persistOcCfg = async (partial) => {
+    const newOc = { ...ocCfg, ...partial };
+    const newCfg = { ...cfg, ocSettings: newOc };
+    window._lpConfig = newCfg;
+    if (onSaveConfig) { try { await onSaveConfig(newCfg); } catch(e){ console.warn('Error guardando config OC:', e); } }
+  };
+
+  const saveAddr = async () => {
     const v = newAddr.trim(); if(!v) return;
-    const updated = [v, ...addresses.filter(a=>a!==v)].slice(0,10);
-    localStorage.setItem(ADDR_KEY, JSON.stringify(updated));
+    const updated = [v, ...addresses.filter(a=>a!==v)].slice(0,15);
     setAddresses(updated);
     updCond('lugar', v);
     setNewAddr(''); setShowAddrInput(false);
+    await persistOcCfg({ direcciones: updated });
   };
-  const deleteAddr = addr => {
+  const deleteAddr = async addr => {
     const updated = addresses.filter(a=>a!==addr);
-    localStorage.setItem(ADDR_KEY, JSON.stringify(updated));
     setAddresses(updated);
+    await persistOcCfg({ direcciones: updated });
   };
 
   // Condiciones editables — forma de pago con default
@@ -675,9 +684,20 @@ function OCModal({ project, onUpdate, onClose }) {
     { id:'penalizacion', label:'Penalización por retraso',  value:'' },
     { id:'notas',        label:'Notas adicionales',         value:'' },
   ];
-  const [conds, setConds] = useState(project.ocCondiciones || DEFAULT_CONDS);
+  // Prioridad: condiciones ya guardadas en este proyecto > defaults globales (config) > defaults del sistema
+  const condsBase = project.ocCondiciones || ocCfg.condicionesDefault || DEFAULT_CONDS;
+  const [conds, setConds] = useState(condsBase);
   const updCond = (id, val) => setConds(cs => cs.map(c => c.id===id ? {...c, value:val} : c));
   const lugarVal = conds.find(c=>c.id==='lugar')?.value || '';
+  const [savedMsg, setSavedMsg] = useState('');
+
+  const guardarPredeterminado = async () => {
+    // Guarda las condiciones actuales (sin el lugar específico) como default global
+    const defaults = conds.map(c => c.id==='lugar' ? {...c, value:''} : c);
+    await persistOcCfg({ condicionesDefault: defaults });
+    setSavedMsg('✓ Guardado como predeterminado para todos los proyectos');
+    setTimeout(()=>setSavedMsg(''), 3000);
+  };
 
   const generar = () => {
     const partidasSel = partidas.filter(p => selParts.includes(p.id));
@@ -770,9 +790,15 @@ function OCModal({ project, onUpdate, onClose }) {
         ),
       ),
 
-      h('div', { style:{ display:'flex', gap:8, justifyContent:'flex-end', paddingTop:8, borderTop:'.5px solid var(--b2)' } },
-        h('button', { onClick:onClose }, 'Cancelar'),
-        h('button', { className:'bp', onClick:generar }, '📄 Generar OC'),
+      h('div', { style:{ display:'flex', gap:8, justifyContent:'space-between', alignItems:'center', paddingTop:8, borderTop:'.5px solid var(--b2)', flexWrap:'wrap' } },
+        h('div', { style:{ display:'flex', flexDirection:'column', gap:2 } },
+          h('button', { onClick:guardarPredeterminado, style:{ fontSize:11, color:'var(--blue)', background:'transparent', border:'.5px solid var(--blue)44', padding:'5px 10px', borderRadius:'var(--r)' } }, '★ Guardar condiciones como predeterminadas'),
+          savedMsg && h('span', { style:{ fontSize:10, color:'#1D9E75' } }, savedMsg),
+        ),
+        h('div', { style:{ display:'flex', gap:8 } },
+          h('button', { onClick:onClose }, 'Cancelar'),
+          h('button', { className:'bp', onClick:generar }, '📄 Generar OC'),
+        ),
       ),
     ),
   );
