@@ -756,8 +756,8 @@ function OCModal({ project, config, onSaveConfig, onUpdate, onClose }) {
           h('input', { value:proveedor, onChange:e=>setProveedor(e.target.value), placeholder:'Ej: Grupo Surman', style:{ ...inputStyle, width:'100%' } }),
         ),
         h('div', null,
-          h('div', { style:secLabel }, 'RFC del cliente'),
-          h('input', { value:rfcCliente, onChange:e=>setRfcCliente(e.target.value.toUpperCase()), placeholder:'Ej: XAXX010101000', maxLength:13, style:{ ...inputStyle, width:'100%', textTransform:'uppercase' } }),
+          h('div', { style:secLabel }, 'RFC del proveedor'),
+          h('input', { value:rfcCliente, onChange:e=>setRfcCliente(e.target.value.toUpperCase()), placeholder:'Ej: SME050105T59', maxLength:13, style:{ ...inputStyle, width:'100%', textTransform:'uppercase' } }),
         ),
       ),
 
