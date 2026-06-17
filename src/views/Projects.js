@@ -635,9 +635,14 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
   const cot = project.cotizacion || {};
   const partidas = (cot.partidas || []).filter(p => p.activo && (p.cantidad||0) > 0);
 
-  // Empresas guardadas (desde companies global)
-  const empresas = companies || [];
-  // Proveedor: puede venir de una empresa guardada o escrito a mano
+  // Config global (Supabase) — compartida entre proyectos y dispositivos
+  const cfg = config || window._lpConfig || {};
+  const ocCfg = cfg.ocSettings || {};
+
+  // PROVEEDORES (a quienes compramos / mandamos OC) — lista propia, distinta de las empresas licitantes
+  const proveedores = cfg.proveedores || [];
+
+  // Proveedor: puede venir de uno guardado o escrito a mano
   const provGuardado = project.ocProveedor || {};
   const [prov, setProv] = useState({
     name: provGuardado.name || cot.agenciaProveedor || '',
@@ -646,10 +651,23 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
   });
   const setProvField = (k,v) => setProv(p=>({...p,[k]:v}));
 
-  // Seleccionar empresa guardada → llena los datos del proveedor
+  // Seleccionar proveedor guardado → llena los datos
   const selectEmpresa = id => {
-    const e = empresas.find(x=>x.id===id);
+    const e = proveedores.find(x=>x.id===id);
     if (e) setProv({ name:e.name||'', rfc:e.rfc||'', address:e.address||'' });
+  };
+
+  // Guardar/actualizar proveedor en config global
+  const persistProveedor = async (p) => {
+    if (!p.name && !p.rfc) return;
+    if (!onSaveConfig) return;
+    const existe = proveedores.find(x => (p.rfc && x.rfc===p.rfc) || (!p.rfc && x.name===p.name));
+    let nuevos;
+    if (existe) nuevos = proveedores.map(x => x===existe ? {...x, ...p} : x);
+    else nuevos = [...proveedores, { id:'prov-'+Date.now(), ...p }];
+    const newCfg = { ...cfg, proveedores: nuevos };
+    window._lpConfig = newCfg;
+    await onSaveConfig(newCfg);
   };
 
   // Analizar Constancia de Situación Fiscal
@@ -670,15 +688,11 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
         address: [data.domicilioFiscal, data.codigoPostal, data.ciudad, data.estado].filter(Boolean).join(', ') || prov.address,
       };
       setProv(nuevo);
-      // Guardar como empresa en la base (si no existe ese RFC) para tenerla en el desplegable
-      if (nuevo.rfc && onSaveCompany) {
-        const yaExiste = empresas.find(e=>e.rfc===nuevo.rfc);
-        if (!yaExiste) {
-          await onSaveCompany({ id:'emp-'+Date.now(), name:nuevo.name, rfc:nuevo.rfc, address:nuevo.address, regimen:data.regimenFiscal||'', cp:data.codigoPostal||'', ciudad:data.ciudad||'', estado:data.estado||'', situacion:data.estatus||'' });
-          setAnalMsg('✓ Datos extraídos y empresa guardada');
-        } else {
-          setAnalMsg('✓ Datos extraídos (empresa ya estaba guardada)');
-        }
+      // Guardar como PROVEEDOR (si no existe ese RFC) para tenerlo en el desplegable
+      if (nuevo.rfc || nuevo.name) {
+        const yaExiste = proveedores.find(e=>(nuevo.rfc && e.rfc===nuevo.rfc) || (!nuevo.rfc && e.name===nuevo.name));
+        await persistProveedor(nuevo);
+        setAnalMsg(yaExiste ? '✓ Datos extraídos (proveedor ya estaba guardado)' : '✓ Datos extraídos y proveedor guardado');
       } else {
         setAnalMsg('✓ Datos extraídos');
       }
@@ -692,10 +706,6 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
   // Selección de partidas
   const [selParts, setSelParts] = useState(partidas.map(p => p.id));
   const togglePart = id => setSelParts(s => s.includes(id) ? s.filter(x=>x!==id) : [...s, id]);
-
-  // Config global (Supabase) — compartida entre proyectos y dispositivos
-  const cfg = config || window._lpConfig || {};
-  const ocCfg = cfg.ocSettings || {};
 
   // Direcciones guardadas en config global (+ migración desde localStorage viejo)
   const loadLegacyAddrs = () => { try { return JSON.parse(localStorage.getItem('lp_oc_addresses')||'[]'); } catch{ return []; } };
@@ -808,12 +818,12 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
             h('input', { type:'file', accept:'application/pdf,image/*', style:{ display:'none' }, disabled:analizando, onChange:e=>{ analizarConstancia(e.target.files[0]); e.target.value=''; } }),
           ),
         ),
-        empresas.length > 0 && h('select', {
+        proveedores.length > 0 && h('select', {
           value:'', onChange:e=>{ if(e.target.value) selectEmpresa(e.target.value); },
           style:{ ...inputStyle, width:'100%', marginBottom:8, color:'var(--t2)' }
         },
-          h('option', { value:'' }, '— Elegir empresa guardada —'),
-          empresas.map(e=>h('option', { key:e.id, value:e.id }, e.name+(e.rfc?(' · '+e.rfc):''))),
+          h('option', { value:'' }, '— Elegir proveedor guardado —'),
+          proveedores.map(e=>h('option', { key:e.id, value:e.id }, e.name+(e.rfc?(' · '+e.rfc):''))),
         ),
         analMsg && h('div', { style:{ fontSize:11, color: analMsg[0]==='❌'?'#E24B4A':'#1D9E75', marginBottom:8 } }, analMsg),
         h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:8 } },
@@ -830,6 +840,11 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
           h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Domicilio fiscal'),
           h('input', { value:prov.address, onChange:e=>setProvField('address',e.target.value), placeholder:'Calle, número, colonia, CP, ciudad', style:{ ...inputStyle, width:'100%' } }),
         ),
+        // Guardar proveedor escrito a mano
+        (prov.name || prov.rfc) && h('button', {
+          onClick: async ()=>{ await persistProveedor(prov); setAnalMsg('✓ Proveedor guardado'); setTimeout(()=>setAnalMsg(''),3000); },
+          style:{ fontSize:11, color:'var(--blue)', background:'transparent', border:'none', padding:'6px 0 0', cursor:'pointer' }
+        }, '+ Guardar este proveedor para futuras OC'),
       ),
 
       // Selector de partidas
