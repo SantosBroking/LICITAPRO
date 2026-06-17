@@ -1,7 +1,7 @@
 import { printCotizacionCliente, printResumenRetornos, printResumenInterno, printOrdenCompra } from '../lib/pdf_export.js';
 import { calcCotizacion } from '../lib/calc.js';
 // Projects.js — Lista, formulario y detalle de proyecto
-import { h, useState, useMemo, useCallback, useRef } from '../lib/core.js';
+import { h, useState, useMemo, useCallback, useRef, useEffect } from '../lib/core.js';
 import { STATUSES, FINAL_STATUS, KANBAN_COLS, TIPOS_PROCEDIMIENTO, DEPENDENCIAS_COMUNES, TIPOS_PRODUCTO } from '../lib/constants.js';
 import { fmt, daysUntil, alertLevel, TODAY, NOW, uid } from '../lib/utils.js';
 import { Badge, AlertChip, Metric, Inp, EmptyState, ConfirmAction, NumInput, DeleteConfirmModal } from '../ui/primitives.js';
@@ -646,10 +646,25 @@ function OCModal({ project, config, onSaveConfig, onUpdate, onClose }) {
   const cfg = config || window._lpConfig || {};
   const ocCfg = cfg.ocSettings || {};
 
-  // Direcciones guardadas en config global
-  const [addresses, setAddresses] = useState(ocCfg.direcciones || []);
+  // Direcciones guardadas en config global (+ migración desde localStorage viejo)
+  const loadLegacyAddrs = () => { try { return JSON.parse(localStorage.getItem('lp_oc_addresses')||'[]'); } catch{ return []; } };
+  const legacyAddrs = loadLegacyAddrs();
+  const cfgAddrs = ocCfg.direcciones || [];
+  // Une las de Supabase con las viejas de este dispositivo (sin duplicar)
+  const mergedAddrs = [...cfgAddrs, ...legacyAddrs.filter(a=>!cfgAddrs.includes(a))].slice(0,15);
+  const [addresses, setAddresses] = useState(mergedAddrs);
   const [newAddr, setNewAddr] = useState('');
   const [showAddrInput, setShowAddrInput] = useState(false);
+
+  // Si había direcciones viejas que no estaban en config, súbelas a Supabase una vez
+  useEffect(() => {
+    if (legacyAddrs.length && legacyAddrs.some(a=>!cfgAddrs.includes(a)) && onSaveConfig) {
+      const newOc = { ...ocCfg, direcciones: mergedAddrs };
+      const newCfg = { ...cfg, ocSettings: newOc };
+      window._lpConfig = newCfg;
+      onSaveConfig(newCfg).catch(e=>console.warn('Error migrando direcciones:',e));
+    }
+  }, []);
 
   const persistOcCfg = async (partial) => {
     const newOc = { ...ocCfg, ...partial };
