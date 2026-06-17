@@ -85,7 +85,7 @@ function openPrint(html, title) {
 
   bar.querySelector('#lpp-back').onclick = () => overlay.remove();
 
-  const fname = (title || 'cotizacion').replace(/[^a-z0-9áéíóúñ ]/gi, '').replace(/\s+/g, '_') + '.pdf';
+  const fname = (title || 'cotizacion').replace(/[^a-z0-9áéíóúñ \-]/gi, '').replace(/\s+/g, '_') + '.pdf';
   bar.querySelector('#lpp-pdf').onclick = () => {
     const win = iframe.contentWindow;
     const el = win.document.querySelector('.sheet');
@@ -734,5 +734,5 @@ ${BASE_CSS}
 
 </div></body></html>`;
 
-  openPrint(html);
+  openPrint(html, folio);
 }
