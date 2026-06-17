@@ -23,22 +23,48 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate }) {
   const [view, setView]     = useState('table');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
-  const [sort, setSort]     = useState('recent');
+  const [empresa, setEmpresa] = useState('all');
+  const [sort, setSort]     = useState('etapa');
   const [grupo, setGrupo]   = useState('todos');
-  const visible = useMemo(() => {
-    let list=[...projects];
+
+  // Orden por etapa del pipeline (ganados primero, luego avanzados, prospectos al final)
+  const etapaRank = id => { const i = STATUSES.findIndex(s=>s.id===id); return i<0 ? 99 : i; };
+  // Ganados/avanzados primero → invertimos el rank para que 'cobrado/ganada' suban
+  const etapaOrder = id => {
+    const ganados = ['cobrado','facturado','entrega','contrato','ganada'];
+    const gi = ganados.indexOf(id);
+    if (gi >= 0) return gi; // 0..4 arriba del todo
+    return 10 + etapaRank(id); // el resto después, en orden de pipeline
+  };
+
+  const empresasUnicas = useMemo(()=>[...new Set(projects.map(p=>p.company).filter(Boolean))].sort(),[projects]);
+
+  const aplicarFiltros = (list) => {
     if(search){const q=search.toLowerCase();list=list.filter(p=>(p.name||'').toLowerCase().includes(q)||(p.dependencia||'').toLowerCase().includes(q)||(p.numLicitacion||'').toLowerCase().includes(q));}
-    if(grupo!=='todos')list=list.filter(p=>(GRUPOS[grupo]||[]).includes(p.status));
+    if(empresa!=='all')list=list.filter(p=>p.company===empresa);
     if(status!=='all')list=list.filter(p=>p.status===status);
     if(sort==='recent')list.sort((a,b)=>b.id>a.id?1:-1);
-    if(sort==='amount')list.sort((a,b)=>(b.montoEstimado||0)-(a.montoEstimado||0));
-    if(sort==='deadline')list.sort((a,b)=>(daysUntil(a.fechaFallo)??9999)-(daysUntil(b.fechaFallo)??9999));
+    else if(sort==='amount')list.sort((a,b)=>(b.montoEstimado||0)-(a.montoEstimado||0));
+    else if(sort==='deadline')list.sort((a,b)=>(daysUntil(a.fechaFallo)??9999)-(daysUntil(b.fechaFallo)??9999));
+    else if(sort==='etapa')list.sort((a,b)=>etapaOrder(a.status)-etapaOrder(b.status));
     return list;
-  },[projects,search,status,sort,grupo]);
+  };
+
+  // Activos (no cerrados) vs cerrados (perdida/cancelada)
+  const esCerrado = p => GRUPOS.cerradas.includes(p.status);
+  const visible = useMemo(() => {
+    let list=[...projects];
+    if(grupo!=='todos')list=list.filter(p=>(GRUPOS[grupo]||[]).includes(p.status));
+    return aplicarFiltros(list);
+  },[projects,search,status,empresa,sort,grupo]);
+
+  const activos  = useMemo(()=>aplicarFiltros(visible.filter(p=>!esCerrado(p))),[visible]);
+  const cerrados = useMemo(()=>aplicarFiltros(visible.filter(esCerrado)),[visible]);
 
   const grpCount = id => id==='todos' ? projects.length : projects.filter(p=>(GRUPOS[id]||[]).includes(p.status)).length;
   const kanbanCols = grupo==='todos' ? KANBAN_COLS : (GRUPOS[grupo]||KANBAN_COLS);
   const sumaVisible = visible.reduce((s,p)=>s+(p.montoEstimado||0),0);
+  const sumaGanados = projects.filter(p=>GRUPOS.nuestros.includes(p.status)).reduce((s,p)=>s+(p.montoEstimado||0),0);
 
   if(projects.length===0) return h('div', null,
     h('div', { style:{ display:'flex', justifyContent:'space-between', marginBottom:20 } },
@@ -58,56 +84,82 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate }) {
         h('button', { key:g[0], className: grupo===g[0]?'bp':'', onClick:()=>setGrupo(g[0]), style:{ fontSize:12, padding:'6px 14px' } }, g[1]+' ('+grpCount(g[0])+')')
       )
     ),
-    h('div', { style:{ fontSize:12, color:'var(--t2)', marginBottom:14 } },
-      'Suma de montos estimados: ', h('strong', { style:{ color:'var(--t1)' } }, fmt(sumaVisible)),
-      ' · ', visible.length, ' proyecto(s)'
+    h('div', { style:{ fontSize:12, color:'var(--t2)', marginBottom:14, display:'flex', gap:16, flexWrap:'wrap' } },
+      h('span', null, 'Pipeline visible: ', h('strong', { style:{ color:'var(--t1)' } }, fmt(sumaVisible)), ' · ', visible.length, ' proyecto(s)'),
+      sumaGanados>0 && h('span', null, '✅ Ganado/contratado: ', h('strong', { style:{ color:'#1D9E75' } }, fmt(sumaGanados))),
     ),
     h('div', { style:{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' } },
-      h('input', { value:search, onChange:e=>setSearch(e.target.value), placeholder:'Buscar...', style:{ maxWidth:220 } }),
-      h('select', { value:status, onChange:e=>setStatus(e.target.value), style:{ maxWidth:180 } },
+      h('input', { value:search, onChange:e=>setSearch(e.target.value), placeholder:'Buscar...', style:{ maxWidth:200 } }),
+      h('select', { value:empresa, onChange:e=>setEmpresa(e.target.value), style:{ maxWidth:200 } },
+        h('option', { value:'all' }, '🏢 Todas las empresas'),
+        empresasUnicas.map(c=>h('option',{key:c,value:c},c))
+      ),
+      h('select', { value:status, onChange:e=>setStatus(e.target.value), style:{ maxWidth:170 } },
         h('option', { value:'all' }, '— Todos los estados —'),
         STATUSES.map(s=>h('option',{key:s.id,value:s.id},s.label))
       ),
       h('select', { value:sort, onChange:e=>setSort(e.target.value), style:{ maxWidth:160 } },
+        h('option', { value:'etapa' }, 'Por etapa (ganados ↑)'),
         h('option', { value:'recent' }, 'Más recientes'),
         h('option', { value:'amount' }, 'Mayor monto'),
         h('option', { value:'deadline' }, 'Fallo próximo'),
       ),
+      (empresa!=='all'||status!=='all'||search) && h('button', { onClick:()=>{ setEmpresa('all'); setStatus('all'); setSearch(''); }, style:{ fontSize:12, padding:'5px 12px', color:'var(--t2)' } }, '✕ Limpiar filtros'),
+      h('div', { style:{ flex:1 } }),
       h('button', { className:view==='table'?'bp':'', onClick:()=>setView('table'), style:{ fontSize:12, padding:'5px 12px' } }, '≡ Tabla'),
       h('button', { className:view==='kanban'?'bp':'', onClick:()=>setView('kanban'), style:{ fontSize:12, padding:'5px 12px' } }, '⎌ Kanban'),
     ),
-    view==='table' && h('div', { className:'card' },
-      h('div', { style:{ overflowX:'auto' } },
-        h('table', { style:{ fontSize:13 } },
-          h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b3)' } },
-            ['PROYECTO','DEPENDENCIA','EMPRESA','MONTO','ESTADO','FALLO',''].map(hd=>h('th',{key:hd,style:{padding:'10px 8px',color:'var(--t3)',fontSize:11,fontWeight:600,letterSpacing:'.4px',textAlign:'left',borderBottom:'1px solid var(--b1)'}},hd))
-          )),
-          h('tbody', null, visible.map(p => {
-            const alF=alertLevel(p.fechaFallo);
-            const stRow=STATUSES.find(s=>s.id===p.status);
-            return h('tr', { key:p.id, style:{ borderBottom:'.5px solid var(--b3)', cursor:'pointer' }, onClick:()=>onNav('project_detail',p.id) },
-              h('td', { style:{ padding:'10px 6px', fontWeight:500, maxWidth:220 } },
-                h('div', { style:{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, p.name),
-                p.numLicitacion && h('div', { style:{ fontSize:11, color:'var(--t2)' } }, p.numLicitacion),
-              ),
-              h('td', { style:{ padding:'10px 6px', color:'var(--t2)', fontSize:12 } }, p.dependencia||'—'),
-              h('td', { style:{ padding:'10px 6px', fontSize:12, color:'var(--t2)' } }, p.company||'—'),
-              h('td', { style:{ padding:'10px 6px', fontWeight:500 } }, fmt(p.montoEstimado)),
-              h('td', { style:{ padding:'10px 6px' }, onClick:e=>e.stopPropagation() },
-                h('select', {
-                  value:p.status,
-                  onClick:e=>e.stopPropagation(),
-                  onChange:e=>{ e.stopPropagation(); onUpdate && onUpdate({...p, status:e.target.value}); },
-                  style:{ fontSize:12, fontWeight:600, padding:'4px 8px', borderRadius:'var(--r)', border:'1px solid '+(stRow?stRow.color:'var(--b1)'), background:stRow?stRow.bg:'var(--bg2)', color:stRow?stRow.tx:'var(--t1)', cursor:'pointer', maxWidth:170 }
-                }, STATUSES.map(s=>h('option',{key:s.id,value:s.id,style:{background:'#fff',color:'#18181b'}}, s.label)))
-              ),
-              h('td', { style:{ padding:'10px 6px', fontSize:12, color:alF==='r'?'var(--red)':alF==='y'?'var(--amber)':'var(--t2)' } }, p.fechaFallo||'—'),
-              h('td', { style:{ padding:'10px 6px' } }, h('button', { onClick:e=>{ e.stopPropagation(); onNav('project_detail',p.id); }, style:{ fontSize:11, padding:'3px 8px' } }, 'Abrir →')),
-            );
-          }))
-        )
-      )
-    ),
+    view==='table' && (() => {
+      const headerRow = h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b3)' } },
+        ['PROYECTO','DEPENDENCIA','EMPRESA','MONTO','ESTADO','FALLO',''].map(hd=>h('th',{key:hd,style:{padding:'10px 8px',color:'var(--t3)',fontSize:11,fontWeight:600,letterSpacing:'.4px',textAlign:'left',borderBottom:'1px solid var(--b1)'}},hd))
+      ));
+      const renderRow = p => {
+        const alF=alertLevel(p.fechaFallo);
+        const stRow=STATUSES.find(s=>s.id===p.status);
+        return h('tr', { key:p.id, style:{ borderBottom:'.5px solid var(--b3)', cursor:'pointer' }, onClick:()=>onNav('project_detail',p.id) },
+          h('td', { style:{ padding:'10px 6px', fontWeight:500, maxWidth:220 } },
+            h('div', { style:{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, p.name),
+            p.numLicitacion && h('div', { style:{ fontSize:11, color:'var(--t2)' } }, p.numLicitacion),
+          ),
+          h('td', { style:{ padding:'10px 6px', color:'var(--t2)', fontSize:12 } }, p.dependencia||'—'),
+          h('td', { style:{ padding:'10px 6px', fontSize:12, color:'var(--t2)' } }, p.company||'—'),
+          h('td', { style:{ padding:'10px 6px', fontWeight:500 } }, fmt(p.montoEstimado)),
+          h('td', { style:{ padding:'10px 6px' }, onClick:e=>e.stopPropagation() },
+            h('select', {
+              value:p.status,
+              onClick:e=>e.stopPropagation(),
+              onChange:e=>{ e.stopPropagation(); onUpdate && onUpdate({...p, status:e.target.value}); },
+              style:{ fontSize:12, fontWeight:600, padding:'4px 8px', borderRadius:'var(--r)', border:'1px solid '+(stRow?stRow.color:'var(--b1)'), background:stRow?stRow.bg:'var(--bg2)', color:stRow?stRow.tx:'var(--t1)', cursor:'pointer', maxWidth:170 }
+            }, STATUSES.map(s=>h('option',{key:s.id,value:s.id,style:{background:'#fff',color:'#18181b'}}, s.label)))
+          ),
+          h('td', { style:{ padding:'10px 6px', fontSize:12, color:alF==='r'?'var(--red)':alF==='y'?'var(--amber)':'var(--t2)' } }, p.fechaFallo||'—'),
+          h('td', { style:{ padding:'10px 6px' } }, h('button', { onClick:e=>{ e.stopPropagation(); onNav('project_detail',p.id); }, style:{ fontSize:11, padding:'3px 8px' } }, 'Abrir →')),
+        );
+      };
+      return h('div', null,
+        // Activos
+        h('div', { className:'card' },
+          h('div', { style:{ overflowX:'auto' } },
+            h('table', { style:{ fontSize:13 } }, headerRow,
+              h('tbody', null,
+                activos.length===0
+                  ? h('tr', null, h('td', { colSpan:7, style:{ padding:'16px 8px', color:'var(--t3)', fontSize:12 } }, 'No hay proyectos activos con estos filtros.'))
+                  : activos.map(renderRow)
+              )
+            )
+          )
+        ),
+        // Cerrados (perdidas/canceladas) — recuadro aparte abajo
+        cerrados.length>0 && h('div', { className:'card', style:{ marginTop:16, opacity:.85 } },
+          h('div', { style:{ fontSize:12, fontWeight:600, color:'var(--t2)', marginBottom:10, letterSpacing:'.3px' } }, '📁 Cerradas — perdidas y canceladas (',cerrados.length,')'),
+          h('div', { style:{ overflowX:'auto' } },
+            h('table', { style:{ fontSize:13 } }, headerRow,
+              h('tbody', null, cerrados.map(renderRow))
+            )
+          )
+        ),
+      );
+    })(),
     view==='kanban' && h('div', { style:{ overflowX:'auto' } },
       h('div', { style:{ display:'flex', gap:12, minWidth:'max-content', paddingBottom:12 } },
         kanbanCols.map(colId => {
