@@ -102,7 +102,7 @@
     }
 
     /* ── Base ──────────────────────────────────────────────── */
-    html { height: 100%; }
+    html { height: 100%; background: #ffffff; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
       color: var(--t1);
@@ -330,7 +330,8 @@
       border-top: 1px solid var(--b1);
       z-index: 200;
       padding-top: 8px;
-      padding-bottom: 8px;
+      /* El fondo de la barra llena también la franja del safe-area (barra de gestos) */
+      padding-bottom: calc(8px + env(safe-area-inset-bottom));
     }
     .mobile-nav-inner {
       display: flex;
