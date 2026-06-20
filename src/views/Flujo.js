@@ -60,11 +60,15 @@ const inRange = (f, a, b) => f && f >= a && f <= b;
 // Input numérico que SÍ se puede vaciar (no fuerza 0)
 function NumCell({ value, onChange, width=110, money=false, suffix='' }) {
   const [txt, setTxt] = useState(value === 0 || value == null ? '' : String(value));
-  // sincronizar si el valor externo cambia (recalcular)
-  const display = txt;
+  const [focus, setFocus] = useState(false);
+  // Editando: muestra el número crudo. Sin foco: muestra con separador de miles.
+  const fmtMiles = n => { const num = Number(n); return isNaN(num) ? '' : num.toLocaleString('es-MX'); };
+  const display = focus ? txt : (txt === '' ? '' : fmtMiles(txt));
   return h('input', {
     type:'text', inputMode:'numeric', value:display,
     placeholder:'0',
+    onFocus: () => setFocus(true),
+    onBlur:  () => setFocus(false),
     onChange:e => {
       const raw = e.target.value.replace(/[^0-9.]/g,'');
       setTxt(raw);
@@ -216,7 +220,7 @@ export default function Flujo({ project, onUpdate }) {
     // ── B. Proveedores ──
     h('div', { style:cardSt },
       secTitle('B','Proveedores — condiciones de pago', 'Edita costo, días de crédito y % de anticipo de cada proveedor.'),
-      h('div', { style:{ overflowX:'auto', margin:'0 -20px', padding:'0 20px' } },
+      h('div', { className:'tbl-scroll', style:{ overflowX:'auto' } },
         h('table', { style:{ width:'100%', borderCollapse:'collapse', minWidth:640 } },
           h('thead', null, h('tr', null,
             th('Bloque','left'), th('Proveedor','left'), th('Costo c/IVA'), th('Días créd.'), th('% Antic.'), th('Días antic.'),
@@ -247,7 +251,7 @@ export default function Flujo({ project, onUpdate }) {
     // ── C. Calendario de pagos ──
     fechaInicio && costoTotal > 0 && h('div', { style:cardSt },
       secTitle('C','Calendario de pagos', 'Fechas calculadas desde la fecha de inicio.'),
-      h('div', { style:{ overflowX:'auto', margin:'0 -20px', padding:'0 20px' } },
+      h('div', { className:'tbl-scroll', style:{ overflowX:'auto' } },
         h('table', { style:{ width:'100%', borderCollapse:'collapse', minWidth:620 } },
           h('thead', null, h('tr', null,
             th('Proveedor','left'), th('Costo'), th('Anticipo'), th('Fecha antic.'), th('Finiquito'), th('Fecha finiq.'),
@@ -269,7 +273,7 @@ export default function Flujo({ project, onUpdate }) {
     // ── D. Cronograma mensual ──
     meses.length>0 && costoTotal>0 && h('div', { style:cardSt },
       secTitle('D','Cronograma mensual — 6 meses', 'Salidas a proveedores vs entrada de cobranza del cliente.'),
-      h('div', { style:{ overflowX:'auto', margin:'0 -20px', padding:'0 20px' } },
+      h('div', { className:'tbl-scroll', style:{ overflowX:'auto' } },
         h('table', { style:{ width:'100%', borderCollapse:'collapse', minWidth:680 } },
           h('thead', null, h('tr', null,
             th('Concepto','left'), ...meses.map(m=>th(m.label)), th('Total'),

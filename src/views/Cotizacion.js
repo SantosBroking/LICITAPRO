@@ -342,7 +342,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
         ),
       ),
       cot.equipo.length===0 && h('div', { className:'card', style:{ textAlign:'center', padding:'30px', color:'var(--t2)', fontSize:13 } }, 'Sin equipo. Abre el catálogo arriba.'),
-      cot.equipo.length>0 && h('div', { className:'card', style:{ overflowX:'auto' } },
+      cot.equipo.length>0 && h('div', { className:'card' }, h('div', { className:'tbl-scroll' },
         h('table', { style:{ fontSize:12, minWidth:700 } },
           h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b3)' } },
             h('td', { style:{ padding:'6px 4px', color:'var(--t2)', fontSize:10, width:30 } }, 'Usar'),
@@ -385,7 +385,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
             );
           }))
         )
-      ),
+      )),
       h(NavButtons),
     ),
 
