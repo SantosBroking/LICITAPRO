@@ -220,7 +220,8 @@ export default function Flujo({ project, onUpdate }) {
     // ── B. Proveedores ──
     h('div', { style:cardSt },
       secTitle('B','Proveedores — condiciones de pago', 'Edita costo, días de crédito y % de anticipo de cada proveedor.'),
-      h('div', { className:'tbl-scroll', style:{ overflowX:'auto' } },
+      // Tabla (desktop)
+      h('div', { className:'tbl-scroll hide-mobile', style:{ overflowX:'auto' } },
         h('table', { style:{ width:'100%', borderCollapse:'collapse', minWidth:640 } },
           h('thead', null, h('tr', null,
             th('Bloque','left'), th('Proveedor','left'), th('Costo c/IVA'), th('Días créd.'), th('% Antic.'), th('Días antic.'),
@@ -245,6 +246,28 @@ export default function Flujo({ project, onUpdate }) {
             h('td', { colSpan:3 }),
           )),
         )
+      ),
+      // Tarjetas (móvil)
+      h('div', { className:'show-mobile', style:{ display:'none' } },
+        bloques.map(b => h('div', { key:b.id, style:{ padding:'12px 0', borderBottom:'.5px solid var(--b3)' } },
+          h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 } },
+            h('div', { style:{ fontSize:14, fontWeight:600 } }, h('span', { style:{ color:'var(--t3)', fontWeight:600, marginRight:8, fontSize:12 } }, b.id), b.nom),
+          ),
+          h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 } },
+            h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Costo c/IVA'),
+              h(NumCell, { value:b.costo, onChange:v=>setBloque(b.id,'costo',v), width:'100%', key:'mc'+b.id+recalcKey })),
+            h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Días crédito'),
+              h(NumCell, { value:b.diasCredito, onChange:v=>setBloque(b.id,'diasCredito',v), width:'100%', key:'mdc'+b.id+recalcKey })),
+            h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, '% Anticipo'),
+              h(NumCell, { value:b.pctAnticipo, onChange:v=>setBloque(b.id,'pctAnticipo',v), width:'100%', key:'mpa'+b.id+recalcKey })),
+            h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Días anticipo'),
+              h(NumCell, { value:b.diasAnticipo, onChange:v=>setBloque(b.id,'diasAnticipo',v), width:'100%', key:'mda'+b.id+recalcKey })),
+          ),
+        )),
+        h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', paddingTop:12, marginTop:4, borderTop:'1px solid var(--b1)' } },
+          h('span', { style:{ fontSize:13, fontWeight:700 } }, 'TOTAL'),
+          h('span', { style:{ fontSize:15, fontWeight:700, fontFamily:'tabular-nums' } }, fmt(costoTotal)),
+        ),
       ),
     ),
 
