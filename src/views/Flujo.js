@@ -75,7 +75,7 @@ function NumCell({ value, onChange, width=110, money=false, suffix='' }) {
       onChange(raw === '' ? 0 : Number(raw));
     },
     style:{
-      width, textAlign:'right', fontFamily:'tabular-nums', fontSize:13,
+      width, textAlign:'right', fontVariantNumeric:'tabular-nums', fontSize:13,
       padding:'7px 10px', border:'1px solid var(--b2)', borderRadius:8,
       background:'var(--bg1)', color:'var(--t1)',
     },
@@ -155,7 +155,7 @@ export default function Flujo({ project, onUpdate }) {
     sub && h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:2 } }, sub),
   );
   const th = (txt, align='right') => h('th', { style:{ padding:'8px 12px', fontSize:10, fontWeight:600, color:'var(--t3)', textAlign:align, letterSpacing:'.5px', textTransform:'uppercase', borderBottom:'1px solid var(--b2)', whiteSpace:'nowrap' } }, txt);
-  const tdR = (v, extra={}) => h('td', { style:{ padding:'9px 12px', textAlign:'right', fontFamily:'tabular-nums', fontSize:13, borderBottom:'1px solid var(--b1)', ...extra } }, v);
+  const tdR = (v, extra={}) => h('td', { style:{ padding:'9px 12px', textAlign:'right', fontVariantNumeric:'tabular-nums', fontSize:13, borderBottom:'1px solid var(--b1)', ...extra } }, v);
   const fmtC = v => v ? fmt(v) : h('span',{style:{color:'var(--t3)'}},'—');
 
   return h('div', null,
@@ -177,15 +177,15 @@ export default function Flujo({ project, onUpdate }) {
     h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:12, marginBottom:16 } },
       h('div', { style:{ ...cardSt, marginBottom:0, padding:16 } },
         h('div', { style:{ fontSize:10, color:'var(--t3)', textTransform:'uppercase', letterSpacing:'.5px', fontWeight:600, marginBottom:6 } }, 'Costo total proveedores'),
-        h('div', { style:{ fontSize:20, fontWeight:600, fontFamily:'tabular-nums' } }, fmt(costoTotal)),
+        h('div', { style:{ fontSize:20, fontWeight:600, fontVariantNumeric:'tabular-nums' } }, fmt(costoTotal)),
       ),
       h('div', { style:{ ...cardSt, marginBottom:0, padding:16 } },
         h('div', { style:{ fontSize:10, color:'var(--t3)', textTransform:'uppercase', letterSpacing:'.5px', fontWeight:600, marginBottom:6 } }, 'Total anticipos'),
-        h('div', { style:{ fontSize:20, fontWeight:600, fontFamily:'tabular-nums', color:'var(--amber)' } }, fmt(calendario.reduce((s,b)=>s+b.mtoAnticipo,0))),
+        h('div', { style:{ fontSize:20, fontWeight:600, fontVariantNumeric:'tabular-nums', color:'var(--amber)' } }, fmt(calendario.reduce((s,b)=>s+b.mtoAnticipo,0))),
       ),
       h('div', { style:{ ...cardSt, marginBottom:0, padding:16 } },
         h('div', { style:{ fontSize:10, color:'var(--t3)', textTransform:'uppercase', letterSpacing:'.5px', fontWeight:600, marginBottom:6 } }, 'Pico de inversión'),
-        h('div', { style:{ fontSize:20, fontWeight:600, fontFamily:'tabular-nums', color:picoInv<0?'var(--red)':'var(--green)' } }, picoInv<0?fmt(picoInv):'—'),
+        h('div', { style:{ fontSize:20, fontWeight:600, fontVariantNumeric:'tabular-nums', color:picoInv<0?'var(--red)':'var(--green)' } }, picoInv<0?fmt(picoInv):'—'),
       ),
     ),
 
@@ -242,7 +242,7 @@ export default function Flujo({ project, onUpdate }) {
           )),
           h('tfoot', null, h('tr', null,
             h('td', { colSpan:2, style:{ padding:'10px 12px', fontSize:12, fontWeight:700 } }, 'TOTAL'),
-            h('td', { style:{ padding:'10px 12px', textAlign:'right', fontWeight:700, fontFamily:'tabular-nums', fontSize:13 } }, fmt(costoTotal)),
+            h('td', { style:{ padding:'10px 12px', textAlign:'right', fontWeight:700, fontVariantNumeric:'tabular-nums', fontSize:13 } }, fmt(costoTotal)),
             h('td', { colSpan:3 }),
           )),
         )
@@ -266,7 +266,7 @@ export default function Flujo({ project, onUpdate }) {
         )),
         h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', paddingTop:12, marginTop:4, borderTop:'1px solid var(--b1)' } },
           h('span', { style:{ fontSize:13, fontWeight:700 } }, 'TOTAL'),
-          h('span', { style:{ fontSize:15, fontWeight:700, fontFamily:'tabular-nums' } }, fmt(costoTotal)),
+          h('span', { style:{ fontSize:15, fontWeight:700, fontVariantNumeric:'tabular-nums' } }, fmt(costoTotal)),
         ),
       ),
     ),
