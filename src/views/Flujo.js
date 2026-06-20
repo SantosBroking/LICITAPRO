@@ -3,8 +3,8 @@ import { h, useState, useMemo } from '../lib/core.js';
 import { fmt } from '../lib/utils.js';
 import { calcCotizacion } from '../lib/calc.js';
 
-const BLOQUES_DEFAULT = [
-  { id:'V',  nom:'Vehículo',                 diasCredito:60, pctAnticipo:50, diasAnticipo:0 },
+// Bloques de equipo (los de vehículo se generan dinámicamente por partida)
+const BLOQUES_EQUIPO = [
   { id:'1',  nom:'Imagen Institucional',      diasCredito:60, pctAnticipo:50, diasAnticipo:0 },
   { id:'2',  nom:'Fierros',                   diasCredito:60, pctAnticipo:50, diasAnticipo:0 },
   { id:'3',  nom:'Luces / Sirenas',           diasCredito:60, pctAnticipo:0,  diasAnticipo:0 },
@@ -24,8 +24,11 @@ const CAT_A_BLOQUE = { '01':'1','02':'2','03':'3','04':'4','05':'5','06':'6','07
 function costosDesdeCotz(cot = {}) {
   const { partidas = [], equipo = [], retornos = [], fianzas = [] } = cot;
   const c = {};
-  c['V'] = partidas.filter(p => p.activo && (p.cantidad||0) > 0)
-    .reduce((s,p) => s + (p.costoMSMS||0) * (p.cantidad||0), 0);
+  // Un bloque de vehículo POR PARTIDA activa (V1, V2, ...)
+  partidas.filter(p => p.activo && (p.cantidad||0) > 0).forEach(p => {
+    const pnum = (p.id||'').replace('P','');
+    c['V'+pnum] = (p.costoMSMS||0) * (p.cantidad||0);
+  });
   equipo.filter(e => e.usar !== false).forEach(e => {
     const bid = CAT_A_BLOQUE[(e.cat||'').slice(0,2)];
     if (!bid) return;
@@ -35,6 +38,19 @@ function costosDesdeCotz(cot = {}) {
   c['10'] = (retornos||[]).reduce((s,r) => s+(r.monto||0)*1.16, 0);
   c['11'] = (fianzas||[]).reduce((s,f) => s+(f.monto||0)*1.16, 0);
   return c;
+}
+
+// Construye la lista de bloques: un bloque de vehículo por partida + bloques de equipo fijos
+function construirBloques(cot = {}) {
+  const partidas = (cot.partidas||[]).filter(p => p.activo && (p.cantidad||0) > 0);
+  const bloquesVeh = partidas.length > 0
+    ? partidas.map(p => {
+        const pnum = (p.id||'').replace('P','');
+        const nombreVeh = [p.marca, p.modelo].filter(Boolean).join(' ') || ('Vehículo '+p.id);
+        return { id:'V'+pnum, nom:'🚗 '+p.id+' · '+nombreVeh, diasCredito:60, pctAnticipo:50, diasAnticipo:0 };
+      })
+    : [{ id:'V1', nom:'🚗 Vehículo', diasCredito:60, pctAnticipo:50, diasAnticipo:0 }];
+  return [...bloquesVeh, ...BLOQUES_EQUIPO];
 }
 
 function addDays(dateStr, days) {
@@ -93,15 +109,22 @@ export default function Flujo({ project, onUpdate }) {
 
   const costosCotz = costosDesdeCotz(cot);
   const hayCotizacion = Object.values(costosCotz).some(v => v > 0);
+  const bloquesActuales = construirBloques(cot);
 
   const [bloques, setBloques] = useState(() => {
-    const base = saved.bloques || BLOQUES_DEFAULT;
-    return base.map(b => ({ ...b, costo: saved.bloques ? (b.costo||0) : (costosCotz[b.id]||0) }));
+    // Combina la estructura actual (partidas de hoy) con lo guardado (condiciones que el usuario editó)
+    if (saved.bloques) {
+      return bloquesActuales.map(b => {
+        const prev = saved.bloques.find(x => x.id === b.id);
+        return prev ? { ...b, costo: prev.costo||0, diasCredito: prev.diasCredito, pctAnticipo: prev.pctAnticipo, diasAnticipo: prev.diasAnticipo } : { ...b, costo: costosCotz[b.id]||0 };
+      });
+    }
+    return bloquesActuales.map(b => ({ ...b, costo: costosCotz[b.id]||0 }));
   });
   const [recalcKey, setRecalcKey] = useState(0);
 
   const setBloque = (id, f, v) => setBloques(prev => prev.map(b => b.id===id ? {...b,[f]:v} : b));
-  const recalcular = () => { setBloques(prev => prev.map(b => ({...b, costo: costosCotz[b.id]||0}))); setRecalcKey(k=>k+1); };
+  const recalcular = () => { setBloques(construirBloques(cot).map(b => { const prev = bloques.find(x=>x.id===b.id); return {...b, costo: costosCotz[b.id]||0, diasCredito: prev?.diasCredito??b.diasCredito, pctAnticipo: prev?.pctAnticipo??b.pctAnticipo, diasAnticipo: prev?.diasAnticipo??b.diasAnticipo}; })); setRecalcKey(k=>k+1); };
   const guardar = () => onUpdate({ ...project, flujo:{ fechaInicio, diasCobranza, pctAntCliente, diasAntCliente, bloques } });
 
   // Calendario
