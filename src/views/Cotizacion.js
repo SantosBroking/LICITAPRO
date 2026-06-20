@@ -145,7 +145,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
 
   return h('div', null,
     // KPIs
-    h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:8, marginBottom:14 } },
+    h('div', { className:'kpi-strip', style:{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:8, marginBottom:14 } },
       kpis.map(k=>h('div', { key:k.label, className:'metric' },
         h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, k.label),
         h('div', { style:{ fontSize:14, fontWeight:500, color:k.color } }, k.val),

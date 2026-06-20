@@ -341,7 +341,7 @@ export function VehicleDetail({ vehicle, project, company, onNav, onUpdate, onDe
       ),
       h(ConfirmAction, { label:'Eliminar', dangerous:true, onConfirm:()=>{ onDelete(vehicle.id); if(logFn)logFn(user,'eliminó','vehículo',vehicle.id,vehicle.vin||''); onNav('project_detail',project.id); } }),
     ),
-    h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:20 } },
+    h('div', { className:'grid-4', style:{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:20 } },
       h(Metric, { label:'Precio total', value:fmt(vehicle.precioTotal), sub:'Unit: '+fmt(vehicle.precioUnitario)+' + IVA '+fmt(vehicle.iva) }),
       h(Metric, { label:'Estatus docs', value:vehicle.statusDocs||'—' }),
       h(Metric, { label:'Estatus entrega', value:vehicle.statusEntrega||'—', sc:vehicle.statusEntrega==='Entregado'?'var(--green)':undefined }),
