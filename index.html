@@ -102,7 +102,7 @@
     }
 
     /* ── Base ──────────────────────────────────────────────── */
-    html { height: 100%; background: var(--bg3); }
+    html { height: 100%; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
       color: var(--t1);
@@ -331,7 +331,6 @@
       z-index: 200;
       padding-top: 6px;
       padding-bottom: max(6px, env(safe-area-inset-bottom));
-      box-shadow: 0 env(safe-area-inset-bottom) 0 var(--bg1);
     }
     .mobile-nav-inner {
       display: flex;
@@ -406,7 +405,7 @@
         max-width: 100vw;
         width: 100vw;
         overflow-x: hidden;
-        padding-top: calc(52px + env(safe-area-inset-top));
+        padding-top: calc(64px + env(safe-area-inset-top));
         padding-left: 14px;
         padding-right: 14px;
         padding-bottom: calc(76px + env(safe-area-inset-bottom));
