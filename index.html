@@ -139,6 +139,16 @@
       accent-color: var(--accent);
     }
     input[type="range"] { padding: 0; border: none; background: transparent; box-shadow: none; }
+    /* iOS: input date se renderiza nativo y centra el texto; forzar alineación y altura */
+    input[type="date"] {
+      -webkit-appearance: none;
+      appearance: none;
+      text-align: left;
+      min-height: 38px;
+      line-height: normal;
+      display: block;
+    }
+    input[type="date"]::-webkit-date-and-time-value { text-align: left; }
     input:read-only { background: var(--bg2); color: var(--t2); }
     textarea { resize: vertical; min-height: 72px; }
 

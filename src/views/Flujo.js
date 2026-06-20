@@ -200,7 +200,7 @@ export default function Flujo({ project, onUpdate }) {
         h('div', null,
           h('label', { style:{ display:'block', fontSize:11, color:'var(--t2)', fontWeight:500, marginBottom:5 } }, 'Fecha de inicio (firma/contrato)'),
           h('input', { type:'date', value:fechaInicio||'', onChange:e=>setFechaInicio(e.target.value),
-            style:{ width:'100%', padding:'8px 10px', fontSize:13, border:'1px solid var(--b2)', borderRadius:8, background:'var(--bg1)' } }),
+            style:{ width:'100%', padding:'8px 10px', fontSize:13, border:'1px solid var(--b2)', borderRadius:8, background:'var(--bg1)', WebkitAppearance:'none', appearance:'none', minHeight:38, textAlign:'left', boxSizing:'border-box', fontFamily:'inherit', color:'var(--t1)' } }),
         ),
         h('div', null,
           h('label', { style:{ display:'block', fontSize:11, color:'var(--t2)', fontWeight:500, marginBottom:5 } }, 'Días cobranza del cliente'),
