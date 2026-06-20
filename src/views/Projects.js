@@ -88,7 +88,7 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate }) {
       h('span', null, 'Pipeline visible: ', h('strong', { style:{ color:'var(--t1)' } }, fmt(sumaVisible)), ' · ', visible.length, ' proyecto(s)'),
       sumaGanados>0 && h('span', null, '✅ Ganado/contratado: ', h('strong', { style:{ color:'#1D9E75' } }, fmt(sumaGanados))),
     ),
-    h('div', { style:{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' } },
+    h('div', { className:'filtros-bar', style:{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' } },
       h('input', { value:search, onChange:e=>setSearch(e.target.value), placeholder:'Buscar...', style:{ maxWidth:200 } }),
       h('select', { value:empresa, onChange:e=>setEmpresa(e.target.value), style:{ maxWidth:200 } },
         h('option', { value:'all' }, '🏢 Todas las empresas'),
@@ -105,17 +105,28 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate }) {
         h('option', { value:'deadline' }, 'Fallo próximo'),
       ),
       (empresa!=='all'||status!=='all'||search) && h('button', { onClick:()=>{ setEmpresa('all'); setStatus('all'); setSearch(''); }, style:{ fontSize:12, padding:'5px 12px', color:'var(--t2)' } }, '✕ Limpiar filtros'),
-      h('div', { style:{ flex:1 } }),
-      h('button', { className:view==='table'?'bp':'', onClick:()=>setView('table'), style:{ fontSize:12, padding:'5px 12px' } }, '≡ Tabla'),
-      h('button', { className:view==='kanban'?'bp':'', onClick:()=>setView('kanban'), style:{ fontSize:12, padding:'5px 12px' } }, '⎌ Kanban'),
+      h('div', { className:'filtro-spacer', style:{ flex:1 } }),
+      h('div', { className:'view-toggle', style:{ display:'flex', gap:8 } },
+        h('button', { className:view==='table'?'bp':'', onClick:()=>setView('table'), style:{ fontSize:12, padding:'5px 12px' } }, '≡ Tabla'),
+        h('button', { className:view==='kanban'?'bp':'', onClick:()=>setView('kanban'), style:{ fontSize:12, padding:'5px 12px' } }, '⎌ Kanban'),
+      ),
     ),
     view==='table' && (() => {
       const headerRow = h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b3)' } },
         ['PROYECTO','DEPENDENCIA','EMPRESA','MONTO','ESTADO','FALLO',''].map(hd=>h('th',{key:hd,style:{padding:'10px 8px',color:'var(--t3)',fontSize:11,fontWeight:600,letterSpacing:'.4px',textAlign:'left',borderBottom:'1px solid var(--b1)'}},hd))
       ));
+      const statusSelect = (p, maxW) => {
+        const stRow=STATUSES.find(s=>s.id===p.status);
+        return h('select', {
+          value:p.status,
+          onClick:e=>e.stopPropagation(),
+          onChange:e=>{ e.stopPropagation(); onUpdate && onUpdate({...p, status:e.target.value}); },
+          style:{ fontSize:12, fontWeight:600, padding:'4px 8px', borderRadius:'var(--r)', border:'1px solid '+(stRow?stRow.color:'var(--b1)'), background:stRow?stRow.bg:'var(--bg2)', color:stRow?stRow.tx:'var(--t1)', cursor:'pointer', maxWidth:maxW||170 }
+        }, STATUSES.map(s=>h('option',{key:s.id,value:s.id,style:{background:'#fff',color:'#18181b'}}, s.label)));
+      };
+      // Fila de tabla (desktop)
       const renderRow = p => {
         const alF=alertLevel(p.fechaFallo);
-        const stRow=STATUSES.find(s=>s.id===p.status);
         return h('tr', { key:p.id, style:{ borderBottom:'.5px solid var(--b3)', cursor:'pointer' }, onClick:()=>onNav('project_detail',p.id) },
           h('td', { style:{ padding:'10px 6px', fontWeight:500, maxWidth:220 } },
             h('div', { style:{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, p.name),
@@ -124,39 +135,59 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate }) {
           h('td', { style:{ padding:'10px 6px', color:'var(--t2)', fontSize:12 } }, p.dependencia||'—'),
           h('td', { style:{ padding:'10px 6px', fontSize:12, color:'var(--t2)' } }, p.company||'—'),
           h('td', { style:{ padding:'10px 6px', fontWeight:500 } }, fmt(p.montoEstimado)),
-          h('td', { style:{ padding:'10px 6px' }, onClick:e=>e.stopPropagation() },
-            h('select', {
-              value:p.status,
-              onClick:e=>e.stopPropagation(),
-              onChange:e=>{ e.stopPropagation(); onUpdate && onUpdate({...p, status:e.target.value}); },
-              style:{ fontSize:12, fontWeight:600, padding:'4px 8px', borderRadius:'var(--r)', border:'1px solid '+(stRow?stRow.color:'var(--b1)'), background:stRow?stRow.bg:'var(--bg2)', color:stRow?stRow.tx:'var(--t1)', cursor:'pointer', maxWidth:170 }
-            }, STATUSES.map(s=>h('option',{key:s.id,value:s.id,style:{background:'#fff',color:'#18181b'}}, s.label)))
-          ),
+          h('td', { style:{ padding:'10px 6px' }, onClick:e=>e.stopPropagation() }, statusSelect(p)),
           h('td', { style:{ padding:'10px 6px', fontSize:12, color:alF==='r'?'var(--red)':alF==='y'?'var(--amber)':'var(--t2)' } }, p.fechaFallo||'—'),
           h('td', { style:{ padding:'10px 6px' } }, h('button', { onClick:e=>{ e.stopPropagation(); onNav('project_detail',p.id); }, style:{ fontSize:11, padding:'3px 8px' } }, 'Abrir →')),
         );
       };
-      return h('div', null,
-        // Activos
-        h('div', { className:'card' },
-          h('div', { style:{ overflowX:'auto' } },
-            h('table', { style:{ fontSize:13 } }, headerRow,
-              h('tbody', null,
-                activos.length===0
-                  ? h('tr', null, h('td', { colSpan:7, style:{ padding:'16px 8px', color:'var(--t3)', fontSize:12 } }, 'No hay proyectos activos con estos filtros.'))
-                  : activos.map(renderRow)
-              )
-            )
+      // Tarjeta (móvil)
+      const renderCard = p => {
+        const alF=alertLevel(p.fechaFallo);
+        const dleft=daysUntil(p.fechaFallo);
+        return h('div', { key:p.id, onClick:()=>onNav('project_detail',p.id),
+          style:{ padding:'12px 0', borderBottom:'.5px solid var(--b3)', cursor:'pointer' } },
+          // Línea 1: nombre + monto
+          h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10, marginBottom:4 } },
+            h('div', { style:{ flex:1, minWidth:0 } },
+              h('div', { style:{ fontWeight:600, fontSize:14, lineHeight:1.25 } }, p.name),
+              p.numLicitacion && h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:1 } }, p.numLicitacion),
+            ),
+            h('div', { style:{ fontWeight:600, fontSize:14, whiteSpace:'nowrap', flexShrink:0 } }, fmt(p.montoEstimado)),
+          ),
+          // Línea 2: dependencia + empresa
+          (p.dependencia||p.company) && h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:8, display:'-webkit-box', WebkitLineClamp:1, WebkitBoxOrient:'vertical', overflow:'hidden' } },
+            [p.company, p.dependencia].filter(Boolean).join(' · ')
+          ),
+          // Línea 3: estado (editable) + fallo
+          h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }, onClick:e=>e.stopPropagation() },
+            statusSelect(p, 200),
+            p.fechaFallo
+              ? h('div', { style:{ fontSize:11, textAlign:'right', flexShrink:0, color:alF==='r'?'var(--red)':alF==='y'?'var(--amber)':'var(--t2)' } },
+                  h('div', { style:{ fontWeight:500 } }, 'Fallo ',p.fechaFallo),
+                  dleft!=null && dleft>=0 && h('div', { style:{ fontSize:10 } }, dleft===0?'¡Hoy!':'faltan '+dleft+'d'),
+                  dleft!=null && dleft<0 && h('div', { style:{ fontSize:10 } }, 'hace '+Math.abs(dleft)+'d'),
+                )
+              : h('div', { style:{ fontSize:11, color:'var(--t3)' } }, 'Sin fecha'),
+          ),
+        );
+      };
+      const tablaCard = (lista, emptyMsg) => h('div', null,
+        // Tabla desktop
+        h('div', { className:'hide-mobile', style:{ overflowX:'auto' } },
+          h('table', { style:{ fontSize:13 } }, headerRow,
+            h('tbody', null, lista.length===0 ? h('tr', null, h('td', { colSpan:7, style:{ padding:'16px 8px', color:'var(--t3)', fontSize:12 } }, emptyMsg)) : lista.map(renderRow))
           )
         ),
-        // Cerrados (perdidas/canceladas) — recuadro aparte abajo
+        // Tarjetas móvil
+        h('div', { className:'show-mobile', style:{ display:'none' } },
+          lista.length===0 ? h('div', { style:{ padding:'16px 0', color:'var(--t3)', fontSize:12 } }, emptyMsg) : lista.map(renderCard)
+        ),
+      );
+      return h('div', null,
+        h('div', { className:'card' }, tablaCard(activos, 'No hay proyectos activos con estos filtros.')),
         cerrados.length>0 && h('div', { className:'card', style:{ marginTop:16, opacity:.85 } },
           h('div', { style:{ fontSize:12, fontWeight:600, color:'var(--t2)', marginBottom:10, letterSpacing:'.3px' } }, '📁 Cerradas — perdidas y canceladas (',cerrados.length,')'),
-          h('div', { style:{ overflowX:'auto' } },
-            h('table', { style:{ fontSize:13 } }, headerRow,
-              h('tbody', null, cerrados.map(renderRow))
-            )
-          )
+          tablaCard(cerrados, ''),
         ),
       );
     })(),

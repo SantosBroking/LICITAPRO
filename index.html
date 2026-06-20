@@ -439,6 +439,14 @@
       .mob-2col  { grid-template-columns: repeat(2, 1fr) !important; }
       .show-mobile { display: flex !important; flex-direction: column; }
 
+      /* Filtros apilados verticalmente para que quepan completos */
+      .filtros-bar { flex-direction: column !important; }
+      .filtros-bar > * { width: 100% !important; max-width: 100% !important; box-sizing: border-box; }
+      .filtros-bar select, .filtros-bar input { width: 100% !important; max-width: 100% !important; box-sizing: border-box; }
+      .filtros-bar .filtro-spacer { display: none !important; }
+      .filtros-bar .view-toggle { display: flex; gap: 8px; }
+      .filtros-bar .view-toggle button { flex: 1; }
+
       /* Botones un poco más altos para tocar mejor */
       button { padding: 9px 14px; }
       button.tab { padding: 8px 11px; }
