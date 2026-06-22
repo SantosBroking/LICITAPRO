@@ -108,6 +108,7 @@ function NumCell({ value, onChange, width=110, money=false, suffix='' }) {
 export default function Flujo({ project, onUpdate }) {
   const saved = project.flujo || {};
   const cot   = project.cotizacion || {};
+  const iniContrato = saved.fechaInicio || project.fechaContrato || '';
 
   const [fechaInicio,    setFechaInicio]    = useState(saved.fechaInicio    || project.fechaContrato || '');
   const [diasCobranza,   setDiasCobranza]   = useState(saved.diasCobranza   ?? 75);
@@ -128,14 +129,15 @@ export default function Flujo({ project, onUpdate }) {
         diasCredito:  prev ? prev.diasCredito  : b.diasCredito,
         pctAnticipo:  prev ? prev.pctAnticipo  : b.pctAnticipo,
         diasAnticipo: prev ? prev.diasAnticipo : b.diasAnticipo,
-        fechaAnticipoManual: prev ? prev.fechaAnticipoManual : (b.fechaAnticipoManual||''),
+        fechaAnticipoManual: prev ? (prev.fechaAnticipoManual||'') : (b.fechaAnticipoManual || iniContrato || ''),
       };
     });
   });
   const [recalcKey, setRecalcKey] = useState(0);
+  const [vistaCron, setVistaCron] = useState('mes');
 
   const setBloque = (id, f, v) => setBloques(prev => prev.map(b => b.id===id ? {...b,[f]:v} : b));
-  const recalcular = () => { setBloques(construirBloques(cot).map(b => { const prev = bloques.find(x=>x.id===b.id); return {...b, costo: costosCotz[b.id]||0, diasCredito: prev?.diasCredito??b.diasCredito, pctAnticipo: prev?.pctAnticipo??b.pctAnticipo, diasAnticipo: prev?.diasAnticipo??b.diasAnticipo, fechaAnticipoManual: prev?.fechaAnticipoManual??(b.fechaAnticipoManual||'')}; })); setRecalcKey(k=>k+1); };
+  const recalcular = () => { setBloques(construirBloques(cot).map(b => { const prev = bloques.find(x=>x.id===b.id); return {...b, costo: costosCotz[b.id]||0, diasCredito: prev?.diasCredito??b.diasCredito, pctAnticipo: prev?.pctAnticipo??b.pctAnticipo, diasAnticipo: prev?.diasAnticipo??b.diasAnticipo, fechaAnticipoManual: (prev?.fechaAnticipoManual)||(b.fechaAnticipoManual||iniContrato||'')}; })); setRecalcKey(k=>k+1); };
 
   // Mantener los costos sincronizados con la cotización en vivo (sin perder las condiciones que el usuario editó)
   const costosFirma = JSON.stringify(costosDesdeCotz(cot));
@@ -150,7 +152,7 @@ export default function Flujo({ project, onUpdate }) {
         diasCredito:  ant ? ant.diasCredito  : b.diasCredito,
         pctAnticipo:  ant ? ant.pctAnticipo  : b.pctAnticipo,
         diasAnticipo: ant ? ant.diasAnticipo : b.diasAnticipo,
-        fechaAnticipoManual: ant ? ant.fechaAnticipoManual : (b.fechaAnticipoManual||''),
+        fechaAnticipoManual: ant ? (ant.fechaAnticipoManual||'') : (b.fechaAnticipoManual || fechaInicio || ''),
       };
     }));
     setRecalcKey(k => k + 1);
@@ -171,9 +173,23 @@ export default function Flujo({ project, onUpdate }) {
 
   const costoTotal = bloques.reduce((s,b) => s+(b.costo||0), 0);
 
-  // Cronograma 6 meses
+  // Cronograma: por mes (6 meses) o por semana (12 semanas)
   const meses = useMemo(() => {
     if (!fechaInicio) return [];
+    if (vistaCron === 'semana') {
+      // 12 semanas desde la fecha de inicio
+      return Array.from({length:12}, (_,i) => {
+        const desde = addDays(fechaInicio, i*7);
+        const hasta = addDays(fechaInicio, i*7 + 6);
+        const d = new Date(desde+'T12:00:00');
+        return {
+          label: 'Sem '+(i+1)+' · '+d.toLocaleDateString('es-MX',{day:'2-digit',month:'short'}),
+          desde, hasta,
+          anticipos:  calendario.filter(b=>inRange(b.fechaAnticipo, desde,hasta)).reduce((s,b)=>s+b.mtoAnticipo,0),
+          finiquitos: calendario.filter(b=>inRange(b.fechaFiniquito,desde,hasta)).reduce((s,b)=>s+b.mtoFiniquito,0),
+        };
+      }).map(m => ({...m, salidas:m.anticipos+m.finiquitos}));
+    }
     return Array.from({length:6}, (_,i) => {
       const desde = i===0 ? fechaInicio : startOfMonthPlus(fechaInicio, i);
       const hasta = endOfMonth(fechaInicio, i);
@@ -184,7 +200,7 @@ export default function Flujo({ project, onUpdate }) {
         finiquitos: calendario.filter(b=>inRange(b.fechaFiniquito,desde,hasta)).reduce((s,b)=>s+b.mtoFiniquito,0),
       };
     }).map(m => ({...m, salidas:m.anticipos+m.finiquitos}));
-  }, [calendario, fechaInicio]);
+  }, [calendario, fechaInicio, vistaCron]);
 
   const ventaTotal = costoTotal * 1.2;
   const cobros = useMemo(() => meses.map(m => {
@@ -349,9 +365,21 @@ export default function Flujo({ project, onUpdate }) {
       ),
     ),
 
-    // ── D. Cronograma mensual ──
+    // ── D. Cronograma ──
     meses.length>0 && costoTotal>0 && h('div', { style:cardSt },
-      secTitle('D','Cronograma mensual — 6 meses', 'Salidas a proveedores vs entrada de cobranza del cliente.'),
+      h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:10, marginBottom:14 } },
+        h('div', null,
+          h('div', { style:{ fontSize:14, fontWeight:600 } }, 'D. Cronograma '+(vistaCron==='semana'?'semanal — 12 semanas':'mensual — 6 meses')),
+          h('div', { style:{ fontSize:11, color:'var(--t2)', marginTop:2 } }, 'Salidas a proveedores vs entrada de cobranza del cliente.'),
+        ),
+        h('div', { style:{ display:'flex', gap:4, background:'var(--bg2)', borderRadius:'var(--r)', padding:3 } },
+          ['mes','semana'].map(v => h('button', {
+            key:v, onClick:()=>setVistaCron(v),
+            style:{ fontSize:12, padding:'5px 14px', borderRadius:'calc(var(--r) - 2px)', border:'none', cursor:'pointer',
+              background: vistaCron===v ? 'var(--t1)' : 'transparent', color: vistaCron===v ? 'var(--bg1)' : 'var(--t2)', fontWeight: vistaCron===v?600:400 }
+          }, v==='mes'?'Mensual':'Semanal'))
+        ),
+      ),
       h('div', { className:'tbl-scroll', style:{ overflowX:'auto' } },
         h('table', { style:{ width:'100%', borderCollapse:'collapse', minWidth:680 } },
           h('thead', null, h('tr', null,
