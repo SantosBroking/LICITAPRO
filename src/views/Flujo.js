@@ -128,13 +128,14 @@ export default function Flujo({ project, onUpdate }) {
         diasCredito:  prev ? prev.diasCredito  : b.diasCredito,
         pctAnticipo:  prev ? prev.pctAnticipo  : b.pctAnticipo,
         diasAnticipo: prev ? prev.diasAnticipo : b.diasAnticipo,
+        fechaAnticipoManual: prev ? prev.fechaAnticipoManual : (b.fechaAnticipoManual||''),
       };
     });
   });
   const [recalcKey, setRecalcKey] = useState(0);
 
   const setBloque = (id, f, v) => setBloques(prev => prev.map(b => b.id===id ? {...b,[f]:v} : b));
-  const recalcular = () => { setBloques(construirBloques(cot).map(b => { const prev = bloques.find(x=>x.id===b.id); return {...b, costo: costosCotz[b.id]||0, diasCredito: prev?.diasCredito??b.diasCredito, pctAnticipo: prev?.pctAnticipo??b.pctAnticipo, diasAnticipo: prev?.diasAnticipo??b.diasAnticipo}; })); setRecalcKey(k=>k+1); };
+  const recalcular = () => { setBloques(construirBloques(cot).map(b => { const prev = bloques.find(x=>x.id===b.id); return {...b, costo: costosCotz[b.id]||0, diasCredito: prev?.diasCredito??b.diasCredito, pctAnticipo: prev?.pctAnticipo??b.pctAnticipo, diasAnticipo: prev?.diasAnticipo??b.diasAnticipo, fechaAnticipoManual: prev?.fechaAnticipoManual??(b.fechaAnticipoManual||'')}; })); setRecalcKey(k=>k+1); };
 
   // Mantener los costos sincronizados con la cotización en vivo (sin perder las condiciones que el usuario editó)
   const costosFirma = JSON.stringify(costosDesdeCotz(cot));
@@ -149,6 +150,7 @@ export default function Flujo({ project, onUpdate }) {
         diasCredito:  ant ? ant.diasCredito  : b.diasCredito,
         pctAnticipo:  ant ? ant.pctAnticipo  : b.pctAnticipo,
         diasAnticipo: ant ? ant.diasAnticipo : b.diasAnticipo,
+        fechaAnticipoManual: ant ? ant.fechaAnticipoManual : (b.fechaAnticipoManual||''),
       };
     }));
     setRecalcKey(k => k + 1);
@@ -161,7 +163,8 @@ export default function Flujo({ project, onUpdate }) {
     const mtoFiniquito = (b.costo||0) - mtoAnticipo;
     return {
       ...b, mtoAnticipo, mtoFiniquito,
-      fechaAnticipo:  fechaInicio ? addDays(fechaInicio, b.diasAnticipo) : null,
+      // Si hay una fecha manual elegida, se usa esa; si no, se calcula desde la fecha de inicio
+      fechaAnticipo:  b.fechaAnticipoManual ? b.fechaAnticipoManual : (fechaInicio ? addDays(fechaInicio, b.diasAnticipo) : null),
       fechaFiniquito: fechaInicio ? addDays(fechaInicio, b.diasCredito)  : null,
     };
   }), [bloques, fechaInicio]);
@@ -275,7 +278,7 @@ export default function Flujo({ project, onUpdate }) {
       h('div', { className:'tbl-scroll hide-mobile', style:{ overflowX:'auto' } },
         h('table', { style:{ width:'100%', borderCollapse:'collapse', minWidth:640 } },
           h('thead', null, h('tr', null,
-            th('Bloque','left'), th('Proveedor','left'), th('Costo c/IVA'), th('Días créd.'), th('% Antic.'), th('Días antic.'),
+            th('Bloque','left'), th('Proveedor','left'), th('Costo c/IVA'), th('Días créd.'), th('% Antic.'), th('Fecha antic.'),
           )),
           h('tbody', null, bloques.map((b,idx) =>
             h('tr', { key:b.id, style:{ background:idx%2?'var(--bg2)':'transparent' } },
@@ -288,7 +291,8 @@ export default function Flujo({ project, onUpdate }) {
               h('td', { style:{ padding:'5px 12px', textAlign:'right', borderBottom:'1px solid var(--b1)' } },
                 h(NumCell, { value:b.pctAnticipo, onChange:v=>setBloque(b.id,'pctAnticipo',v), width:56, key:'pa'+b.id+recalcKey })),
               h('td', { style:{ padding:'5px 12px', textAlign:'right', borderBottom:'1px solid var(--b1)' } },
-                h(NumCell, { value:b.diasAnticipo, onChange:v=>setBloque(b.id,'diasAnticipo',v), width:64, key:'da'+b.id+recalcKey })),
+                h('input', { type:'date', value:b.fechaAnticipoManual||'', onChange:e=>setBloque(b.id,'fechaAnticipoManual',e.target.value),
+                  style:{ width:130, fontSize:12, padding:'6px 8px', border:'1px solid var(--b2)', borderRadius:8, background:'var(--bg1)', WebkitAppearance:'none', appearance:'none', textAlign:'left', color:'var(--t1)' }, key:'da'+b.id+recalcKey })),
             )
           )),
           h('tfoot', null, h('tr', null,
@@ -311,8 +315,9 @@ export default function Flujo({ project, onUpdate }) {
               h(NumCell, { value:b.diasCredito, onChange:v=>setBloque(b.id,'diasCredito',v), width:'100%', key:'mdc'+b.id+recalcKey })),
             h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, '% Anticipo'),
               h(NumCell, { value:b.pctAnticipo, onChange:v=>setBloque(b.id,'pctAnticipo',v), width:'100%', key:'mpa'+b.id+recalcKey })),
-            h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Días anticipo'),
-              h(NumCell, { value:b.diasAnticipo, onChange:v=>setBloque(b.id,'diasAnticipo',v), width:'100%', key:'mda'+b.id+recalcKey })),
+            h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Fecha anticipo'),
+              h('input', { type:'date', value:b.fechaAnticipoManual||'', onChange:e=>setBloque(b.id,'fechaAnticipoManual',e.target.value),
+                style:{ width:'100%', fontSize:12, padding:'6px 8px', border:'1px solid var(--b2)', borderRadius:8, background:'var(--bg1)', WebkitAppearance:'none', appearance:'none', textAlign:'left', color:'var(--t1)', boxSizing:'border-box' }, key:'mda'+b.id+recalcKey })),
           ),
         )),
         h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', paddingTop:12, marginTop:4, borderTop:'1px solid var(--b1)' } },
