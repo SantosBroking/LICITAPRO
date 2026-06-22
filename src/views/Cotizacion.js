@@ -42,7 +42,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
   const [newProdForm, setNewProdForm] = useState(null);
 
   const yr = new Date().getFullYear();
-  const makeP = (id,activo) => ({id,activo,tipo:'',marca:'',modelo:'',ano:yr,version:'',cantidad:0,precioLista:0,costoMSMS:0,modoPrecio:'Utilidad deseada $',techo:0,utilidadDeseada:0,utilidadPct:0});
+  const makeP = (id,activo) => ({id,activo,tipo:'',marca:'',modelo:'',ano:yr,version:'',color:'',cantidad:0,precioLista:0,costoMSMS:0,modoPrecio:'Utilidad deseada $',techo:0,utilidadDeseada:0,utilidadPct:0});
 
   const cot = useMemo(()=>{
     const c=project.cotizacion||{};
@@ -218,6 +218,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
             h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Modelo'), h('input', { value:p.modelo||'', onChange:e=>updPartida(p.id,'modelo',e.target.value), style:{ fontSize:12 } })),
             h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Año'), h('input', { type:'number', value:p.ano||'', onChange:e=>updPartida(p.id,'ano',Number(e.target.value)), style:{ fontSize:12 } })),
             h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Versión'), h('input', { value:p.version||'', onChange:e=>updPartida(p.id,'version',e.target.value), style:{ fontSize:12 } })),
+            h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Color'), h('input', { value:p.color||'', onChange:e=>updPartida(p.id,'color',e.target.value), style:{ fontSize:12 }, placeholder:'Ej: Blanco' })),
           ),
           h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(120px, 1fr))', gap:8 } },
             h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Cantidad'), h(NumInput, { value:p.cantidad, onChange:v=>updPartida(p.id,'cantidad',v), style:{ fontSize:13, padding:'6px 8px', fontWeight:500 } })),

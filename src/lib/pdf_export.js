@@ -608,10 +608,11 @@ export function printOrdenCompra({ project, partidas, condiciones, folio: folioP
     const puSIVA = puCIVA / (1 + IVA);        // precio s/IVA para desglosar
     const subCIVA = puCIVA * qty;
     const veh = [p.marca, p.modelo, p.version, p.ano].filter(Boolean).join(' ');
+    const colorTxt = p.color ? ` <span style="color:#6b6862">— Color: ${esc(p.color)}</span>` : '';
     return `
       <tr>
         <td style="font-size:11px;font-weight:500">${esc(p.tipo||'')}</td>
-        <td style="font-size:11px">${esc(veh)}</td>
+        <td style="font-size:11px">${esc(veh)}${colorTxt}</td>
         <td style="text-align:center;font-weight:600">${qty}</td>
         <td style="text-align:right">${fmt(puSIVA)}</td>
         <td style="text-align:right;font-weight:600">${fmt(subCIVA)}</td>
