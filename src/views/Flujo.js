@@ -1,5 +1,5 @@
 // Flujo.js — Calendario de Pagos a Proveedores (rediseñado)
-import { h, useState, useMemo } from '../lib/core.js';
+import { h, useState, useMemo, useEffect } from '../lib/core.js';
 import { fmt } from '../lib/utils.js';
 import { calcCotizacion } from '../lib/calc.js';
 
@@ -112,19 +112,40 @@ export default function Flujo({ project, onUpdate }) {
   const bloquesActuales = construirBloques(cot);
 
   const [bloques, setBloques] = useState(() => {
-    // Combina la estructura actual (partidas de hoy) con lo guardado (condiciones que el usuario editó)
-    if (saved.bloques) {
-      return bloquesActuales.map(b => {
-        const prev = saved.bloques.find(x => x.id === b.id);
-        return prev ? { ...b, costo: prev.costo||0, diasCredito: prev.diasCredito, pctAnticipo: prev.pctAnticipo, diasAnticipo: prev.diasAnticipo } : { ...b, costo: costosCotz[b.id]||0 };
-      });
-    }
-    return bloquesActuales.map(b => ({ ...b, costo: costosCotz[b.id]||0 }));
+    // El COSTO siempre se toma de la cotización (en vivo). Solo las condiciones (días, %) se recuerdan de lo guardado.
+    return bloquesActuales.map(b => {
+      const prev = saved.bloques ? saved.bloques.find(x => x.id === b.id) : null;
+      return {
+        ...b,
+        costo: costosCotz[b.id] || 0,
+        diasCredito:  prev ? prev.diasCredito  : b.diasCredito,
+        pctAnticipo:  prev ? prev.pctAnticipo  : b.pctAnticipo,
+        diasAnticipo: prev ? prev.diasAnticipo : b.diasAnticipo,
+      };
+    });
   });
   const [recalcKey, setRecalcKey] = useState(0);
 
   const setBloque = (id, f, v) => setBloques(prev => prev.map(b => b.id===id ? {...b,[f]:v} : b));
   const recalcular = () => { setBloques(construirBloques(cot).map(b => { const prev = bloques.find(x=>x.id===b.id); return {...b, costo: costosCotz[b.id]||0, diasCredito: prev?.diasCredito??b.diasCredito, pctAnticipo: prev?.pctAnticipo??b.pctAnticipo, diasAnticipo: prev?.diasAnticipo??b.diasAnticipo}; })); setRecalcKey(k=>k+1); };
+
+  // Mantener los costos sincronizados con la cotización en vivo (sin perder las condiciones que el usuario editó)
+  const costosFirma = JSON.stringify(costosDesdeCotz(cot));
+  useEffect(() => {
+    const nuevosCostos = costosDesdeCotz(cot);
+    const estructura = construirBloques(cot);
+    setBloques(prev => estructura.map(b => {
+      const ant = prev.find(x => x.id === b.id);
+      return {
+        ...b,
+        costo: nuevosCostos[b.id] || 0,
+        diasCredito:  ant ? ant.diasCredito  : b.diasCredito,
+        pctAnticipo:  ant ? ant.pctAnticipo  : b.pctAnticipo,
+        diasAnticipo: ant ? ant.diasAnticipo : b.diasAnticipo,
+      };
+    }));
+    setRecalcKey(k => k + 1);
+  }, [costosFirma]);
   const guardar = () => onUpdate({ ...project, flujo:{ fechaInicio, diasCobranza, pctAntCliente, diasAntCliente, bloques } });
 
   // Calendario
