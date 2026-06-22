@@ -24,16 +24,23 @@ const CAT_A_BLOQUE = { '01':'1','02':'2','03':'3','04':'4','05':'5','06':'6','07
 function costosDesdeCotz(cot = {}) {
   const { partidas = [], equipo = [], retornos = [], fianzas = [] } = cot;
   const c = {};
+  const activas = partidas.filter(p => p.activo && (p.cantidad||0) > 0);
   // Un bloque de vehículo POR PARTIDA activa (V1, V2, ...)
-  partidas.filter(p => p.activo && (p.cantidad||0) > 0).forEach(p => {
+  activas.forEach(p => {
     const pnum = (p.id||'').replace('P','');
     c['V'+pnum] = (p.costoMSMS||0) * (p.cantidad||0);
   });
+  // Equipo: costoConIVA × cantidad-en-la-partida × unidades-de-la-partida (igual que la corrida)
   equipo.filter(e => e.usar !== false).forEach(e => {
     const bid = CAT_A_BLOQUE[(e.cat||'').slice(0,2)];
     if (!bid) return;
-    const qty = (e.cnts||[]).reduce((s,q) => s+(q||0), 0);
-    c[bid] = (c[bid]||0) + (e.costoConIVA||0) * qty;
+    let totalCIVA = 0;
+    activas.forEach(p => {
+      const pi = parseInt((p.id||'').replace('P','')) - 1;
+      const cnt = (e.cnts && e.cnts[pi] != null) ? Number(e.cnts[pi]) : 0;
+      totalCIVA += (e.costoConIVA||0) * cnt * (p.cantidad||0);
+    });
+    c[bid] = (c[bid]||0) + totalCIVA;
   });
   c['10'] = (retornos||[]).reduce((s,r) => s+(r.monto||0)*1.16, 0);
   c['11'] = (fianzas||[]).reduce((s,f) => s+(f.monto||0)*1.16, 0);
