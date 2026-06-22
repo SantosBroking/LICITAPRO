@@ -164,11 +164,13 @@ export default function Flujo({ project, onUpdate }) {
   const calendario = useMemo(() => bloques.map(b => {
     const mtoAnticipo  = (b.costo||0) * ((b.pctAnticipo||0)/100);
     const mtoFiniquito = (b.costo||0) - mtoAnticipo;
+    // Fecha efectiva de arranque del proveedor: la fecha manual elegida, o fecha de inicio + días de anticipo
+    const fechaArranque = b.fechaAnticipoManual ? b.fechaAnticipoManual : (fechaInicio ? addDays(fechaInicio, b.diasAnticipo) : null);
     return {
       ...b, mtoAnticipo, mtoFiniquito,
-      // Si hay una fecha manual elegida, se usa esa; si no, se calcula desde la fecha de inicio
-      fechaAnticipo:  b.fechaAnticipoManual ? b.fechaAnticipoManual : (fechaInicio ? addDays(fechaInicio, b.diasAnticipo) : null),
-      fechaFiniquito: fechaInicio ? addDays(fechaInicio, b.diasCredito)  : null,
+      fechaAnticipo:  fechaArranque,
+      // El finiquito se cuenta desde la fecha de arranque (anticipo) + días de crédito
+      fechaFiniquito: fechaArranque ? addDays(fechaArranque, b.diasCredito||0) : (fechaInicio ? addDays(fechaInicio, b.diasCredito) : null),
     };
   }), [bloques, fechaInicio]);
 
