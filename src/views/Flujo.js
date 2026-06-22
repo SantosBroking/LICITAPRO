@@ -176,11 +176,19 @@ export default function Flujo({ project, onUpdate }) {
   // Cronograma: por mes (6 meses) o por semana (12 semanas)
   const meses = useMemo(() => {
     if (!fechaInicio) return [];
+    // El cronograma debe empezar en la fecha más temprana de todos los eventos (anticipos manuales incluidos)
+    const todasFechas = [fechaInicio];
+    calendario.forEach(b => { if (b.fechaAnticipo) todasFechas.push(b.fechaAnticipo); if (b.fechaFiniquito) todasFechas.push(b.fechaFiniquito); });
+    const fechaMin = todasFechas.filter(Boolean).sort()[0] || fechaInicio;
+
     if (vistaCron === 'semana') {
-      // 12 semanas desde la fecha de inicio
-      return Array.from({length:12}, (_,i) => {
-        const desde = addDays(fechaInicio, i*7);
-        const hasta = addDays(fechaInicio, i*7 + 6);
+      // Semanas desde la fecha más temprana; alinear al lunes de esa semana
+      const base = new Date(fechaMin + 'T12:00:00');
+      const diaSem = (base.getDay() + 6) % 7; // 0 = lunes
+      const inicioSemana = addDays(fechaMin, -diaSem);
+      return Array.from({length:14}, (_,i) => {
+        const desde = addDays(inicioSemana, i*7);
+        const hasta = addDays(inicioSemana, i*7 + 6);
         const d = new Date(desde+'T12:00:00');
         return {
           label: 'Sem '+(i+1)+' · '+d.toLocaleDateString('es-MX',{day:'2-digit',month:'short'}),
@@ -190,9 +198,9 @@ export default function Flujo({ project, onUpdate }) {
         };
       }).map(m => ({...m, salidas:m.anticipos+m.finiquitos}));
     }
-    return Array.from({length:6}, (_,i) => {
-      const desde = i===0 ? fechaInicio : startOfMonthPlus(fechaInicio, i);
-      const hasta = endOfMonth(fechaInicio, i);
+    return Array.from({length:7}, (_,i) => {
+      const desde = i===0 ? fechaMin : startOfMonthPlus(fechaMin, i);
+      const hasta = endOfMonth(fechaMin, i);
       return {
         label: new Date(hasta+'T12:00:00').toLocaleDateString('es-MX',{month:'short',year:'2-digit'}),
         desde, hasta,
