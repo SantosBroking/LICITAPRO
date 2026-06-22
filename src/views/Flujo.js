@@ -135,6 +135,7 @@ export default function Flujo({ project, onUpdate }) {
   });
   const [recalcKey, setRecalcKey] = useState(0);
   const [vistaCron, setVistaCron] = useState('mes');
+  const [expandAnt, setExpandAnt] = useState(false);
 
   const setBloque = (id, f, v) => setBloques(prev => prev.map(b => b.id===id ? {...b,[f]:v} : b));
   const recalcular = () => { setBloques(construirBloques(cot).map(b => { const prev = bloques.find(x=>x.id===b.id); return {...b, costo: costosCotz[b.id]||0, diasCredito: prev?.diasCredito??b.diasCredito, pctAnticipo: prev?.pctAnticipo??b.pctAnticipo, diasAnticipo: prev?.diasAnticipo??b.diasAnticipo, fechaAnticipoManual: (prev?.fechaAnticipoManual)||(b.fechaAnticipoManual||'')}; })); setRecalcKey(k=>k+1); };
@@ -190,10 +191,12 @@ export default function Flujo({ project, onUpdate }) {
         const desde = addDays(inicioSemana, i*7);
         const hasta = addDays(inicioSemana, i*7 + 6);
         const d = new Date(desde+'T12:00:00');
+        const antBloques = calendario.filter(b=>inRange(b.fechaAnticipo, desde,hasta) && b.mtoAnticipo>0);
         return {
           label: 'Sem '+(i+1)+' · '+d.toLocaleDateString('es-MX',{day:'2-digit',month:'short'}),
           desde, hasta,
-          anticipos:  calendario.filter(b=>inRange(b.fechaAnticipo, desde,hasta)).reduce((s,b)=>s+b.mtoAnticipo,0),
+          anticipos:  antBloques.reduce((s,b)=>s+b.mtoAnticipo,0),
+          detalleAnt: antBloques.map(b=>({ nom:b.nom, monto:b.mtoAnticipo })),
           finiquitos: calendario.filter(b=>inRange(b.fechaFiniquito,desde,hasta)).reduce((s,b)=>s+b.mtoFiniquito,0),
         };
       }).map(m => ({...m, salidas:m.anticipos+m.finiquitos}));
@@ -201,10 +204,12 @@ export default function Flujo({ project, onUpdate }) {
     return Array.from({length:7}, (_,i) => {
       const desde = i===0 ? fechaMin : startOfMonthPlus(fechaMin, i);
       const hasta = endOfMonth(fechaMin, i);
+      const antBloques = calendario.filter(b=>inRange(b.fechaAnticipo, desde,hasta) && b.mtoAnticipo>0);
       return {
         label: new Date(hasta+'T12:00:00').toLocaleDateString('es-MX',{month:'short',year:'2-digit'}),
         desde, hasta,
-        anticipos:  calendario.filter(b=>inRange(b.fechaAnticipo, desde,hasta)).reduce((s,b)=>s+b.mtoAnticipo,0),
+        anticipos:  antBloques.reduce((s,b)=>s+b.mtoAnticipo,0),
+        detalleAnt: antBloques.map(b=>({ nom:b.nom, monto:b.mtoAnticipo })),
         finiquitos: calendario.filter(b=>inRange(b.fechaFiniquito,desde,hasta)).reduce((s,b)=>s+b.mtoFiniquito,0),
       };
     }).map(m => ({...m, salidas:m.anticipos+m.finiquitos}));
@@ -394,9 +399,25 @@ export default function Flujo({ project, onUpdate }) {
             th('Concepto','left'), ...meses.map(m=>th(m.label)), th('Total'),
           )),
           h('tbody', null,
-            h('tr', null, h('td',{style:{padding:'9px 12px',fontSize:12,borderBottom:'1px solid var(--b1)'}},'Anticipos'),
+            // Fila Anticipos (clicable para expandir)
+            h('tr', { style:{ cursor:'pointer' }, onClick:()=>setExpandAnt(v=>!v) },
+              h('td',{style:{padding:'9px 12px',fontSize:12,borderBottom:'1px solid var(--b1)',fontWeight:500}},
+                h('span',{style:{display:'inline-block',width:14,color:'var(--t2)'}}, expandAnt?'▾':'▸'),'Anticipos'),
               ...meses.map((m,i)=>tdR(m.anticipos?fmt(m.anticipos):'—',{fontSize:12,color:m.anticipos?'var(--amber)':'var(--t3)'})),
               tdR(fmt(meses.reduce((s,m)=>s+m.anticipos,0)),{fontSize:12,fontWeight:600,color:'var(--amber)'})),
+            // Desglose por concepto (cuando está expandido)
+            ...(expandAnt ? (() => {
+              // Conceptos únicos que tienen algún anticipo en el rango visible
+              const conceptos = [...new Set(meses.flatMap(m=>(m.detalleAnt||[]).map(d=>d.nom)))];
+              return conceptos.map(nom => h('tr', { key:'ant-'+nom, style:{ background:'var(--bg2)' } },
+                h('td',{style:{padding:'6px 12px 6px 28px',fontSize:11,color:'var(--t2)',borderBottom:'.5px solid var(--b3)'}}, nom),
+                ...meses.map((m,i)=>{
+                  const d=(m.detalleAnt||[]).find(x=>x.nom===nom);
+                  return tdR(d?fmt(d.monto):'',{fontSize:11,color:d?'var(--t1)':'var(--t3)',borderBottom:'.5px solid var(--b3)'});
+                }),
+                tdR(fmt(meses.reduce((s,m)=>s+((m.detalleAnt||[]).find(x=>x.nom===nom)?.monto||0),0)),{fontSize:11,fontWeight:500,color:'var(--t2)',borderBottom:'.5px solid var(--b3)'}),
+              ));
+            })() : []),
             h('tr', null, h('td',{style:{padding:'9px 12px',fontSize:12,borderBottom:'1px solid var(--b1)'}},'Finiquitos'),
               ...meses.map((m,i)=>tdR(m.finiquitos?fmt(m.finiquitos):'—',{fontSize:12,color:m.finiquitos?'var(--amber)':'var(--t3)'})),
               tdR(fmt(meses.reduce((s,m)=>s+m.finiquitos,0)),{fontSize:12,fontWeight:600,color:'var(--amber)'})),
