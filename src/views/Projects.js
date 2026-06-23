@@ -404,8 +404,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
             fechaFallo: undefined,
             fechaContrato: undefined,
           };
-          await onUpdate(copia);
-          onNav('project_detail', newId);
+          await onSave(copia, true);
         }}, '⧉ Duplicar'),
         h('button', { onClick:()=>setShowDelete(true), style:{ color:'#E24B4A' } }, 'Eliminar'),
       ),
