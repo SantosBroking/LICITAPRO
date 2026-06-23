@@ -4,6 +4,7 @@ import { fmt, pctS } from './utils.js';
 import { calcCotizacion } from './calc.js';
 import { CATALOG_IMAGES } from './catalog_images.js';
 import { CATALOG_PRODUCTS, KIT_MAP } from './catalog.js';
+import { getCompanyLogo } from './company_logos.js';
 
 const IVA = 0.16;
 
@@ -226,12 +227,15 @@ export async function printCotizacionCliente({ project, cot, calc, config }) {
 <div class="sheet">
 
 <div class="header-top">
-  <div class="empresa-info">
-    <div style="font-size:14px;font-weight:700;color:#1a1917;margin-bottom:4px">${emp.nombreComercial||emp.razonSocial||'MSMS CORP'}</div>
-    <div>${emp.razonSocial||''}</div>
-    <div>${emp.rfc||''}</div>
-    <div>${emp.direccion||''}</div>
-    <div>${emp.telefono||''} ${emp.correo?'• '+emp.correo:''}</div>
+  <div class="empresa-info" style="display:flex;align-items:center;gap:12px">
+    ${(() => { const logo = getCompanyLogo(project.company); return logo ? `<img src="${logo}" style="height:42px;width:auto;object-fit:contain" />` : ''; })()}
+    <div>
+      <div style="font-size:14px;font-weight:700;color:#1a1917;margin-bottom:4px">${emp.nombreComercial||emp.razonSocial||'MSMS CORP'}</div>
+      <div>${emp.razonSocial||''}</div>
+      <div>${emp.rfc||''}</div>
+      <div>${emp.direccion||''}</div>
+      <div>${emp.telefono||''} ${emp.correo?'• '+emp.correo:''}</div>
+    </div>
   </div>
   <div class="cot-title">
     <h1>COTIZACIÓN</h1>
@@ -649,10 +653,13 @@ ${BASE_CSS}
 <div class="sheet">
 
   <div class="oc-header">
-    <div>
-      <div style="font-size:13px;font-weight:700;letter-spacing:.5px">BROKING AND BRANDS GROUP S.A. DE C.V.</div>
-      <div style="font-size:10px;color:#6b6862;margin-top:2px">BBG1007304K0 · Pedregal 23, Piso 1, Lomas de Chapultepec, CDMX</div>
-      <div style="font-size:10px;color:#6b6862">5544432786 · santiago@brokingroup.com</div>
+    <div style="display:flex;align-items:center;gap:14px">
+      ${(() => { const logo = getCompanyLogo(project.company || 'Broking and Brands Group'); return logo ? `<img src="${logo}" style="height:46px;width:auto;object-fit:contain" />` : ''; })()}
+      <div>
+        <div style="font-size:13px;font-weight:700;letter-spacing:.5px">BROKING AND BRANDS GROUP S.A. DE C.V.</div>
+        <div style="font-size:10px;color:#6b6862;margin-top:2px">BBG1007304K0 · Pedregal 23, Piso 1, Lomas de Chapultepec, CDMX</div>
+        <div style="font-size:10px;color:#6b6862">5544432786 · santiago@brokingroup.com</div>
+      </div>
     </div>
     <div class="oc-folio">
       <div class="lbl">Orden de Compra</div>
