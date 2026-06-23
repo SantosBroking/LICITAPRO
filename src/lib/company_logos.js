@@ -19,12 +19,15 @@ export function normalizeCompanyName(name = '') {
     .trim();
 }
 
-// Devuelve el logo base64 de una empresa, o null si no tiene
-export function getCompanyLogo(name = '') {
+// Devuelve el logo base64 de una empresa, o null si no tiene.
+// Prioridad: logo guardado en el objeto empresa > logo incrustado por nombre.
+export function getCompanyLogo(name = '', companyObj = null) {
+  // 1. Si la empresa guardada tiene su propio logo subido, usarlo
+  if (companyObj && companyObj.logo) return companyObj.logo;
+  // 2. Si no, buscar un logo incrustado por nombre
   if (!name) return null;
   const norm = normalizeCompanyName(name);
   if (COMPANY_LOGOS[norm]) return COMPANY_LOGOS[norm];
-  // Coincidencia parcial: si el nombre contiene "broking"
   if (norm.includes('broking') && norm.includes('brand')) return LOGO_BROKING;
   return null;
 }

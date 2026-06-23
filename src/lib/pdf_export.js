@@ -130,7 +130,7 @@ const fmtDate = d => {
 // ══════════════════════════════════════════════════════════════
 // 1. COTIZACIÓN CLIENTE
 // ══════════════════════════════════════════════════════════════
-export async function printCotizacionCliente({ project, cot, calc, config }) {
+export async function printCotizacionCliente({ project, cot, calc, config, companyObj }) {
   const emp = config?.empresa || {};
   // Catálogo en vivo: productos base + personalizados del config
   const liveCatMap = {};
@@ -228,7 +228,7 @@ export async function printCotizacionCliente({ project, cot, calc, config }) {
 
 <div class="header-top">
   <div class="empresa-info" style="display:flex;align-items:center;gap:12px">
-    ${(() => { const logo = getCompanyLogo(project.company); return logo ? `<img src="${logo}" style="height:42px;width:auto;object-fit:contain" />` : ''; })()}
+    ${(() => { const logo = getCompanyLogo(project.company, companyObj); return logo ? `<img src="${logo}" style="height:42px;width:auto;object-fit:contain" />` : ''; })()}
     <div>
       <div style="font-size:14px;font-weight:700;color:#1a1917;margin-bottom:4px">${emp.nombreComercial||emp.razonSocial||'MSMS CORP'}</div>
       <div>${emp.razonSocial||''}</div>
@@ -601,7 +601,7 @@ export function printResumenInterno({ project, cot, calc }) {
 }
 
 // ── Orden de Compra ───────────────────────────────────────────
-export function printOrdenCompra({ project, partidas, condiciones, folio: folioParam }) {
+export function printOrdenCompra({ project, partidas, condiciones, folio: folioParam, companyObj }) {
   const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const hoy = new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'});
   const folio = folioParam || ('OC-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-5));
@@ -654,7 +654,7 @@ ${BASE_CSS}
 
   <div class="oc-header">
     <div style="display:flex;align-items:center;gap:14px">
-      ${(() => { const logo = getCompanyLogo(project.company || 'Broking and Brands Group'); return logo ? `<img src="${logo}" style="height:46px;width:auto;object-fit:contain" />` : ''; })()}
+      ${(() => { const logo = getCompanyLogo(project.company || 'Broking and Brands Group', companyObj); return logo ? `<img src="${logo}" style="height:46px;width:auto;object-fit:contain" />` : ''; })()}
       <div>
         <div style="font-size:13px;font-weight:700;letter-spacing:.5px">BROKING AND BRANDS GROUP S.A. DE C.V.</div>
         <div style="font-size:10px;color:#6b6862;margin-top:2px">BBG1007304K0 · Pedregal 23, Piso 1, Lomas de Chapultepec, CDMX</div>

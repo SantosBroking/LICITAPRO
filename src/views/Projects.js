@@ -483,7 +483,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
     tab==='cotizacion' && h('div', null,
       h('div', { style:{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap', paddingBottom:14, borderBottom:'.5px solid var(--b3)' } },
         h('div', { style:{ fontSize:11, color:'var(--t2)', alignSelf:'center', marginRight:4 } }, 'Exportar PDF:'),
-        h('button', { onClick:async ()=>{ const c=cotRef.current; const cc=calcCotizacion(c); await printCotizacionCliente({project,cot:c,calc:cc,config:window._lpConfig}); }, style:{ fontSize:11, padding:'5px 12px', border:'.5px solid var(--blue)44', color:'var(--blue)', background:'#3b6cf408' } }, '📄 Cotización cliente'),
+        h('button', { onClick:async ()=>{ const c=cotRef.current; const cc=calcCotizacion(c); await printCotizacionCliente({project,cot:c,calc:cc,config:window._lpConfig,companyObj:company}); }, style:{ fontSize:11, padding:'5px 12px', border:'.5px solid var(--blue)44', color:'var(--blue)', background:'#3b6cf408' } }, '📄 Cotización cliente'),
         h('button', { onClick:()=>{ const c=project.cotizacion||{}; const cc=calcCotizacion(c); printResumenRetornos({project,cot:c,calc:cc}); }, style:{ fontSize:11, padding:'5px 12px', border:'.5px solid var(--amber)44', color:'var(--amber)', background:'#d9770608' } }, '📋 Resumen retornos'),
         h('button', { onClick:()=>{ const c=project.cotizacion||{}; const cc=calcCotizacion(c); printResumenInterno({project,cot:c,calc:cc}); }, style:{ fontSize:11, padding:'5px 12px', border:'.5px solid var(--t3)44', color:'var(--t2)' } }, '🔒 Resumen interno'),
         h('button', { onClick:()=>setShowOC(true), style:{ fontSize:11, padding:'5px 12px', border:'.5px solid #1D9E7544', color:'#1D9E75', background:'#1D9E7508' } }, '🛒 Orden de compra'),
@@ -521,7 +521,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
                       const orig=(cot2.partidas||[]).find(p=>p.id===op.id)||{};
                       return {...orig,...op, costoMSMS:op.precioUnit||orig.costoMSMS||0};
                     });
-                    printOrdenCompra({ project:{...project,ocProveedor:{name:oc.proveedor,rfc:oc.proveedorRfc,address:oc.proveedorAddress},cotizacion:{...cot2,agenciaProveedor:oc.proveedor}}, partidas:parts, condiciones:oc.condiciones||[], folio:oc.folio });
+                    printOrdenCompra({ project:{...project,ocProveedor:{name:oc.proveedor,rfc:oc.proveedorRfc,address:oc.proveedorAddress},cotizacion:{...cot2,agenciaProveedor:oc.proveedor}}, partidas:parts, condiciones:oc.condiciones||[], folio:oc.folio, companyObj:company });
                   }
                 }, '📄 Reimprimir'),
                 h('button', { style:{ fontSize:11, color:'var(--red)', padding:'3px 8px', marginLeft:4 },
@@ -876,7 +876,7 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
     };
     const ocs = [...(project.ordenesCompra||[]).filter(o=>o.id!==folio), nuevaOC];
     onUpdate({ ...project, ocProveedor: prov, ordenesCompra: ocs, ocCondiciones: conds });
-    printOrdenCompra({ project: proyConProv, partidas: partidasSel, condiciones: conds, folio });
+    printOrdenCompra({ project: proyConProv, partidas: partidasSel, condiciones: conds, folio, companyObj: companies.find(c=>c.name===project.company) });
   };
 
   const inputStyle = { fontSize:12, padding:'6px 10px' };

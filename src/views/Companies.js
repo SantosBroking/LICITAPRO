@@ -114,6 +114,31 @@ export function EmpresaDocsCard({ company, onUpdate }) {
   );
 }
 
+// Comprime una imagen subida a un PNG base64 de ancho máximo 400px (para el PDF)
+function comprimirLogo(file, maxW = 400) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const escala = Math.min(1, maxW / img.width);
+        const w = Math.round(img.width * escala);
+        const h = Math.round(img.height * escala);
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        // Fondo blanco (por si el logo es PNG transparente)
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user, logFn, config }) {
   const [c, sC]       = useState(JSON.parse(JSON.stringify(company)));
   const [parsing, setParsing] = useState(false);
@@ -212,6 +237,28 @@ export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user,
     h('div', { className:'card', style:{ marginBottom:16 } },
       h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:8 } }, 'Objeto social'),
       h(Inp, { value:c.objetoSocial||'', onChange:v=>set('objetoSocial',v), textarea:true }),
+    ),
+    // Logo de la empresa (aparece en cotización y orden de compra)
+    h('div', { className:'card', style:{ marginBottom:16 } },
+      h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:4 } }, 'Logo de la empresa'),
+      h('div', { style:{ fontSize:11, color:'var(--t3)', marginBottom:12 } }, 'Se mostrará en el encabezado de las cotizaciones y órdenes de compra de esta empresa.'),
+      h('div', { style:{ display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' } },
+        c.logo
+          ? h('div', { style:{ display:'flex', alignItems:'center', gap:12 } },
+              h('img', { src:c.logo, style:{ height:56, width:'auto', maxWidth:180, objectFit:'contain', border:'1px solid var(--b1)', borderRadius:8, padding:6, background:'#fff' } }),
+              h('button', { onClick:()=>set('logo',''), style:{ fontSize:12, color:'var(--red)', background:'transparent', border:'1px solid var(--b1)', borderRadius:'var(--r)', padding:'6px 12px', cursor:'pointer' } }, 'Quitar logo'),
+            )
+          : h('div', { style:{ fontSize:12, color:'var(--t3)', padding:'16px 20px', border:'1px dashed var(--b1)', borderRadius:8 } }, 'Sin logo'),
+        h('label', { style:{ fontSize:12, fontWeight:500, color:'var(--blue)', background:'var(--bg2)', border:'1px solid var(--b1)', borderRadius:'var(--r)', padding:'8px 14px', cursor:'pointer' } },
+          c.logo ? 'Cambiar logo' : '+ Subir logo',
+          h('input', { type:'file', accept:'image/*', style:{ display:'none' }, onChange:async e=>{
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+            const b64 = await comprimirLogo(file);
+            set('logo', b64);
+          } }),
+        ),
+      ),
     ),
     h('div', { className:'card', style:{ marginBottom:20 } },
       h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 } },
