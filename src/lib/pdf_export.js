@@ -131,7 +131,16 @@ const fmtDate = d => {
 // 1. COTIZACIÓN CLIENTE
 // ══════════════════════════════════════════════════════════════
 export async function printCotizacionCliente({ project, cot, calc, config, companyObj }) {
-  const emp = config?.empresa || {};
+  // Datos del encabezado: priorizar la empresa del proyecto (si tiene datos), si no usar la config general
+  const cfgEmp = config?.empresa || {};
+  const emp = companyObj && companyObj.name ? {
+    nombreComercial: companyObj.nombreComercial || companyObj.name,
+    razonSocial: companyObj.name || '',
+    rfc: companyObj.rfc || '',
+    direccion: [companyObj.address, companyObj.cp, companyObj.ciudad, companyObj.estado].filter(Boolean).join(', '),
+    telefono: companyObj.telefono || '',
+    correo: companyObj.correo || '',
+  } : cfgEmp;
   // Catálogo en vivo: productos base + personalizados del config
   const liveCatMap = {};
   [...CATALOG_PRODUCTS, ...(config?.customProducts || [])].forEach(p => { liveCatMap[p.id] = p; });
@@ -656,9 +665,9 @@ ${BASE_CSS}
     <div style="display:flex;align-items:center;gap:14px">
       ${(() => { const logo = getCompanyLogo(project.company || 'Broking and Brands Group', companyObj); return logo ? `<img src="${logo}" style="height:46px;width:auto;object-fit:contain" />` : ''; })()}
       <div>
-        <div style="font-size:13px;font-weight:700;letter-spacing:.5px">BROKING AND BRANDS GROUP S.A. DE C.V.</div>
-        <div style="font-size:10px;color:#6b6862;margin-top:2px">BBG1007304K0 · Pedregal 23, Piso 1, Lomas de Chapultepec, CDMX</div>
-        <div style="font-size:10px;color:#6b6862">5544432786 · santiago@brokingroup.com</div>
+        <div style="font-size:13px;font-weight:700;letter-spacing:.5px">${esc((companyObj && companyObj.name) ? (companyObj.nombreComercial || companyObj.name) : 'BROKING AND BRANDS GROUP S.A. DE C.V.')}</div>
+        <div style="font-size:10px;color:#6b6862;margin-top:2px">${esc((companyObj && companyObj.rfc) ? companyObj.rfc : 'BBG1007304K0')}${(() => { const dir = (companyObj && companyObj.address) ? [companyObj.address, companyObj.cp, companyObj.ciudad, companyObj.estado].filter(Boolean).join(', ') : 'Pedregal 23, Piso 1, Lomas de Chapultepec, CDMX'; return dir ? ' · ' + esc(dir) : ''; })()}</div>
+        <div style="font-size:10px;color:#6b6862">${esc((companyObj && companyObj.telefono) ? companyObj.telefono : '5544432786')}${(() => { const correo = (companyObj && companyObj.correo) ? companyObj.correo : 'santiago@brokingroup.com'; return correo ? ' · ' + esc(correo) : ''; })()}</div>
       </div>
     </div>
     <div class="oc-folio">
