@@ -236,14 +236,14 @@ export async function printCotizacionCliente({ project, cot, calc, config, compa
 <div class="sheet">
 
 <div class="header-top">
-  <div class="empresa-info" style="display:flex;align-items:flex-start;gap:12px;flex:1;min-width:0;padding-right:20px">
-    ${(() => { const logo = getCompanyLogo(project.company, companyObj); return logo ? `<img src="${logo}" style="height:42px;width:auto;max-width:90px;flex-shrink:0;object-fit:contain;background:#ffffff;padding:3px;border-radius:4px" />` : ''; })()}
+  <div class="empresa-info" style="display:flex;align-items:flex-start;gap:14px;flex:1;min-width:0;padding-right:20px">
+    ${(() => { const logo = getCompanyLogo(project.company, companyObj); return logo ? `<img src="${logo}" style="height:60px;width:auto;max-width:120px;flex-shrink:0;object-fit:contain;background:#ffffff;padding:3px;border-radius:4px" />` : ''; })()}
     <div style="min-width:0">
       <div style="font-size:14px;font-weight:700;color:#1a1917;margin-bottom:4px;line-height:1.3">${emp.nombreComercial||emp.razonSocial||'MSMS CORP'}</div>
-      <div>${emp.razonSocial||''}</div>
-      <div>${emp.rfc||''}</div>
-      <div>${emp.direccion||''}</div>
-      <div>${emp.telefono||''} ${emp.correo?'• '+emp.correo:''}</div>
+      <div style="font-size:10px;line-height:1.5">${emp.razonSocial||''}</div>
+      <div style="font-size:10px;line-height:1.5">${emp.rfc||''}</div>
+      <div style="font-size:10px;line-height:1.5">${emp.direccion||''}</div>
+      <div style="font-size:10px;line-height:1.5">${emp.telefono||''} ${emp.correo?'• '+emp.correo:''}</div>
     </div>
   </div>
   <div class="cot-title" style="flex-shrink:0">
@@ -663,7 +663,7 @@ ${BASE_CSS}
 
   <div class="oc-header">
     <div style="display:flex;align-items:flex-start;gap:14px;flex:1;min-width:0;padding-right:20px">
-      ${(() => { const logo = getCompanyLogo(project.company || 'Broking and Brands Group', companyObj); return logo ? `<img src="${logo}" style="height:46px;width:auto;max-width:90px;flex-shrink:0;object-fit:contain;background:#ffffff;padding:3px;border-radius:4px" />` : ''; })()}
+      ${(() => { const logo = getCompanyLogo(project.company || 'Broking and Brands Group', companyObj); return logo ? `<img src="${logo}" style="height:60px;width:auto;max-width:120px;flex-shrink:0;object-fit:contain;background:#ffffff;padding:3px;border-radius:4px" />` : ''; })()}
       <div style="min-width:0">
         <div style="font-size:13px;font-weight:700;letter-spacing:.5px;line-height:1.3">${esc((companyObj && companyObj.name) ? (companyObj.nombreComercial || companyObj.name) : 'BROKING AND BRANDS GROUP S.A. DE C.V.')}</div>
         <div style="font-size:10px;color:#6b6862;margin-top:2px;line-height:1.4">${esc((companyObj && companyObj.rfc) ? companyObj.rfc : 'BBG1007304K0')}${(() => { const dir = (companyObj && companyObj.address) ? [companyObj.address, companyObj.cp, companyObj.ciudad, companyObj.estado].filter(Boolean).join(', ') : 'Pedregal 23, Piso 1, Lomas de Chapultepec, CDMX'; return dir ? ' · ' + esc(dir) : ''; })()}</div>
