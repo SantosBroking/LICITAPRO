@@ -577,7 +577,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
         ),
         h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:12 } },
           h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, '% al SAT'), h(NumInput, { value:Math.round((cot.pctIvaSat||.5)*100), onChange:v=>updCot({...cot,pctIvaSat:v/100,pctIvaUtil:1-v/100}), style:{ fontSize:12 } })),
-          h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, '% a utilidad'), h('input', { type:'text', value:Math.round((cot.pctIvaUtil||.5)*100)+'%', readOnly:true, style:{ fontSize:12, background:'var(--bg2)', textAlign:'right' } })),
+          h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, '% a utilidad'), h(NumInput, { value:Math.round((cot.pctIvaUtil||.5)*100), onChange:v=>updCot({...cot,pctIvaUtil:v/100,pctIvaSat:1-v/100}), style:{ fontSize:12 } })),
         ),
       ),
       h(NavButtons),
