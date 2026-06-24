@@ -45,6 +45,7 @@ export function calcCotizacion(cot) {
   const {
     partidas = [], equipo = [], retornos = [], fianzas = [],
     pctIvaSat = 0.5, pctIvaUtil = 0.5,
+    ivaSelectivo = true,
   } = cot;
 
   // ── Por partida ───────────────────────────────────────────
@@ -170,8 +171,10 @@ export function calcCotizacion(cot) {
   // IVA acreditable = ivaVeh + ivaEq + ivaRetornos + ivaFianzas
   const ivaAcreditable = ivaVeh + ivaEq + ivaRetornos + ivaFianzas;
   const ivaSobrante    = Math.max(0, ivaVenta - ivaAcreditable);
-  const ivaAlSAT       = ivaSobrante * (pctIvaSat || 0.5);
-  const ivaAUtilidad   = ivaSobrante * (pctIvaUtil || 0.5);
+  // IVA selectivo activado: reparte el sobrante entre SAT y utilidad.
+  // Desactivado: todo el sobrante se paga al SAT (IVA natural 16%), nada va a utilidad.
+  const ivaAlSAT       = ivaSelectivo ? ivaSobrante * (pctIvaSat || 0.5) : ivaSobrante;
+  const ivaAUtilidad   = ivaSelectivo ? ivaSobrante * (pctIvaUtil || 0.5) : 0;
 
   // ── UTILIDAD (fórmulas C53-C54 del Excel) ────────────────
   // Utilidad bruta = venta_sIVA − costo_total_sIVA
@@ -194,6 +197,7 @@ export function calcCotizacion(cot) {
     utilBruta, utilNeta,
     margen, margenNeto,
     ivaAcreditable, ivaSobrante, ivaAlSAT, ivaAUtilidad,
+    ivaSelectivo,
     totalRetornos, totalFianzas,
     unidades,
   };

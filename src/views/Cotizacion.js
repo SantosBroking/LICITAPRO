@@ -540,7 +540,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
                     h('td', { style:col('var(--red)',false,true) }, '−'+fmt(tot)),
                   );
                 }),
-                h('tr', { style:{ borderBottom:'.5px solid var(--b1)' } },
+                cot.ivaSelectivo !== false && h('tr', { style:{ borderBottom:'.5px solid var(--b1)' } },
                   h('td', { style:{ padding:'9px 20px', color:'var(--t2)' } }, 'IVA a utilidad ('+Math.round((cot.pctIvaUtil||.5)*100)+'%)'),
                   ...pdata.map(pd=>h('td', { key:pd.p.id, style:col('var(--green)',false,false) }, '+'+fmt(pd.ivaPartida))),
                   h('td', { style:col('var(--green)',false,true) }, '+'+fmt(calc.ivaAUtilidad)),
@@ -568,18 +568,29 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
         );
       })(),
       // ── Desglose de IVA + % al SAT ──────────────────────────
-      h('div', { className:'card', style:{ marginBottom:12 } },
-        h('div', { style:{ fontSize:13, fontWeight:500, marginBottom:10 } }, 'Desglose de IVA'),
-        [['IVA cobrado al cliente',fmt(calc.ivaVenta),'var(--t1)',false],['− IVA acreditable (costos)',fmt(calc.ivaAcreditable),'var(--t2)',false],['IVA sobrante',fmt(calc.ivaSobrante),'var(--t1)',true],['IVA pagado al SAT',fmt(calc.ivaAlSAT),'var(--t2)',false],['IVA a utilidad',fmt(calc.ivaAUtilidad),'var(--green)',false]].map(([l,v,c,bold])=>
+      (() => { const ivaSel = cot.ivaSelectivo !== false; return h('div', { className:'card', style:{ marginBottom:12 } },
+        h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 } },
+          h('div', { style:{ fontSize:13, fontWeight:500 } }, 'Desglose de IVA'),
+          h('label', { style:{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:12, color:'var(--t2)' } },
+            h('input', { type:'checkbox', checked:ivaSel, onChange:e=>updCot({...cot, ivaSelectivo:e.target.checked}), style:{ width:18, height:18, cursor:'pointer' } }),
+            h('span', null, 'IVA selectivo'),
+          ),
+        ),
+        !ivaSel && h('div', { style:{ fontSize:11, color:'var(--t3)', marginBottom:10, padding:'8px 10px', background:'var(--bg2)', borderRadius:8 } }, 'IVA natural (16%): todo el IVA sobrante se paga al SAT.'),
+        [['IVA cobrado al cliente',fmt(calc.ivaVenta),'var(--t1)',false,true],
+         ['− IVA acreditable (costos)',fmt(calc.ivaAcreditable),'var(--t2)',false,true],
+         ['IVA sobrante',fmt(calc.ivaSobrante),'var(--t1)',true,true],
+         ['IVA pagado al SAT',fmt(calc.ivaAlSAT),'var(--t2)',false,true],
+         ['IVA a utilidad',fmt(calc.ivaAUtilidad),'var(--green)',false,ivaSel]].filter(([,,,,show])=>show).map(([l,v,c,bold])=>
           h('div', { key:l, style:{ display:'flex', justifyContent:'space-between', fontSize:12, fontWeight:bold?600:400, padding:'7px 0', borderBottom:'.5px solid var(--b3)' } },
             h('span', { style:{ color:'var(--t2)' } }, l), h('span', { style:{ color:c, fontWeight:bold?600:500 } }, v),
           )
         ),
-        h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:12 } },
+        ivaSel && h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:12 } },
           h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, '% al SAT'), h(NumInput, { value:Math.round((cot.pctIvaSat||.5)*100), onChange:v=>updCot({...cot,pctIvaSat:v/100,pctIvaUtil:1-v/100}), style:{ fontSize:12 } })),
           h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, '% a utilidad'), h(NumInput, { value:Math.round((cot.pctIvaUtil||.5)*100), onChange:v=>updCot({...cot,pctIvaUtil:v/100,pctIvaSat:1-v/100}), style:{ fontSize:12 } })),
         ),
-      ),
+      ); })(),
       h(NavButtons),
     ),
 
@@ -647,7 +658,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
               row('− Equipo c/IVA', eqUnit, 'var(--t2)', false, true),
               ...retActivos.map(r => row('− '+r.nombre+(r.base.startsWith('%')?' ('+r.valor+'%)':''), costoTratoPU(r), 'var(--red)', false, true)),
               ...fianzActivas.map(f => row('− '+f.nombre+(f.base.startsWith('%')?' ('+f.valor+'%)':''), costoTratoPU(f), 'var(--red)', false, true)),
-              row('+ IVA a utilidad ('+Math.round((cot.pctIvaUtil||.5)*100)+'%)', ivaUnit, 'var(--green)', false, false),
+              cot.ivaSelectivo !== false && row('+ IVA a utilidad ('+Math.round((cot.pctIvaUtil||.5)*100)+'%)', ivaUnit, 'var(--green)', false, false),
               h('div', { style:{ height:4 } }),
               row('Utilidad neta por unidad', utilUnit, color(utilUnit), true, false),
               h('div', { style:{ display:'flex', gap:20, marginTop:12, paddingTop:10, borderTop:'.5px solid var(--b2)' } },
