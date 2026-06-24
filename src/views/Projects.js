@@ -113,7 +113,7 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate }) {
     ),
     view==='table' && (() => {
       const headerRow = h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b3)' } },
-        ['PROYECTO','DEPENDENCIA','EMPRESA','MONTO','ESTADO','FALLO',''].map(hd=>h('th',{key:hd,style:{padding:'10px 8px',color:'var(--t3)',fontSize:11,fontWeight:600,letterSpacing:'.4px',textAlign:'left',borderBottom:'1px solid var(--b1)'}},hd))
+        ['PROYECTO','DEPENDENCIA','EMPRESA','MONTO','ESTADO','FALLO',''].map(hd=>h('th',{key:hd,style:{padding:'10px 8px',color:'var(--t3)',fontSize:11,fontWeight:600,letterSpacing:'.4px',textAlign:'left',whiteSpace:'nowrap',borderBottom:'1px solid var(--b1)'}},hd))
       ));
       const statusSelect = (p, maxW) => {
         const stRow=STATUSES.find(s=>s.id===p.status);
@@ -134,10 +134,10 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate }) {
           ),
           h('td', { style:{ padding:'10px 6px', color:'var(--t2)', fontSize:12 } }, p.dependencia||'—'),
           h('td', { style:{ padding:'10px 6px', fontSize:12, color:'var(--t2)' } }, p.company||'—'),
-          h('td', { style:{ padding:'10px 6px', fontWeight:500 } }, fmt(p.montoEstimado)),
+          h('td', { style:{ padding:'10px 6px', fontWeight:500, whiteSpace:'nowrap' } }, fmt(p.montoEstimado)),
           h('td', { style:{ padding:'10px 6px' }, onClick:e=>e.stopPropagation() }, statusSelect(p)),
-          h('td', { style:{ padding:'10px 6px', fontSize:12, color:alF==='r'?'var(--red)':alF==='y'?'var(--amber)':'var(--t2)' } }, p.fechaFallo||'—'),
-          h('td', { style:{ padding:'10px 6px' } }, h('button', { onClick:e=>{ e.stopPropagation(); onNav('project_detail',p.id); }, style:{ fontSize:11, padding:'3px 8px' } }, 'Abrir →')),
+          h('td', { style:{ padding:'10px 6px', fontSize:12, whiteSpace:'nowrap', color:alF==='r'?'var(--red)':alF==='y'?'var(--amber)':'var(--t2)' } }, p.fechaFallo||'—'),
+          h('td', { style:{ padding:'10px 6px' } }, h('button', { onClick:e=>{ e.stopPropagation(); onNav('project_detail',p.id); }, style:{ fontSize:11, padding:'3px 8px', whiteSpace:'nowrap' } }, 'Abrir →')),
         );
       };
       // Tarjeta (móvil)
