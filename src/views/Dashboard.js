@@ -67,9 +67,9 @@ export default function Dashboard({ projects, vehicles, companies, onNav, onUpda
         filtered.slice(0,8).map((a,i) =>
           h('div', { key:i, onClick:()=>onNav('project_detail',a.project.id), className:(a.level==='r'?'alert-r':'alert-y')+' alert-row',
             style:{ padding:'8px 12px', borderRadius:'var(--r)', fontSize:12, cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 } },
-            h('div', { style:{ flex:1, minWidth:0 } }, h('strong', null, a.project.name), ' — ', a.label, ': ', a.date),
+            h('div', { style:{ flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, h('strong', null, a.project.name), ' — ', a.label, ': ', a.date),
             h('div', { style:{ display:'flex', alignItems:'center', gap:6, flexShrink:0 } },
-              h('div', { className:'alert-badge', style:{ fontWeight:600, fontSize:11, padding:'2px 8px', borderRadius:8, background:'rgba(0,0,0,.06)' } }, a.days<0?'Vencido hace '+(-a.days)+'d':a.days===0?'HOY':'En '+a.days+'d'),
+              h('div', { className:'alert-badge', style:{ fontWeight:600, fontSize:11, padding:'2px 8px', borderRadius:8, whiteSpace:'nowrap', background:'rgba(0,0,0,.06)' } }, a.days<0?'Vencido hace '+(-a.days)+'d':a.days===0?'HOY':'En '+a.days+'d'),
               h('button', { onClick:e=>{ e.stopPropagation(); dismissAlert(a); }, title:'Descartar alerta',
                 style:{ padding:'2px 6px', fontSize:13, lineHeight:1, background:'transparent', border:'none', color:'inherit', opacity:.6, cursor:'pointer', borderRadius:4 } }, '✕'),
             ),
@@ -85,7 +85,7 @@ export default function Dashboard({ projects, vehicles, companies, onNav, onUpda
         h('table', { style:{ fontSize:13 } },
           h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b3)' } },
             ['PROYECTO','DEPENDENCIA','EMPRESA','MONTO','ESTADO','FALLO'].map(hd =>
-              h('th', { key:hd, style:{ padding:'10px 8px', color:'var(--t3)', fontSize:11, fontWeight:600, letterSpacing:'.4px', textAlign:'left', borderBottom:'1px solid var(--b1)' } }, hd)
+              h('th', { key:hd, style:{ padding:'10px 8px', color:'var(--t3)', fontSize:11, fontWeight:600, letterSpacing:'.4px', textAlign:'left', whiteSpace:'nowrap', borderBottom:'1px solid var(--b1)' } }, hd)
             )
           )),
           h('tbody', null, projects.map(p => {
@@ -94,9 +94,9 @@ export default function Dashboard({ projects, vehicles, companies, onNav, onUpda
               h('td', { style:{ padding:'10px 6px', fontWeight:500 } }, p.name),
               h('td', { style:{ padding:'10px 6px', color:'var(--t2)' } }, p.dependencia||'—'),
               h('td', { style:{ padding:'10px 6px', fontSize:12, color:'var(--t2)' } }, p.company||'—'),
-              h('td', { style:{ padding:'10px 6px', fontWeight:500 } }, fmt(p.montoEstimado)),
+              h('td', { style:{ padding:'10px 6px', fontWeight:500, whiteSpace:'nowrap' } }, fmt(p.montoEstimado)),
               h('td', { style:{ padding:'10px 6px' } }, h(Badge, { statusId:p.status })),
-              h('td', { style:{ padding:'10px 6px', fontSize:12, color:alF==='r'?'var(--red)':alF==='y'?'var(--amber)':'var(--t2)' } }, p.fechaFallo||'—'),
+              h('td', { style:{ padding:'10px 6px', fontSize:12, whiteSpace:'nowrap', color:alF==='r'?'var(--red)':alF==='y'?'var(--amber)':'var(--t2)' } }, p.fechaFallo||'—'),
             );
           }))
         )
