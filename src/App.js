@@ -229,6 +229,7 @@ export default function App() {
       h('div', { className:'sidebar-logo' },
         h('div', { className:'sidebar-brand' }, 'MSMS CORP'),
         h('div', { className:'sidebar-name' }, 'LicitaPro'),
+        h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:4, textTransform:'capitalize' } }, new Date().toLocaleDateString('es-MX', { weekday:'long', day:'numeric', month:'long', year:'numeric' })),
       ),
       h('nav', { style:{ flex:1, padding:'10px 8px', overflowY:'auto' } },
         NAV_ITEMS.map(item => {
@@ -259,6 +260,7 @@ export default function App() {
         h('div', { style:{ marginBottom:20 } },
           h('div', { className:'sidebar-brand' }, 'MSMS CORP'),
           h('div', { className:'sidebar-name' }, 'LicitaPro'),
+          h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:4, textTransform:'capitalize' } }, new Date().toLocaleDateString('es-MX', { weekday:'long', day:'numeric', month:'long', year:'numeric' })),
         ),
         NAV_ITEMS.map(item => {
           const active = view===item.id || (item.id==='projects' && view.startsWith('project'));
