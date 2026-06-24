@@ -50,6 +50,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
       version:c.version||'V1', folio:c.folio||'', municipio:c.municipio||'', fechaCotizacion:c.fechaCotizacion||TODAY(), vigenciaDias:c.vigenciaDias||20,
       condicionesComerciales:c.condicionesComerciales||'', agenciaProveedor:c.agenciaProveedor||'',
       pctIvaSat:c.pctIvaSat!=null?c.pctIvaSat:0.5, pctIvaUtil:c.pctIvaUtil!=null?c.pctIvaUtil:0.5,
+      ivaSelectivo:c.ivaSelectivo!==false,
       partidas:c.partidas||[makeP('P1',true),makeP('P2',false),makeP('P3',false),makeP('P4',false),makeP('P5',false)],
       equipo:c.equipo||[], retornos:c.retornos||[], fianzas:c.fianzas||[],
     };
