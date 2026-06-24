@@ -1,5 +1,5 @@
 // Dashboard.js — Panel principal con KPIs y alertas
-import { h, useMemo, useState } from '../lib/core.js';
+import { h, useMemo } from '../lib/core.js';
 import { STATUSES, FINAL_STATUS } from '../lib/constants.js';
 import { fmt, fmtNum, daysUntil, alertLevel } from '../lib/utils.js';
 import { Metric, Badge, AlertChip, EmptyState } from '../ui/primitives.js';
@@ -16,28 +16,27 @@ export default function Dashboard({ projects, vehicles, companies, onNav, onUpda
   const conv      = decided > 0 ? Math.round(won.length/decided*100) : 0;
 
   const upcomingAlerts = [];
-  projects.forEach(p => {
+  projects.filter(p => !FINAL_STATUS.includes(p.status)).forEach(p => {
+    // No alertar sobre alertas que el usuario ya descartó en este proyecto
+    const descartadas = p.alertasDescartadas || [];
     [['Aclaraciones',p.fechaAclaraciones],['Propuesta',p.fechaPropuesta],['Fallo',p.fechaFallo],['Contrato',p.fechaContrato]]
       .forEach(([label,date]) => {
         const lvl = alertLevel(date);
-        if (lvl) upcomingAlerts.push({ label, date, level:lvl, days:daysUntil(date), project:p });
+        const key = label + '|' + date;
+        if (lvl && !descartadas.includes(key)) upcomingAlerts.push({ label, date, level:lvl, days:daysUntil(date), project:p });
       });
   });
-  const [dismissed, setDismissed] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('lp_dismissed_alerts') || '[]'); } catch { return []; }
-  });
-
   const dismissAlert = (a) => {
-    const key = a.project.id + '|' + a.label + '|' + a.date;
-    const next = [...dismissed, key];
-    setDismissed(next);
-    localStorage.setItem('lp_dismissed_alerts', JSON.stringify(next));
+    // Guardar el descarte en el proyecto mismo (persiste en la base de datos)
+    const key = a.label + '|' + a.date;
+    const p = a.project;
+    const descartadas = [...(p.alertasDescartadas || []), key];
+    onUpdate && onUpdate({ ...p, alertasDescartadas: descartadas });
   };
 
   const vistas = new Set();
   const filtered = upcomingAlerts.filter(a => {
     const key = a.project.id + '|' + a.label + '|' + a.date;
-    if (dismissed.includes(key)) return false;
     if (vistas.has(key)) return false;  // evitar duplicados
     vistas.add(key);
     return true;

@@ -211,7 +211,7 @@ export default function App() {
     : h('div', { className:'empty' }, h('h3', null, 'Proyecto no encontrado'), h('button', { onClick:()=>nav('projects') }, '← Volver'));
 
   const content = ({
-    dashboard:      h(Dashboard,     { projects, vehicles, companies, onNav:nav }),
+    dashboard:      h(Dashboard,     { projects, vehicles, companies, onNav:nav, onUpdate:upProject }),
     projects:       h(ProjectsList,  { projects, vehicles, onNav:nav, onUpdate:p=>handleSaveProject(p,false) }),
     project_new:    h(ProjectForm,   { companies, config, onSave:handleSaveProject, onCancel:()=>nav('projects') }),
     project_detail: projDetailView,
@@ -220,7 +220,7 @@ export default function App() {
     reports:        h(Reports,       { projects, vehicles, companies, audit }),
     settings:       h(Settings,      { config, user, onSave:handleSaveConfig }),
     audit:          h(AuditLogView,  { audit }),
-  })[view] || h(Dashboard, { projects, vehicles, companies, onNav:nav });
+  })[view] || h(Dashboard, { projects, vehicles, companies, onNav:nav, onUpdate:upProject });
 
   return h('div', { style:{ display:'flex', minHeight:'100vh', background:'var(--bg3)' } },
 
