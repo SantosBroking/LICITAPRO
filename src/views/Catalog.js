@@ -388,8 +388,9 @@ export default function CatalogView({ config, onSaveConfig }) {
     !kitView && h('div', { style:{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:14 } },
       cats.map(c => h('button', { key:c, className:sel===c?'bp':'', onClick:()=>{ setSel(c); setSearch(''); }, style:{ fontSize:12, padding:'5px 12px' } }, c))
     ),
-    !kitView && h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:12 } },
-      prods.map(prod => {
+    !kitView && (() => {
+      // Tarjeta de producto (reutilizable)
+      const renderProd = prod => {
         const isCustom = !!customProds.find(x => x.id === prod.id);
         return h('div', { key:prod.id, className:'card' },
           h('div', { style:{ display:'flex', justifyContent:'flex-end', gap:4, marginBottom:8 } },
@@ -414,8 +415,30 @@ export default function CatalogView({ config, onSaveConfig }) {
             isCustom && CATALOG_PRODUCTS.find(x=>x.id===prod.id) && h('span', { style:{ fontSize:10, padding:'2px 8px', borderRadius:10, background:'var(--amber-bg)', color:'var(--amber)' } }, '✏ Editado'),
           ),
         );
-      })
-    ),
+      };
+      const gridStyle = { display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:12 };
+
+      // Si es la categoría de vehículos, agrupar por marca
+      const esVehiculos = sel === '00 Vehículos' || prods.every(p => p.esVehiculo);
+      if (esVehiculos && prods.length > 0) {
+        const porMarca = {};
+        prods.forEach(p => {
+          const marca = (p.v_marca || 'Otros').trim() || 'Otros';
+          (porMarca[marca] = porMarca[marca] || []).push(p);
+        });
+        const marcas = Object.keys(porMarca).sort((a,b)=>a.localeCompare(b));
+        return h('div', null,
+          marcas.map(marca => h('div', { key:marca, style:{ marginBottom:20 } },
+            h('div', { style:{ fontSize:13, fontWeight:600, color:'var(--t1)', marginBottom:10, paddingBottom:6, borderBottom:'1px solid var(--b1)', textTransform:'uppercase', letterSpacing:'.4px' } },
+              marca, h('span', { style:{ fontSize:11, fontWeight:400, color:'var(--t3)', marginLeft:8, textTransform:'none', letterSpacing:0 } }, porMarca[marca].length+' modelo'+(porMarca[marca].length>1?'s':'')),
+            ),
+            h('div', { style:gridStyle }, porMarca[marca].map(renderProd)),
+          )),
+        );
+      }
+      // Resto de categorías: grid normal
+      return h('div', { style:gridStyle }, prods.map(renderProd));
+    })(),
     prods.length===0 && h('div', { className:'card', style:{ textAlign:'center', padding:30, color:'var(--t2)' } }, 'Sin resultados'),
   );
 }
