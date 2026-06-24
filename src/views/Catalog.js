@@ -322,6 +322,17 @@ export default function CatalogView({ config, onSaveConfig }) {
     setForm(null);
   };
 
+  // Duplicar un producto/modelo: crea una copia con ID nuevo y abre el formulario para ajustarla
+  const duplicateProduct = (prod) => {
+    const copia = {
+      ...prod,
+      id: 'cust-' + Date.now(),
+      nom: (prod.nom || '') + ' (copia)',
+      photo: prod.photo || CATALOG_IMAGES[prod.id] || '',
+    };
+    setForm(copia);
+  };
+
   const saveKit = async (kit) => {
     const finalUpdated = customProds.find(x=>x.id===kit.id)
       ? customProds.map(x=>x.id===kit.id?kit:x)
@@ -393,9 +404,11 @@ export default function CatalogView({ config, onSaveConfig }) {
       const renderProd = prod => {
         const isCustom = !!customProds.find(x => x.id === prod.id);
         return h('div', { key:prod.id, className:'card' },
-          h('div', { style:{ display:'flex', justifyContent:'flex-end', gap:4, marginBottom:8 } },
+          h('div', { style:{ display:'flex', justifyContent:'flex-end', gap:4, marginBottom:8, flexWrap:'wrap' } },
             h('button', { onClick:()=>setForm({...prod, photo: prod.photo || CATALOG_IMAGES[prod.id] || ''}),
               style:{ fontSize:11, padding:'4px 10px', color:'var(--blue)', background:'var(--bg1)', border:'1px solid var(--blue-border)', borderRadius:'var(--r)', cursor:'pointer' } }, '✏ Editar'),
+            h('button', { onClick:()=>duplicateProduct(prod),
+              style:{ fontSize:11, padding:'4px 10px', color:'var(--t1)', background:'var(--bg1)', border:'1px solid var(--b2)', borderRadius:'var(--r)', cursor:'pointer' } }, '⧉ Duplicar'),
             isCustom && CATALOG_PRODUCTS.find(x=>x.id===prod.id)
               ? h('button', { onClick:()=>restoreProduct(prod.id),
                   style:{ fontSize:11, padding:'4px 10px', color:'var(--t2)', background:'var(--bg1)', border:'1px solid var(--b2)', borderRadius:'var(--r)', cursor:'pointer' } }, '↩ Restaurar')
