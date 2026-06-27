@@ -70,7 +70,7 @@ export function VehiclesTab({ project, vehicles, onSave, onDelete, onNav, user, 
     vehicles.length===0
       ? h('div', { className:'card' }, h(EmptyState, { icon:'🚓', title:'Sin vehículos registrados', description:'Registra los vehículos del proyecto.', actionLabel:'+ Agregar primer vehículo', onAction:()=>setShowForm(true) }))
       : h('div', { className:'card' },
-          h('div', { style:{ overflowX:'auto' } },
+          h('div', { className:'tbl-scroll', style:{ overflowX:'auto', WebkitOverflowScrolling:'touch' } },
             h('table', { style:{ fontSize:13 } },
               h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b3)' } },
                 ['VIN','MARCA/MODELO','AÑO','PRECIO','ENTREGA','FACTURAS',''].map(hd => h('td', { key:hd, style:{ padding:'8px 6px', color:'var(--t2)', fontSize:11 } }, hd))
@@ -438,7 +438,7 @@ export function BillingTab({ project, vehicles, onNav }) {
     ),
     h('div', { className:'card' },
       h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:14 } }, 'Detalle por vehículo'),
-      h('div', { style:{ overflowX:'auto' } },
+      h('div', { className:'tbl-scroll', style:{ overflowX:'auto', WebkitOverflowScrolling:'touch' } },
         h('table', { style:{ fontSize:13 } },
           h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b3)' } },
             ['VIN/MOD.','F. AGENCIA','F. CLIENTE','TOTAL'].map(hd => h('td', { key:hd, style:{ padding:'8px 6px', color:'var(--t2)', fontSize:11 } }, hd))

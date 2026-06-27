@@ -191,7 +191,7 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate }) {
         ),
       );
     })(),
-    view==='kanban' && h('div', { style:{ overflowX:'auto' } },
+    view==='kanban' && h('div', { style:{ overflowX:'auto', WebkitOverflowScrolling:'touch' } },
       h('div', { style:{ display:'flex', gap:12, minWidth:'max-content', paddingBottom:12 } },
         kanbanCols.map(colId => {
           const s=STATUSES.find(x=>x.id===colId), cols=visible.filter(p=>p.status===colId);
@@ -498,39 +498,57 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
     // Documentos
     tab==='docs' && h('div', null,
       // Órdenes de Compra generadas
-      (project.ordenesCompra||[]).length > 0 && h('div', { className:'card', style:{ marginBottom:14 } },
-        h('div', { style:{ fontSize:13, fontWeight:500, marginBottom:10 } }, '🛒 Órdenes de Compra'),
-        h('table', { style:{ fontSize:12, width:'100%', borderCollapse:'collapse' } },
-          h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b2)' } },
-            ['Folio','Fecha','Proveedor','Vehículos','Acciones'].map(h2=>h('th',{key:h2,style:{padding:'6px 8px',textAlign:'left',fontSize:10,fontWeight:500,color:'var(--t2)',letterSpacing:'.4px'}},h2))
-          )),
-          h('tbody', null, [...(project.ordenesCompra||[])].reverse().map(oc=>
-            h('tr', { key:oc.id, style:{ borderBottom:'.5px solid var(--b3)' } },
-              h('td', { style:{ padding:'9px 8px', fontWeight:500, color:'var(--blue)', fontFamily:'monospace', fontSize:11 } }, oc.folio),
-              h('td', { style:{ padding:'9px 8px', color:'var(--t2)', fontSize:11 } }, oc.fecha),
-              h('td', { style:{ padding:'9px 8px' } }, oc.proveedor||'—'),
-              h('td', { style:{ padding:'9px 8px', fontSize:11, color:'var(--t2)' } },
-                (oc.partidas||[]).map(p=>`${p.id} · ${p.vehiculo||''} ×${p.cantidad}`).join(' | ')
-              ),
-              h('td', { style:{ padding:'9px 8px' } },
-                h('button', { style:{ fontSize:11, color:'var(--blue)', padding:'3px 8px' },
-                  onClick:()=>{
-                    const cot2=project.cotizacion||{};
-                    const parts=(oc.partidas||[]).map(op=>{
-                      const orig=(cot2.partidas||[]).find(p=>p.id===op.id)||{};
-                      return {...orig,...op, costoMSMS:op.precioUnit||orig.costoMSMS||0};
-                    });
-                    printOrdenCompra({ project:{...project,ocProveedor:{name:oc.proveedor,rfc:oc.proveedorRfc,address:oc.proveedorAddress},cotizacion:{...cot2,agenciaProveedor:oc.proveedor}}, partidas:parts, condiciones:oc.condiciones||[], folio:oc.folio, companyObj:company });
-                  }
-                }, '📄 Reimprimir'),
-                h('button', { style:{ fontSize:11, color:'var(--red)', padding:'3px 8px', marginLeft:4 },
-                  onClick:()=>{ if(confirm('¿Eliminar OC '+oc.folio+'?')) updProject({...project,ordenesCompra:(project.ordenesCompra||[]).filter(o=>o.id!==oc.id)}); }
-                }, 'Eliminar'),
-              ),
+      (project.ordenesCompra||[]).length > 0 && (() => {
+        const reimprimir = oc => {
+          const cot2=project.cotizacion||{};
+          const parts=(oc.partidas||[]).map(op=>{
+            const orig=(cot2.partidas||[]).find(p=>p.id===op.id)||{};
+            return {...orig,...op, costoMSMS:op.precioUnit||orig.costoMSMS||0};
+          });
+          printOrdenCompra({ project:{...project,ocProveedor:{name:oc.proveedor,rfc:oc.proveedorRfc,address:oc.proveedorAddress},cotizacion:{...cot2,agenciaProveedor:oc.proveedor}}, partidas:parts, condiciones:oc.condiciones||[], folio:oc.folio, companyObj:company });
+        };
+        const eliminar = oc => { if(confirm('¿Eliminar OC '+oc.folio+'?')) updProject({...project,ordenesCompra:(project.ordenesCompra||[]).filter(o=>o.id!==oc.id)}); };
+        const ocsList = [...(project.ordenesCompra||[])].reverse();
+        const vehTxt = oc => (oc.partidas||[]).map(p=>`${p.id} · ${p.vehiculo||''} ×${p.cantidad}`).join(' | ');
+        return h('div', { className:'card', style:{ marginBottom:14 } },
+          h('div', { style:{ fontSize:13, fontWeight:500, marginBottom:10 } }, '🛒 Órdenes de Compra'),
+          // Tabla (desktop)
+          h('div', { className:'tbl-scroll hide-mobile', style:{ overflowX:'auto' } },
+            h('table', { style:{ fontSize:12, width:'100%', borderCollapse:'collapse', minWidth:560 } },
+              h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b2)' } },
+                ['Folio','Fecha','Proveedor','Vehículos','Acciones'].map(h2=>h('th',{key:h2,style:{padding:'6px 8px',textAlign:'left',fontSize:10,fontWeight:500,color:'var(--t2)',letterSpacing:'.4px',whiteSpace:'nowrap'}},h2))
+              )),
+              h('tbody', null, ocsList.map(oc=>
+                h('tr', { key:oc.id, style:{ borderBottom:'.5px solid var(--b3)' } },
+                  h('td', { style:{ padding:'9px 8px', fontWeight:500, color:'var(--blue)', fontFamily:'monospace', fontSize:11, whiteSpace:'nowrap' } }, oc.folio),
+                  h('td', { style:{ padding:'9px 8px', color:'var(--t2)', fontSize:11, whiteSpace:'nowrap' } }, oc.fecha),
+                  h('td', { style:{ padding:'9px 8px' } }, oc.proveedor||'—'),
+                  h('td', { style:{ padding:'9px 8px', fontSize:11, color:'var(--t2)' } }, vehTxt(oc)),
+                  h('td', { style:{ padding:'9px 8px', whiteSpace:'nowrap' } },
+                    h('button', { style:{ fontSize:11, color:'var(--blue)', padding:'3px 8px' }, onClick:()=>reimprimir(oc) }, '📄 Reimprimir'),
+                    h('button', { style:{ fontSize:11, color:'var(--red)', padding:'3px 8px', marginLeft:4 }, onClick:()=>eliminar(oc) }, 'Eliminar'),
+                  ),
+                )
+              )),
             )
-          )),
-        ),
-      ),
+          ),
+          // Tarjetas (móvil)
+          h('div', { className:'show-mobile', style:{ display:'none' } },
+            ocsList.map(oc => h('div', { key:oc.id, style:{ padding:'12px 0', borderBottom:'.5px solid var(--b3)' } },
+              h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 } },
+                h('span', { style:{ fontWeight:600, color:'var(--blue)', fontFamily:'monospace', fontSize:13 } }, oc.folio),
+                h('span', { style:{ fontSize:11, color:'var(--t3)' } }, oc.fecha),
+              ),
+              h('div', { style:{ fontSize:13, fontWeight:500, marginBottom:2 } }, oc.proveedor||'—'),
+              vehTxt(oc) && h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:8, lineHeight:1.4 } }, vehTxt(oc)),
+              h('div', { style:{ display:'flex', gap:8 } },
+                h('button', { style:{ fontSize:12, color:'var(--blue)', padding:'6px 12px', border:'1px solid var(--blue-border)', borderRadius:'var(--r)', background:'var(--bg1)', flex:1 }, onClick:()=>reimprimir(oc) }, '📄 Reimprimir'),
+                h('button', { style:{ fontSize:12, color:'var(--red)', padding:'6px 12px', border:'1px solid #E24B4A55', borderRadius:'var(--r)', background:'var(--bg1)' }, onClick:()=>eliminar(oc) }, 'Eliminar'),
+              ),
+            )),
+          ),
+        );
+      })(),
       h(DocsTab, { project, onUpdate:updProject, user, logFn }),
     ),
     // Preguntas
@@ -883,7 +901,7 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
 
   return h('div', { style:{ position:'fixed', inset:0, zIndex:9999, background:'rgba(0,0,0,.45)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 },
     onClick: e => { if(e.target===e.currentTarget) onClose(); } },
-    h('div', { style:{ background:'var(--bg1)', borderRadius:'var(--rl)', width:'100%', maxWidth:640, maxHeight:'92vh', overflow:'auto', padding:24, display:'flex', flexDirection:'column', gap:16 } },
+    h('div', { style:{ background:'var(--bg1)', borderRadius:'var(--rl)', width:'100%', maxWidth:640, maxHeight:'92vh', overflow:'auto', WebkitOverflowScrolling:'touch', padding:24, display:'flex', flexDirection:'column', gap:16 } },
 
       // Header
       h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center' } },
