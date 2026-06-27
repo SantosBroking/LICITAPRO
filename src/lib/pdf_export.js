@@ -753,3 +753,47 @@ ${BASE_CSS}
 
   openPrint(html, folio);
 }
+
+// ── Documento membretado de empresa ───────────────────────────
+export function printDocumentoMembretado({ empresa, titulo, cuerpo, folio }) {
+  const emp = empresa || {};
+  const logo = getCompanyLogo(emp.name, emp);
+  const dir = [emp.address, emp.cp, emp.ciudad, emp.estado].filter(Boolean).join(', ');
+  const contacto = [emp.telefono, emp.correo].filter(Boolean).join(' · ');
+  // Escapar HTML del cuerpo y respetar saltos de línea
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const cuerpoHtml = esc(cuerpo).replace(/\n/g, '<br>');
+
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<title>${esc(titulo||'Documento')} ${esc(folio||'')}</title>
+<style>
+  @page { size: letter; margin: 2.2cm 2.4cm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; color:#1a1917; font-size:12.5px; line-height:1.7; margin:0; }
+  .header { display:flex; align-items:flex-start; gap:16px; border-bottom:2px solid #1a1917; padding-bottom:14px; margin-bottom:8px; }
+  .header img { height:64px; width:auto; max-width:130px; object-fit:contain; background:#fff; flex-shrink:0; }
+  .emp-nombre { font-size:14px; font-weight:700; margin-bottom:3px; }
+  .emp-datos { font-size:9.5px; color:#555; line-height:1.5; }
+  .folio { font-size:9px; color:#888; text-align:right; margin-bottom:24px; }
+  .cuerpo { white-space:normal; margin-top:28px; text-align:justify; }
+  .no-print { display:none !important; }
+  @media screen { body { max-width:780px; margin:24px auto; padding:0 24px; } }
+</style></head><body>
+  <div class="header">
+    ${logo ? `<img src="${logo}" />` : ''}
+    <div style="flex:1;min-width:0">
+      <div class="emp-nombre">${esc(emp.nombreComercial || emp.name || '')}</div>
+      <div class="emp-datos">${esc(emp.name||'')}</div>
+      ${emp.rfc?`<div class="emp-datos">RFC: ${esc(emp.rfc)}</div>`:''}
+      ${dir?`<div class="emp-datos">${esc(dir)}</div>`:''}
+      ${contacto?`<div class="emp-datos">${esc(contacto)}</div>`:''}
+    </div>
+  </div>
+  ${folio?`<div class="folio">${esc(folio)}</div>`:'<div style="margin-bottom:24px"></div>'}
+  ${titulo?`<div style="text-align:center;font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">${esc(titulo)}</div>`:''}
+  <div class="cuerpo">${cuerpoHtml}</div>
+  <script>setTimeout(()=>window.print(),400);</script>
+</body></html>`);
+  win.document.close();
+}

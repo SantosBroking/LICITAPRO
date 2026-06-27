@@ -6,6 +6,8 @@ import { AIAnalyzerButton } from '../ui/AIAnalyzerButton.js';
 import { EMPRESA_BASE_DOCS } from '../lib/constants.js';
 import { TODAY, uid, dlFile, fmtBytes } from '../lib/utils.js';
 import { Inp, EmptyState, DeleteConfirmModal, InfoModal } from '../ui/primitives.js';
+import { redactarDocumento } from '../lib/ai_analyzer.js';
+import { printDocumentoMembretado } from '../lib/pdf_export.js';
 
 export function EmpresaDocsCard({ company, onUpdate }) {
   const docs = company.baseDocs || [];
@@ -139,7 +141,123 @@ function comprimirLogo(file, maxW = 400) {
   });
 }
 
-export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user, logFn, config }) {
+// ── Documentos membretados por empresa ────────────────────────
+// Generador de cartas/oficios con el membrete de la empresa, con ayuda de IA,
+// guardado en el expediente de la empresa y ligado a proyectos.
+export function DocumentosMembretados({ company, projects, config, onUpdate }) {
+  const expediente = company.documentosMembretados || [];
+  const projsEmpresa = (projects||[]).filter(p => p.company === company.name);
+
+  const [titulo, setTitulo] = useState('');
+  const [instrucciones, setInstrucciones] = useState('');
+  const [cuerpo, setCuerpo] = useState('');
+  const [proyectoId, setProyectoId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [editId, setEditId] = useState(null);
+
+  const limpiar = () => { setTitulo(''); setInstrucciones(''); setCuerpo(''); setProyectoId(''); setEditId(null); setMsg(''); };
+
+  const redactarIA = async () => {
+    if (!instrucciones.trim()) { setMsg('Escribe primero qué quieres que diga el documento.'); return; }
+    const apiKey = window._lpConfig?.ia?.openaiKey || config?.ia?.openaiKey;
+    setBusy(true); setMsg('🤖 Redactando con IA...');
+    try {
+      const proyecto = projsEmpresa.find(p => p.id === proyectoId) || null;
+      const texto = await redactarDocumento({ instrucciones, empresa:company, proyecto, apiKey });
+      setCuerpo(texto);
+      setMsg('✅ Borrador listo. Revísalo, edítalo si quieres, y guárdalo o imprímelo.');
+    } catch(e) { setMsg('Error: ' + e.message); }
+    setBusy(false);
+  };
+
+  const imprimir = () => {
+    if (!cuerpo.trim()) { setMsg('No hay contenido para imprimir.'); return; }
+    const folio = editId ? (expediente.find(d=>d.id===editId)?.folio || '') : ('DOC-' + new Date().getFullYear() + '-' + Math.floor(1000+Math.random()*9000));
+    printDocumentoMembretado({ empresa:company, titulo, cuerpo, folio });
+  };
+
+  const guardar = () => {
+    if (!titulo.trim() && !cuerpo.trim()) { setMsg('Ponle un título o contenido al documento.'); return; }
+    let nuevoExp;
+    if (editId) {
+      nuevoExp = expediente.map(d => d.id===editId ? { ...d, titulo, cuerpo, proyectoId, proyectoNombre:(projsEmpresa.find(p=>p.id===proyectoId)?.name)||'', updatedAt:TODAY() } : d);
+    } else {
+      const doc = {
+        id: uid('docm'), titulo: titulo||'(Sin título)', cuerpo, instrucciones,
+        proyectoId, proyectoNombre:(projsEmpresa.find(p=>p.id===proyectoId)?.name)||'',
+        folio: 'DOC-' + new Date().getFullYear() + '-' + Math.floor(1000+Math.random()*9000),
+        createdAt: TODAY(), updatedAt: TODAY(),
+      };
+      nuevoExp = [doc, ...expediente];
+    }
+    onUpdate({ ...company, documentosMembretados: nuevoExp });
+    setMsg('✅ Documento guardado en el expediente.');
+    limpiar();
+  };
+
+  const editar = (d) => { setEditId(d.id); setTitulo(d.titulo||''); setInstrucciones(d.instrucciones||''); setCuerpo(d.cuerpo||''); setProyectoId(d.proyectoId||''); setMsg('Editando: ' + (d.titulo||'documento')); window.scrollTo({top:0,behavior:'smooth'}); };
+  const borrar = (id) => { if(confirm('¿Eliminar este documento del expediente?')) onUpdate({ ...company, documentosMembretados: expediente.filter(d=>d.id!==id) }); };
+
+  // Agrupar expediente por proyecto
+  const porProyecto = {};
+  expediente.forEach(d => { const k = d.proyectoNombre || 'Sin proyecto'; (porProyecto[k]=porProyecto[k]||[]).push(d); });
+  const gruposProyecto = Object.keys(porProyecto).sort((a,b)=> a==='Sin proyecto'?1 : b==='Sin proyecto'?-1 : a.localeCompare(b));
+
+  const lbl = { fontSize:11, color:'var(--t2)', marginBottom:4, display:'block', fontWeight:500 };
+
+  return h('div', { className:'card', style:{ marginBottom:16 } },
+    h('div', { style:{ fontSize:15, fontWeight:600, marginBottom:4 } }, '📝 Documentos membretados'),
+    h('div', { style:{ fontSize:11, color:'var(--t3)', marginBottom:16 } }, 'Crea cartas y oficios con el membrete de ', h('strong',null,company.nombreComercial||company.name||'esta empresa'), '. La IA te ayuda a redactar, y puedes ligar cada documento a un proyecto.'),
+
+    // ── Generador ──
+    h('div', { style:{ background:'var(--bg2)', borderRadius:'var(--rl)', padding:16, marginBottom:16 } },
+      h('label', { style:lbl }, 'Título del documento'),
+      h('input', { type:'text', value:titulo, onChange:e=>setTitulo(e.target.value), placeholder:'Ej: Carta de presentación', style:{ width:'100%', marginBottom:12, fontSize:13 } }),
+
+      h('label', { style:lbl }, 'Ligar a proyecto (opcional)'),
+      h('select', { value:proyectoId, onChange:e=>setProyectoId(e.target.value), style:{ width:'100%', marginBottom:12, fontSize:13 } },
+        h('option', { value:'' }, '— Sin proyecto —'),
+        projsEmpresa.map(p => h('option', { key:p.id, value:p.id }, p.name)),
+      ),
+
+      h('label', { style:lbl }, '¿Qué quieres que diga? (instrucciones para la IA)'),
+      h('textarea', { value:instrucciones, onChange:e=>setInstrucciones(e.target.value), placeholder:'Ej: Una carta dirigida al municipio de Tultitlán manifestando que cumplimos con todos los requisitos de la licitación y que tenemos capacidad para entregar 10 patrullas en 60 días.', rows:3, style:{ width:'100%', marginBottom:10, fontSize:13, resize:'vertical', fontFamily:'inherit' } }),
+      h('button', { onClick:redactarIA, disabled:busy, className:'bp', style:{ marginBottom:12, opacity:busy?.6:1 } }, busy?'Redactando...':'🤖 Redactar con IA'),
+
+      h('label', { style:lbl }, 'Contenido del documento (editable)'),
+      h('textarea', { value:cuerpo, onChange:e=>setCuerpo(e.target.value), placeholder:'Aquí aparece el texto generado. Puedes editarlo libremente o escribir el tuyo desde cero.', rows:12, style:{ width:'100%', marginBottom:12, fontSize:13, resize:'vertical', lineHeight:1.6, fontFamily:'inherit' } }),
+
+      h('div', { style:{ display:'flex', gap:8, flexWrap:'wrap' } },
+        h('button', { onClick:imprimir, className:'bp' }, '🖨 Ver / Imprimir PDF'),
+        h('button', { onClick:guardar }, editId?'💾 Guardar cambios':'💾 Guardar en expediente'),
+        (titulo||cuerpo||instrucciones) && h('button', { onClick:limpiar, style:{ color:'var(--t2)' } }, editId?'Cancelar edición':'Limpiar'),
+      ),
+      msg && h('div', { style:{ fontSize:12, color:msg.startsWith('✅')?'var(--green)':msg.startsWith('Error')?'var(--red)':'var(--t2)', marginTop:12, padding:'8px 10px', background:'var(--bg1)', borderRadius:8 } }, msg),
+    ),
+
+    // ── Expediente ──
+    h('div', { style:{ fontSize:13, fontWeight:600, marginBottom:10 } }, 'Expediente · ', expediente.length, ' documento(s)'),
+    expediente.length===0
+      ? h('div', { style:{ fontSize:12, color:'var(--t3)', padding:'16px', textAlign:'center', border:'1px dashed var(--b1)', borderRadius:8 } }, 'Aún no hay documentos guardados. Crea uno arriba.')
+      : gruposProyecto.map(grupo => h('div', { key:grupo, style:{ marginBottom:14 } },
+          h('div', { style:{ fontSize:11, fontWeight:600, color: grupo==='Sin proyecto'?'var(--t3)':'var(--blue)', textTransform:'uppercase', letterSpacing:'.4px', marginBottom:8, paddingBottom:4, borderBottom:'.5px solid var(--b3)' } }, grupo==='Sin proyecto'?'📂 Sin proyecto ligado':'📁 '+grupo),
+          porProyecto[grupo].map(d => h('div', { key:d.id, style:{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'10px 0', borderBottom:'.5px solid var(--b3)' } },
+            h('div', { style:{ flex:1, minWidth:0 } },
+              h('div', { style:{ fontSize:13, fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, d.titulo),
+              h('div', { style:{ fontSize:10, color:'var(--t3)' } }, d.folio, ' · ', d.updatedAt||d.createdAt),
+            ),
+            h('div', { style:{ display:'flex', gap:6, flexShrink:0 } },
+              h('button', { onClick:()=>printDocumentoMembretado({ empresa:company, titulo:d.titulo, cuerpo:d.cuerpo, folio:d.folio }), style:{ fontSize:11, padding:'4px 8px', color:'var(--blue)' } }, '🖨'),
+              h('button', { onClick:()=>editar(d), style:{ fontSize:11, padding:'4px 8px' } }, '✏️'),
+              h('button', { onClick:()=>borrar(d.id), style:{ fontSize:11, padding:'4px 8px', color:'var(--red)' } }, '🗑'),
+            ),
+          )),
+        )),
+  );
+}
+
+export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user, logFn, config, projects }) {
   const [c, sC]       = useState(JSON.parse(JSON.stringify(company)));
   const [parsing, setParsing] = useState(false);
   const [parseMsg, setParseMsg] = useState('');
@@ -278,6 +396,7 @@ export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user,
       ),
     ),
     h(EmpresaDocsCard, { company:c, onUpdate:sC }),
+    h(DocumentosMembretados, { company:c, projects, config, onUpdate:(updated)=>{ sC(updated); onSave(updated); } }),
     onRequestDelete && h('div', { className:'card', style:{ borderLeft:'3px solid #E24B4A', marginBottom:20 } },
       h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:8, color:'#E24B4A' } }, 'Zona de peligro'),
       h('button', { onClick:onRequestDelete, style:{ background:'transparent', color:'#E24B4A', border:'1px solid #E24B4A', fontSize:13, padding:'8px 18px', fontWeight:500 } }, '🗑 Eliminar esta empresa'),
@@ -297,7 +416,7 @@ export default function Companies({ companies, setCompanies, projects, onSave, u
       : companies.find(c=>c.id===sel);
     if (!co) { setSel(null); return null; }
     return h('div', null,
-      h(CompanyProfile, { company:co, config, onSave:c=>{ onSave(c); }, onBack:()=>setSel(null), onRequestDelete:sel==='new'?null:()=>requestDelete(co), user, logFn }),
+      h(CompanyProfile, { company:co, config, projects, onSave:c=>{ onSave(c); }, onBack:()=>setSel(null), onRequestDelete:sel==='new'?null:()=>requestDelete(co), user, logFn }),
       deleteState && renderDeleteModal(deleteState,setDeleteState,confirmDelete),
     );
   }

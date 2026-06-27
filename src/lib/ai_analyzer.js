@@ -153,3 +153,61 @@ function fileToBase64(file) {
     reader.readAsDataURL(file);
   });
 }
+
+// ── Redacción de documentos membretados ───────────────────────
+// Genera texto de un documento (carta/oficio) a partir de instrucciones del usuario.
+// Devuelve texto plano con saltos de línea (no JSON).
+export async function redactarDocumento({ instrucciones, empresa, proyecto, apiKey }) {
+  if (!apiKey) throw new Error('Agrega tu API Key de Anthropic en Configuración → 🤖 Inteligencia Artificial.');
+  const ctxEmpresa = empresa ? `
+Empresa que emite el documento:
+- Razón social: ${empresa.name||''}
+- Nombre comercial: ${empresa.nombreComercial||''}
+- RFC: ${empresa.rfc||''}
+- Domicilio: ${[empresa.address,empresa.cp,empresa.ciudad,empresa.estado].filter(Boolean).join(', ')}
+- Representante legal: ${empresa.representanteLegal||''} ${empresa.cargoRepresentante?('('+empresa.cargoRepresentante+')'):''}
+- Objeto social: ${empresa.objetoSocial||''}` : '';
+  const ctxProyecto = proyecto ? `
+Proyecto/licitación relacionado:
+- Nombre: ${proyecto.name||''}
+- Dependencia: ${proyecto.dependencia||''}
+- Cliente: ${proyecto.client||proyecto.cliente||''}
+- Número de procedimiento: ${proyecto.numProcedimiento||proyecto.folio||''}
+- Monto: ${proyecto.montoEstimado||''}` : '';
+  const prompt = `Eres un asistente que redacta documentos formales para empresas mexicanas que participan en licitaciones de gobierno. Redacta un documento profesional en español según estas instrucciones del usuario:
+
+"${instrucciones}"
+${ctxEmpresa}${ctxProyecto}
+
+REGLAS:
+- Devuelve SOLO el cuerpo del documento, en texto plano, listo para imprimir.
+- NO incluyas el membrete, logo, razón social ni domicilio en encabezado (eso lo agrega el sistema automáticamente).
+- NO uses Markdown (nada de **, ##, etc.). Usa texto plano con saltos de línea y mayúsculas donde corresponda.
+- Incluye lugar y fecha si es una carta (usa "Ciudad de México, a [fecha de hoy]" si no se especifica otra ciudad).
+- Usa un tono formal y profesional apropiado para trámites de gobierno.
+- Si el usuario pide una carta dirigida a alguien, incluye el destinatario.
+- Cierra con el nombre del representante legal y su cargo si están disponibles.`;
+
+  const response = await fetch(CLAUDE_API, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: 2000,
+      messages: [{ role: 'user', content: [{ type:'text', text: prompt }] }]
+    })
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    if (response.status === 401) throw new Error('API key inválida. Revisa tu key de Anthropic en Configuración.');
+    if (response.status === 429) throw new Error('Límite de solicitudes alcanzado. Espera 1 minuto.');
+    throw new Error('Error de Claude: ' + (err.error?.message || response.status));
+  }
+  const data = await response.json();
+  return data.content?.[0]?.text?.trim() || '';
+}
