@@ -429,6 +429,9 @@ export function BillingTab({ project, vehicles, onNav }) {
     const apiKey = window._lpConfig?.ia?.openaiKey;
     setBusy(true);
     let creados = 0, errores = 0;
+    // Mapa local de vehículos tocados en esta tanda (el estado de React no se actualiza entre iteraciones)
+    const locales = {};
+    vehicles.forEach(v => { if (v.vin) locales[(v.vin||'').trim().toUpperCase()] = { ...v }; });
     for (const file of files) {
       try {
         setMsg('🤖 Analizando '+file.name+'...');
@@ -453,21 +456,32 @@ export function BillingTab({ project, vehicles, onNav }) {
           uuid: datos.uuid||'', subtotal: datos.subtotal||0, iva: datos.iva||0, total: datos.total||0,
           statusPago: 'Pendiente', nota, xmlNombre: file.name, xmlData: url || '',
         };
-        // ¿Ya existe un vehículo con este VIN? Si sí, actualizar; si no, crear
         const vinNorm = (datos.vin||'').trim().toUpperCase();
-        const existente = vinNorm ? vehicles.find(v => (v.vin||'').trim().toUpperCase() === vinNorm) : null;
         const campoFactura = tipoFactura==='agencia' ? 'facturaAgencia' : tipoFactura==='gobierno' ? 'facturaGobierno' : tipoFactura==='intermedia' ? 'facturaIntermedia' : 'facturaEquipo';
+        // ¿Ya existe (en estado o en esta tanda) un vehículo con este VIN?
+        let existente = vinNorm ? locales[vinNorm] : null;
+        // Si la factura no trae VIN (común en reventas) y hay un solo vehículo en el proyecto, asignarla a ese
+        if (!existente && !vinNorm) {
+          const listaLocal = Object.values(locales);
+          if (listaLocal.length === 1) existente = listaLocal[0];
+          else if (listaLocal.length > 1) { setMsg('⚠️ La factura no trae VIN y hay varios vehículos. Súbela desde el detalle del vehículo correspondiente.'); errores++; continue; }
+        }
         if (existente) {
-          onNav('save_vehicle', { ...existente, [campoFactura]: facObj, vin: existente.vin || vinNorm });
+          const actualizado = { ...existente, [campoFactura]: facObj, vin: existente.vin || vinNorm };
+          if (vinNorm) locales[vinNorm] = actualizado;
+          onNav('save_vehicle', actualizado);
         } else {
-          onNav('save_vehicle', {
+          const nuevo = {
             id: vehId, projectId: project.id,
             marca: datos.marca||'', modelo: datos.modelo||'', version:'', ano: datos.ano||'', color: datos.color||'',
             vin: vinNorm, numMotor: datos.numMotor||'', numInventario:'',
             precioUnitario: datos.subtotal||0, iva: datos.iva||0, precioTotal: datos.total||0,
             equipamiento:'', statusDocs:'Pendiente', statusEntrega:'Pendiente', ubicacion:'', observaciones: nota,
-            facturaAgencia: tipoFactura==='agencia'?facObj:{}, facturaEquipo: tipoFactura==='equipo'?facObj:{}, facturaIntermedia: tipoFactura==='intermedia'?facObj:{}, facturaGobierno: tipoFactura==='gobierno'?facObj:{}, actaEntrega:{},
-          });
+            facturaAgencia:{}, facturaEquipo:{}, facturaIntermedia:{}, facturaGobierno:{}, actaEntrega:{},
+            [campoFactura]: facObj,
+          };
+          if (vinNorm) locales[vinNorm] = nuevo;
+          onNav('save_vehicle', nuevo);
         }
         creados++;
       } catch(e) { console.error(e); errores++; setMsg('Error en '+file.name+': '+e.message); }
