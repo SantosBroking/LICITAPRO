@@ -419,15 +419,90 @@ ${acta.observaciones?`<p><strong>Observaciones:</strong> ${acta.observaciones}</
 
 // ── BillingTab ────────────────────────────────────────────────
 export function BillingTab({ project, vehicles, onNav }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  // Analiza una factura (PDF o XML), extrae datos y crea/actualiza el vehículo + su factura
+  const subirFactura = async (files, tipoFactura) => {
+    if (!files || !files.length) return;
+    const apiKey = window._lpConfig?.ia?.openaiKey;
+    setBusy(true);
+    let creados = 0, errores = 0;
+    for (const file of files) {
+      try {
+        setMsg('🤖 Analizando '+file.name+'...');
+        let datos;
+        const esXML = file.name.toLowerCase().endsWith('.xml');
+        if (esXML) {
+          // CFDI XML: parsear directamente (no requiere IA)
+          const text = await file.text();
+          datos = parseCFDI(text);
+        } else {
+          if (!apiKey) { setMsg('⚠️ Agrega tu API Key de Anthropic en Configuración para analizar PDFs.'); setBusy(false); return; }
+          datos = await analyzeFactura(file, apiKey);
+        }
+        // Subir el archivo a almacenamiento
+        const vehId = uid('VEH');
+        const storagePath = `vehiculos/${vehId}/factura-${tipoFactura}-${file.name}`;
+        const url = await uploadFileToStorage(storagePath, file);
+        // Nota automática tipo "Nissan Surman a Broking"
+        const nota = [datos.emisor, datos.receptor].filter(Boolean).join(' a ');
+        const facObj = {
+          folio: datos.folio||'', fecha: datos.fecha||'', emisor: datos.emisor||'', receptor: datos.receptor||'',
+          uuid: datos.uuid||'', subtotal: datos.subtotal||0, iva: datos.iva||0, total: datos.total||0,
+          statusPago: 'Pendiente', nota, xmlNombre: file.name, xmlData: url || '',
+        };
+        // ¿Ya existe un vehículo con este VIN? Si sí, actualizar; si no, crear
+        const vinNorm = (datos.vin||'').trim().toUpperCase();
+        const existente = vinNorm ? vehicles.find(v => (v.vin||'').trim().toUpperCase() === vinNorm) : null;
+        const campoFactura = tipoFactura==='agencia' ? 'facturaAgencia' : tipoFactura==='gobierno' ? 'facturaGobierno' : 'facturaEquipo';
+        if (existente) {
+          onNav('save_vehicle', { ...existente, [campoFactura]: facObj, vin: existente.vin || vinNorm });
+        } else {
+          onNav('save_vehicle', {
+            id: vehId, projectId: project.id,
+            marca: datos.marca||'', modelo: datos.modelo||'', version:'', ano: datos.ano||'', color: datos.color||'',
+            vin: vinNorm, numMotor: datos.numMotor||'', numInventario:'',
+            precioUnitario: datos.subtotal||0, iva: datos.iva||0, precioTotal: datos.total||0,
+            equipamiento:'', statusDocs:'Pendiente', statusEntrega:'Pendiente', ubicacion:'', observaciones: nota,
+            facturaAgencia: tipoFactura==='agencia'?facObj:{}, facturaEquipo: tipoFactura==='equipo'?facObj:{}, facturaGobierno: tipoFactura==='gobierno'?facObj:{}, actaEntrega:{},
+          });
+        }
+        creados++;
+      } catch(e) { console.error(e); errores++; setMsg('Error en '+file.name+': '+e.message); }
+    }
+    setBusy(false);
+    if (!errores) setMsg('✅ '+creados+' factura(s) procesada(s). VIN y folio agregados a Vehículos.');
+  };
+
   const totals = { agencia:{count:0,total:0,pagadas:0}, equipo:{count:0,total:0,pagadas:0}, gobierno:{count:0,total:0,pagadas:0} };
   vehicles.forEach(v => {
     [['agencia','facturaAgencia'],['gobierno','facturaGobierno']].forEach(([k,f]) => {
       const fc=v[f]; if(fc?.folio){totals[k].count++;totals[k].total+=(fc.total||0);if(['Pagada','Cobrada'].includes(fc.statusPago))totals[k].pagadas++;}
     });
   });
-  if (vehicles.length===0) return h('div', { className:'card' }, h(EmptyState, { title:'Sin vehículos', description:'Agrega vehículos para gestionar su facturación.' }));
+
+  const btnSubir = (label, tipo, color) => h('label', { style:{ fontSize:12, fontWeight:500, color, background:'var(--bg1)', border:'1px solid '+color+'55', borderRadius:'var(--r)', padding:'8px 14px', cursor:busy?'wait':'pointer', display:'inline-block' } },
+    label,
+    h('input', { type:'file', accept:'application/pdf,text/xml,.xml', multiple:true, style:{ display:'none' }, disabled:busy, onChange:e=>{ subirFactura(Array.from(e.target.files), tipo); e.target.value=''; } }),
+  );
+
   return h('div', null,
-    h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12, marginBottom:20 } },
+    // Sección de carga de facturas
+    h('div', { className:'card', style:{ marginBottom:16 } },
+      h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:4 } }, 'Subir factura (PDF o XML)'),
+      h('div', { style:{ fontSize:11, color:'var(--t3)', marginBottom:12 } }, 'Se analiza automáticamente: folio, VIN, montos y nota (ej: «Nissan Surman a Broking»). El VIN se agrega a Vehículos.'),
+      h('div', { style:{ display:'flex', gap:8, flexWrap:'wrap' } },
+        btnSubir('📥 Factura de agencia', 'agencia', '#5B8DEF'),
+        btnSubir('🔧 Factura de equipo', 'equipo', '#EF9F27'),
+        btnSubir('📤 Factura a cliente', 'gobierno', '#1D9E75'),
+      ),
+      msg && h('div', { style:{ fontSize:12, color:msg.startsWith('✅')?'var(--green)':msg.startsWith('⚠️')||msg.startsWith('Error')?'var(--red)':'var(--t2)', marginTop:12, padding:'8px 10px', background:'var(--bg2)', borderRadius:8 } }, msg),
+    ),
+    vehicles.length===0
+      ? h('div', { className:'card' }, h(EmptyState, { title:'Sin vehículos', description:'Sube una factura de agencia para crear el primer vehículo, o agrégalo manualmente en la pestaña Vehículos.' }))
+      : h('div', null,
+    h('div', { className:'grid-3', style:{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12, marginBottom:20 } },
       [{k:'agencia',l:'De agencia (entrada)',c:'#5B8DEF'},{k:'equipo',l:'De proveedor equipo',c:'#EF9F27'},{k:'gobierno',l:'A cliente final (salida)',c:'#1D9E75'}].map(g =>
         h('div', { key:g.k, className:'card', style:{ borderTop:'3px solid '+g.c } },
           h('div', { style:{ fontSize:12, color:'var(--t2)', marginBottom:8 } }, g.l),
@@ -459,6 +534,7 @@ export function BillingTab({ project, vehicles, onNav }) {
         )
       )
     ),
+      ),
   );
 }
 
