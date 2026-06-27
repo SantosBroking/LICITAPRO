@@ -494,7 +494,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
     // Vehículos
     tab==='vehiculos' && h(VehiclesTab, { project, vehicles:pVehicles, onSave:v=>onNav('save_vehicle',v), onDelete:id=>onNav('delete_vehicle',id), onNav:(view,id)=>{ if(view==='vehicle_detail')setSelVehicle(id); else onNav(view,id); }, user, logFn }),
     // Facturación
-    tab==='facturacion' && h(BillingTab, { project, vehicles:pVehicles, onNav:(view,id)=>{ if(view==='vehicle_detail')setSelVehicle(id); } }),
+    tab==='facturacion' && h(BillingTab, { project, vehicles:pVehicles, onNav:(view,id)=>{ if(view==='vehicle_detail'){ setSelVehicle(id); } else { onNav(view,id); } } }),
     // Documentos
     tab==='docs' && h('div', null,
       // Órdenes de Compra generadas
