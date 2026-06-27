@@ -102,7 +102,7 @@ export function VehiclesTab({ project, vehicles, onSave, onDelete, onNav, user, 
 
 // ── VehicleForm ───────────────────────────────────────────────
 export function VehicleForm({ vehicle, projectId, onSave, onSaveMany, onCancel }) {
-  const [v, sV] = useState(vehicle || { id:uid('VEH'), projectId, marca:'', modelo:'', version:'', ano:'', color:'', vin:'', numMotor:'', numInventario:'', precioUnitario:0, iva:0, precioTotal:0, equipamiento:'', statusDocs:'Pendiente', statusEntrega:'Pendiente', ubicacion:'', observaciones:'', facturaAgencia:{}, facturaEquipo:{}, facturaGobierno:{}, actaEntrega:{} });
+  const [v, sV] = useState(vehicle || { id:uid('VEH'), projectId, marca:'', modelo:'', version:'', ano:'', color:'', vin:'', numMotor:'', numInventario:'', precioUnitario:0, iva:0, precioTotal:0, equipamiento:'', statusDocs:'Pendiente', statusEntrega:'Pendiente', ubicacion:'', observaciones:'', facturaAgencia:{}, facturaIntermedia:{}, facturaEquipo:{}, facturaGobierno:{}, actaEntrega:{} });
   const [lote, setLote] = useState(false);       // modo varios VINs
   const [vinsText, setVinsText] = useState('');   // VINs uno por línea
   const esEdicion = !!vehicle;
@@ -362,7 +362,8 @@ export function VehicleDetail({ vehicle, project, company, onNav, onUpdate, onDe
       ),
     ),
     tab==='facturas' && h('div', { style:{ display:'flex', flexDirection:'column', gap:16 } },
-      h(FacturaCard, { title:'Factura de la agencia (a la empresa)', subtitle:'La agencia automotriz me factura este vehículo', color:'#5B8DEF', data:vehicle.facturaAgencia||{}, onSave:f=>updFact('facturaAgencia',f) }),
+      h(FacturaCard, { title:'Factura de la agencia (compra)', subtitle:'La agencia automotriz me factura este vehículo', color:'#5B8DEF', data:vehicle.facturaAgencia||{}, onSave:f=>updFact('facturaAgencia',f) }),
+      h(FacturaCard, { title:'Factura de reventa (intermedia)', subtitle:'Venta entre empresas (ej: Broking a SATHRI)', color:'#9B7EDE', data:vehicle.facturaIntermedia||{}, onSave:f=>updFact('facturaIntermedia',f) }),
       h(FacturaCard, { title:'Factura al cliente final (gobierno)', subtitle:'Yo facturo el vehículo equipado al cliente', color:'#1D9E75', data:vehicle.facturaGobierno||{}, onSave:f=>updFact('facturaGobierno',f) }),
     ),
     tab==='entrega' && h(ActaEntrega, { vehicle, project, company, onUpdate }),
@@ -455,7 +456,7 @@ export function BillingTab({ project, vehicles, onNav }) {
         // ¿Ya existe un vehículo con este VIN? Si sí, actualizar; si no, crear
         const vinNorm = (datos.vin||'').trim().toUpperCase();
         const existente = vinNorm ? vehicles.find(v => (v.vin||'').trim().toUpperCase() === vinNorm) : null;
-        const campoFactura = tipoFactura==='agencia' ? 'facturaAgencia' : tipoFactura==='gobierno' ? 'facturaGobierno' : 'facturaEquipo';
+        const campoFactura = tipoFactura==='agencia' ? 'facturaAgencia' : tipoFactura==='gobierno' ? 'facturaGobierno' : tipoFactura==='intermedia' ? 'facturaIntermedia' : 'facturaEquipo';
         if (existente) {
           onNav('save_vehicle', { ...existente, [campoFactura]: facObj, vin: existente.vin || vinNorm });
         } else {
@@ -465,7 +466,7 @@ export function BillingTab({ project, vehicles, onNav }) {
             vin: vinNorm, numMotor: datos.numMotor||'', numInventario:'',
             precioUnitario: datos.subtotal||0, iva: datos.iva||0, precioTotal: datos.total||0,
             equipamiento:'', statusDocs:'Pendiente', statusEntrega:'Pendiente', ubicacion:'', observaciones: nota,
-            facturaAgencia: tipoFactura==='agencia'?facObj:{}, facturaEquipo: tipoFactura==='equipo'?facObj:{}, facturaGobierno: tipoFactura==='gobierno'?facObj:{}, actaEntrega:{},
+            facturaAgencia: tipoFactura==='agencia'?facObj:{}, facturaEquipo: tipoFactura==='equipo'?facObj:{}, facturaIntermedia: tipoFactura==='intermedia'?facObj:{}, facturaGobierno: tipoFactura==='gobierno'?facObj:{}, actaEntrega:{},
           });
         }
         creados++;
@@ -475,9 +476,9 @@ export function BillingTab({ project, vehicles, onNav }) {
     if (!errores) setMsg('✅ '+creados+' factura(s) procesada(s). VIN y folio agregados a Vehículos.');
   };
 
-  const totals = { agencia:{count:0,total:0,pagadas:0}, equipo:{count:0,total:0,pagadas:0}, gobierno:{count:0,total:0,pagadas:0} };
+  const totals = { agencia:{count:0,total:0,pagadas:0}, intermedia:{count:0,total:0,pagadas:0}, equipo:{count:0,total:0,pagadas:0}, gobierno:{count:0,total:0,pagadas:0} };
   vehicles.forEach(v => {
-    [['agencia','facturaAgencia'],['gobierno','facturaGobierno']].forEach(([k,f]) => {
+    [['agencia','facturaAgencia'],['intermedia','facturaIntermedia'],['gobierno','facturaGobierno']].forEach(([k,f]) => {
       const fc=v[f]; if(fc?.folio){totals[k].count++;totals[k].total+=(fc.total||0);if(['Pagada','Cobrada'].includes(fc.statusPago))totals[k].pagadas++;}
     });
   });
@@ -491,19 +492,20 @@ export function BillingTab({ project, vehicles, onNav }) {
     // Sección de carga de facturas
     h('div', { className:'card', style:{ marginBottom:16 } },
       h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:4 } }, 'Subir factura (PDF o XML)'),
-      h('div', { style:{ fontSize:11, color:'var(--t3)', marginBottom:12 } }, 'Se analiza automáticamente: folio, VIN, montos y nota (ej: «Nissan Surman a Broking»). El VIN se agrega a Vehículos.'),
+      h('div', { style:{ fontSize:11, color:'var(--t3)', marginBottom:12 } }, 'Se analiza automáticamente: folio, VIN, montos y nota (ej: «Surman a Broking»). El VIN se agrega a Vehículos.'),
       h('div', { style:{ display:'flex', gap:8, flexWrap:'wrap' } },
-        btnSubir('📥 Factura de agencia', 'agencia', '#5B8DEF'),
-        btnSubir('🔧 Factura de equipo', 'equipo', '#EF9F27'),
-        btnSubir('📤 Factura a cliente', 'gobierno', '#1D9E75'),
+        btnSubir('📥 Compra (agencia → empresa)', 'agencia', '#5B8DEF'),
+        btnSubir('🔄 Reventa (entre empresas)', 'intermedia', '#9B7EDE'),
+        btnSubir('🔧 Equipo', 'equipo', '#EF9F27'),
+        btnSubir('📤 Venta a cliente final', 'gobierno', '#1D9E75'),
       ),
       msg && h('div', { style:{ fontSize:12, color:msg.startsWith('✅')?'var(--green)':msg.startsWith('⚠️')||msg.startsWith('Error')?'var(--red)':'var(--t2)', marginTop:12, padding:'8px 10px', background:'var(--bg2)', borderRadius:8 } }, msg),
     ),
     vehicles.length===0
       ? h('div', { className:'card' }, h(EmptyState, { title:'Sin vehículos', description:'Sube una factura de agencia para crear el primer vehículo, o agrégalo manualmente en la pestaña Vehículos.' }))
       : h('div', null,
-    h('div', { className:'grid-3', style:{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12, marginBottom:20 } },
-      [{k:'agencia',l:'De agencia (entrada)',c:'#5B8DEF'},{k:'equipo',l:'De proveedor equipo',c:'#EF9F27'},{k:'gobierno',l:'A cliente final (salida)',c:'#1D9E75'}].map(g =>
+    h('div', { className:'grid-4', style:{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:12, marginBottom:20 } },
+      [{k:'agencia',l:'Compra (agencia)',c:'#5B8DEF'},{k:'intermedia',l:'Reventa (intermedia)',c:'#9B7EDE'},{k:'equipo',l:'Equipo',c:'#EF9F27'},{k:'gobierno',l:'Venta final',c:'#1D9E75'}].map(g =>
         h('div', { key:g.k, className:'card', style:{ borderTop:'3px solid '+g.c } },
           h('div', { style:{ fontSize:12, color:'var(--t2)', marginBottom:8 } }, g.l),
           h('div', { style:{ fontSize:18, fontWeight:500, marginBottom:6 } }, fmt(totals[g.k].total)),
