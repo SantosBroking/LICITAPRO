@@ -85,7 +85,7 @@ export function VehiclesTab({ project, vehicles, onSave, onDelete, onNav, user, 
                   h('td', { style:{ padding:'10px 6px' } }, v.ano||'—'),
                   h('td', { style:{ padding:'10px 6px', fontWeight:500 } }, fmt(v.precioTotal)),
                   h('td', { style:{ padding:'10px 6px' } },
-                    v.statusEntrega && h('span', { style:{ fontSize:11, padding:'2px 8px', borderRadius:10, background:v.statusEntrega==='Entregado'?'#E1F5EE':'#FAEEDA', color:v.statusEntrega==='Entregado'?'#085041':'#633806' } }, v.statusEntrega)
+                    v.statusEntrega && (() => { const st=v.statusEntrega; const col = st==='Cobrada'?{bg:'#C8E9D9',tx:'#085041'}:st==='Entregada'?{bg:'#E1F5EE',tx:'#085041'}:st==='En armadora'?{bg:'#FAEEDA',tx:'#633806'}:{bg:'#E6F1FB',tx:'#1A4480'}; return h('span', { style:{ fontSize:11, padding:'2px 8px', borderRadius:10, whiteSpace:'nowrap', background:col.bg, color:col.tx } }, st); })()
                   ),
                   h('td', { style:{ padding:'10px 6px', fontSize:11, color:fc===2?'var(--green)':'var(--amber)' } }, fc+'/2'),
                   h('td', { style:{ padding:'10px 6px' } },
@@ -237,7 +237,7 @@ export function VehicleForm({ vehicle, projectId, onSave, onSaveMany, onCancel }
         h('div', { className:'card' },
           h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:14 } }, 'Estatus'),
           h(Inp, { label:'Estatus documentación', value:v.statusDocs, onChange:val=>set('statusDocs',val), options:['Pendiente','En proceso','Completa','Entregada'] }),
-          h(Inp, { label:'Estatus entrega', value:v.statusEntrega, onChange:val=>set('statusEntrega',val), options:['Pendiente','En equipamiento','Listo','Entregado'] }),
+          h(Inp, { label:'Estatus entrega', value:v.statusEntrega, onChange:val=>set('statusEntrega',val), options:['En agencia/planta','En armadora','Entregada','Cobrada'] }),
         ),
       ),
     ),
@@ -346,7 +346,7 @@ export function VehicleDetail({ vehicle, project, company, onNav, onUpdate, onDe
     h('div', { className:'grid-4', style:{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:20 } },
       h(Metric, { label:'Precio total', value:fmt(vehicle.precioTotal), sub:'Unit: '+fmt(vehicle.precioUnitario)+' + IVA '+fmt(vehicle.iva) }),
       h(Metric, { label:'Estatus docs', value:vehicle.statusDocs||'—' }),
-      h(Metric, { label:'Estatus entrega', value:vehicle.statusEntrega||'—', sc:vehicle.statusEntrega==='Entregado'?'var(--green)':undefined }),
+      h(Metric, { label:'Estatus entrega', value:vehicle.statusEntrega||'—', sc:['Entregada','Cobrada'].includes(vehicle.statusEntrega)?'var(--green)':undefined }),
       h(Metric, { label:'Ubicación', value:vehicle.ubicacion||'—' }),
     ),
     h('div', { style:{ display:'flex', gap:2, marginBottom:20, borderBottom:'.5px solid var(--b3)', overflowX:'auto', flexWrap:'nowrap' } },
@@ -376,6 +376,18 @@ export function VehicleDetail({ vehicle, project, company, onNav, onUpdate, onDe
 export function ActaEntrega({ vehicle, project, company, onUpdate }) {
   const acta = vehicle.actaEntrega || {};
   const set  = (k, v) => onUpdate({ ...vehicle, actaEntrega: { ...acta, [k]:v } });
+  const [subiendo, setSubiendo] = useState(false);
+  const actaFileRef = useRef(null);
+  const subirActaFirmada = async (file) => {
+    if (!file) return;
+    setSubiendo(true);
+    try {
+      const path = `vehiculos/${vehicle.id}/acta-firmada-${file.name}`;
+      const url = await uploadFileToStorage(path, file);
+      set('archivoFirmado', { url:url||'', nombre:file.name, size:file.size, tipo:file.type||'', fecha:TODAY() });
+    } catch(e) { console.error(e); alert('Error al subir el acta'); }
+    setSubiendo(false);
+  };
   const printActa = () => {
     const w = window.open('', '_blank');
     if (!w) return alert('Permite ventanas emergentes para imprimir el acta');
@@ -416,6 +428,26 @@ ${acta.observaciones?`<p><strong>Observaciones:</strong> ${acta.observaciones}</
     h('div', { className:'card' },
       h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:8 } }, 'Generar acta'),
       h('button', { className:'bp', onClick:printActa }, 'Generar e imprimir acta'),
+      // Subir acta firmada
+      h('div', { style:{ marginTop:16, paddingTop:16, borderTop:'.5px solid var(--b3)' } },
+        h('div', { style:{ fontSize:13, fontWeight:500, marginBottom:8 } }, 'Acta de entrega firmada'),
+        acta.archivoFirmado?.url
+          ? h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, padding:'10px 12px', background:'var(--bg2)', borderRadius:'var(--r)' } },
+              h('div', { style:{ minWidth:0 } },
+                h('div', { style:{ fontSize:13, fontWeight:500, overflow:'hidden', textOverflow:'ellipsis' } }, '📄 '+acta.archivoFirmado.nombre),
+                h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:2 } }, 'Subida '+acta.archivoFirmado.fecha+(acta.archivoFirmado.size?' · '+fmtBytes(acta.archivoFirmado.size):'')),
+              ),
+              h('div', { style:{ display:'flex', gap:8, flexShrink:0 } },
+                h('button', { onClick:()=>window.open(acta.archivoFirmado.url,'_blank'), style:{ fontSize:11, color:'var(--blue)', background:'transparent', border:'none', cursor:'pointer' } }, 'Ver'),
+                h('button', { onClick:()=>set('archivoFirmado',null), style:{ fontSize:11, color:'var(--red)', background:'transparent', border:'none', cursor:'pointer' } }, 'Quitar'),
+              ),
+            )
+          : h('div', null,
+              h('input', { ref:actaFileRef, type:'file', accept:'application/pdf,image/*', style:{ display:'none' }, disabled:subiendo, onChange:e=>{ subirActaFirmada(e.target.files[0]); e.target.value=''; } }),
+              h('button', { disabled:subiendo, onClick:()=>actaFileRef.current&&actaFileRef.current.click(), style:{ fontSize:13, padding:'8px 14px', background:'var(--bg2)', border:'1px solid var(--b2)', borderRadius:'var(--r)', cursor:subiendo?'wait':'pointer' } }, subiendo?'Subiendo...':'📎 Subir acta firmada'),
+              h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:6 } }, 'Sube el acta firmada y sellada (PDF o foto).'),
+            ),
+      ),
     ),
   );
 }
