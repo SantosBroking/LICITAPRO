@@ -549,7 +549,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
           ),
         );
       })(),
-      h(DocsTab, { project, onUpdate:updProject, user, logFn }),
+      h(DocsTab, { project, vehicles:pVehicles, onUpdate:updProject, user, logFn }),
     ),
     // Preguntas
     tab==='preguntas' && h('div', null,

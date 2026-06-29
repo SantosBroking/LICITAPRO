@@ -555,42 +555,123 @@ export function BillingTab({ project, vehicles, onNav }) {
 }
 
 // ── DocsTab ───────────────────────────────────────────────────
-export function DocsTab({ project, onUpdate, user, logFn }) {
+export function DocsTab({ project, vehicles, onUpdate, user, logFn }) {
   const [newDoc, setNewDoc] = useState({ name:'', category:'Bases', notes:'', date:TODAY() });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const fileRef = useRef(null);
   const docs = project.docs || [];
+  const vehs = vehicles || [];
+
+  // Documentos automáticos del sistema (facturas de vehículos + órdenes de compra)
+  const autoDocs = [];
+  vehs.forEach(v => {
+    [['facturaAgencia','Factura de compra'],['facturaIntermedia','Factura de reventa'],['facturaEquipo','Factura de equipo'],['facturaGobierno','Factura a cliente']].forEach(([campo,etiq]) => {
+      const f = v[campo];
+      if (f && f.folio) autoDocs.push({ id:'auto-'+v.id+'-'+campo, name:etiq+' '+f.folio+' ('+(v.vin||v.marca||'')+')', category:'Facturas', date:f.fecha||'', fileUrl:f.xmlData||'', notes:f.nota||'', auto:true });
+    });
+  });
+  (project.ordenesCompra||[]).forEach(oc => {
+    autoDocs.push({ id:'auto-oc-'+oc.id, name:'Orden de compra '+oc.folio+' · '+(oc.proveedor||''), category:'Órdenes de compra', date:oc.fecha||'', fileUrl:'', notes:'Generada en el sistema', auto:true });
+  });
+
+  // Agregar documento solo como referencia (sin archivo)
   const addDoc = () => {
     if (!newDoc.name) return;
     onUpdate({ ...project, docs:[...docs, { id:uid('doc'), ...newDoc }] });
     setNewDoc({ name:'', category:'Bases', notes:'', date:TODAY() });
     if (logFn) logFn(user,'registró documento','proyecto',project.id,newDoc.name);
   };
-  const rmDoc = id => onUpdate({ ...project, docs:docs.filter(d=>d.id!==id) });
+
+  // Subir archivo(s) reales al expediente
+  const subirArchivos = async (files) => {
+    if (!files || !files.length) return;
+    setBusy(true);
+    let nuevos = [];
+    for (const file of files) {
+      try {
+        setMsg('Subiendo '+file.name+'...');
+        const docId = uid('doc');
+        const path = `proyectos/${project.id}/${docId}-${file.name}`;
+        const url = await uploadFileToStorage(path, file);
+        nuevos.push({
+          id: docId, name: file.name, category: newDoc.category, notes: newDoc.notes||'',
+          date: newDoc.date||TODAY(), fileUrl: url||'', fileName: file.name, fileSize: file.size, fileType: file.type||'',
+        });
+      } catch(e) { console.error(e); setMsg('Error con '+file.name); }
+    }
+    if (nuevos.length) {
+      onUpdate({ ...project, docs:[...docs, ...nuevos] });
+      if (logFn) logFn(user,'subió '+nuevos.length+' documento(s)','proyecto',project.id,project.name);
+      setMsg('✅ '+nuevos.length+' archivo(s) agregado(s) al expediente.');
+      setNewDoc(p=>({ ...p, name:'', notes:'' }));
+    }
+    setBusy(false);
+  };
+
+  const rmDoc = id => { if(confirm('¿Quitar este documento del expediente?')) onUpdate({ ...project, docs:docs.filter(d=>d.id!==id) }); };
+  const verDoc = d => { if (d.fileUrl) window.open(d.fileUrl, '_blank'); };
+
+  // Combinar documentos manuales + automáticos del sistema
+  const todosDocs = [...docs, ...autoDocs];
+  const ordenCat = DOC_CATEGORIES;
   const byCategory = {};
-  docs.forEach(d => { const c=d.category||'Otro'; if(!byCategory[c])byCategory[c]=[]; byCategory[c].push(d); });
+  todosDocs.forEach(d => { const c=d.category||'Otro'; if(!byCategory[c])byCategory[c]=[]; byCategory[c].push(d); });
+  const catsOrdenadas = Object.keys(byCategory).sort((a,b)=>{ const ia=ordenCat.indexOf(a), ib=ordenCat.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib); });
+  const totalArchivos = todosDocs.filter(d=>d.fileUrl).length;
+
+  const iconoTipo = (t='') => t.includes('pdf')?'📕':t.includes('image')?'🖼️':t.includes('xml')||t.includes('text')?'📄':t.includes('word')||t.includes('document')?'📘':t.includes('sheet')||t.includes('excel')?'📗':'📎';
+
   return h('div', null,
+    // Encabezado del expediente
+    h('div', { className:'card', style:{ marginBottom:16, background:'linear-gradient(135deg, var(--bg2), var(--bg1))' } },
+      h('div', { style:{ fontSize:15, fontWeight:600, marginBottom:4 } }, '🗂️ Expediente del proyecto'),
+      h('div', { style:{ fontSize:12, color:'var(--t2)' } }, 'Respaldo completo: bases, fallos, contratos, facturas, documentos membretados y todo el soporte. ',
+        h('strong', null, todosDocs.length+' documentos'),' · ',totalArchivos+' archivos guardados.'),
+    ),
+    // Subir / registrar
     h('div', { className:'card', style:{ marginBottom:16 } },
-      h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:14 } }, 'Registrar documento'),
-      h('div', { style:{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', gap:12 } },
-        h(Inp, { label:'Nombre', value:newDoc.name, onChange:v=>setNewDoc(p=>({...p,name:v})), placeholder:'Propuesta técnica V2' }),
+      h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:14 } }, 'Agregar al expediente'),
+      h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:8 } },
         h(Inp, { label:'Categoría', value:newDoc.category, onChange:v=>setNewDoc(p=>({...p,category:v})), options:DOC_CATEGORIES }),
         h(Inp, { label:'Fecha', value:newDoc.date, onChange:v=>setNewDoc(p=>({...p,date:v})), type:'date' }),
       ),
-      h(Inp, { label:'Notas', value:newDoc.notes, onChange:v=>setNewDoc(p=>({...p,notes:v})) }),
-      h('button', { className:'bp', onClick:addDoc }, '+ Agregar documento'),
+      h(Inp, { label:'Notas (opcional)', value:newDoc.notes, onChange:v=>setNewDoc(p=>({...p,notes:v})), placeholder:'Ej: Fallo publicado en CompraNet' }),
+      // Subir archivo real
+      h('div', { style:{ marginTop:12, padding:'14px', border:'1.5px dashed var(--b2)', borderRadius:'var(--r)', textAlign:'center' } },
+        h('input', { ref:fileRef, type:'file', multiple:true, accept:'application/pdf,image/*,text/xml,.xml,.doc,.docx,.xls,.xlsx', style:{ display:'none' }, disabled:busy, onChange:e=>{ subirArchivos(Array.from(e.target.files)); e.target.value=''; } }),
+        h('button', { className:'bp', disabled:busy, onClick:()=>fileRef.current&&fileRef.current.click() }, busy?'Subiendo...':'📎 Subir archivo(s)'),
+        h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:8 } }, 'PDF, imágenes, XML, Word, Excel. Se guarda con la categoría y fecha de arriba.'),
+        msg && h('div', { style:{ fontSize:12, color:msg.startsWith('✅')?'var(--green)':'var(--t2)', marginTop:8 } }, msg),
+      ),
+      // Registrar solo referencia (sin archivo)
+      h('details', { style:{ marginTop:12 } },
+        h('summary', { style:{ fontSize:12, color:'var(--t2)', cursor:'pointer' } }, 'O registrar solo una referencia sin archivo'),
+        h('div', { style:{ display:'flex', gap:8, marginTop:8 } },
+          h(Inp, { label:'Nombre del documento', value:newDoc.name, onChange:v=>setNewDoc(p=>({...p,name:v})), placeholder:'Propuesta técnica V2' }),
+          h('button', { style:{ alignSelf:'flex-end', whiteSpace:'nowrap', fontSize:13, padding:'8px 14px', background:'var(--bg2)', border:'1px solid var(--b2)', borderRadius:'var(--r)', cursor:'pointer' }, onClick:addDoc }, '+ Agregar'),
+        ),
+      ),
     ),
-    docs.length===0
-      ? h('div', { className:'card' }, h(EmptyState, { title:'Sin documentos', description:'Lleva un inventario de bases, anexos, propuestas, etc.' }))
-      : Object.entries(byCategory).map(([cat,items]) =>
+    todosDocs.length===0
+      ? h('div', { className:'card' }, h(EmptyState, { title:'Expediente vacío', description:'Sube las bases, el fallo, el contrato, las facturas y todo el soporte del proyecto para tenerlo respaldado.' }))
+      : catsOrdenadas.map(cat =>
           h('div', { key:cat, className:'card', style:{ marginBottom:12 } },
-            h('div', { style:{ fontSize:11, color:'var(--t2)', textTransform:'uppercase', letterSpacing:.5, marginBottom:10, fontWeight:600 } }, cat,' (',items.length,')'),
-            items.map(d =>
+            h('div', { style:{ fontSize:11, color:'var(--t2)', textTransform:'uppercase', letterSpacing:.5, marginBottom:10, fontWeight:600 } }, cat,' (',byCategory[cat].length,')'),
+            byCategory[cat].map(d =>
               h('div', { key:d.id, style:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, padding:'10px 0', borderBottom:'.5px solid var(--b3)' } },
-                h('div', { style:{ flex:1 } },
-                  h('div', { style:{ fontSize:13, fontWeight:500 } }, d.name),
+                h('div', { style:{ flex:1, minWidth:0 } },
+                  h('div', { style:{ fontSize:13, fontWeight:500, display:'flex', alignItems:'center', gap:6 } },
+                    d.fileUrl && h('span', null, iconoTipo(d.fileType)),
+                    h('span', { style:{ overflow:'hidden', textOverflow:'ellipsis' } }, d.name),
+                  ),
                   d.notes && h('div', { style:{ fontSize:12, color:'var(--t2)', marginTop:2 } }, d.notes),
-                  h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:2 } }, d.date),
+                  h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:2 } }, d.date, d.fileSize?' · '+fmtBytes(d.fileSize):'', d.auto?' · del sistema':d.fileUrl?'':' · (solo referencia)'),
                 ),
-                h('button', { onClick:()=>rmDoc(d.id), style:{ fontSize:11, color:'var(--red)', background:'transparent', border:'none', cursor:'pointer' } }, 'Quitar'),
+                h('div', { style:{ display:'flex', gap:8, flexShrink:0 } },
+                  d.fileUrl && h('button', { onClick:()=>verDoc(d), style:{ fontSize:11, color:'var(--blue)', background:'transparent', border:'none', cursor:'pointer' } }, 'Ver'),
+                  !d.auto && h('button', { onClick:()=>rmDoc(d.id), style:{ fontSize:11, color:'var(--red)', background:'transparent', border:'none', cursor:'pointer' } }, 'Quitar'),
+                ),
               )
             )
           )

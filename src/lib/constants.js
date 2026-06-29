@@ -39,10 +39,10 @@ export const TIPOS_PRODUCTO = [
 export const ESTATUS_COSTO = ['Confirmado','Estimado','Heredado','Pendiente MSM','Vencido'];
 export const MODOS_PRECIO  = ['Utilidad deseada $','Utilidad deseada %','Techo presupuestal'];
 export const DOC_CATEGORIES = [
-  'Bases','Anexo técnico','Anexos administrativos','Anexos legales',
-  'Propuesta técnica','Propuesta económica','Cartas','Poderes',
-  'Constancias fiscales','Opiniones de cumplimiento','Fichas técnicas',
-  'Facturas','Fotografías','Comprobantes de entrega','Otro',
+  'Convocatoria','Bases','Junta de aclaraciones','Anexo técnico','Anexos administrativos','Anexos legales',
+  'Propuesta técnica','Propuesta económica','Acta de apertura','Fallo','Contrato',
+  'Cartas','Membretado','Poderes','Constancias fiscales','Opiniones de cumplimiento','Fichas técnicas',
+  'Facturas','Órdenes de compra','Fotografías','Comprobantes de entrega','Garantías','Fianzas','Otro',
 ];
 
 export const EMPRESA_BASE_DOCS = [
