@@ -84,8 +84,18 @@ export function VehiclesTab({ project, vehicles, onSave, onDelete, onNav, user, 
                   h('td', { style:{ padding:'10px 6px', fontWeight:500 } }, v.marca,' ',v.modelo, v.version?' · '+v.version:''),
                   h('td', { style:{ padding:'10px 6px' } }, v.ano||'—'),
                   h('td', { style:{ padding:'10px 6px', fontWeight:500 } }, fmt(v.precioTotal)),
-                  h('td', { style:{ padding:'10px 6px' } },
-                    v.statusEntrega && (() => { const st=v.statusEntrega; const col = st==='Cobrada'?{bg:'#C8E9D9',tx:'#085041'}:st==='Entregada'?{bg:'#E1F5EE',tx:'#085041'}:st==='En armadora'?{bg:'#FAEEDA',tx:'#633806'}:{bg:'#E6F1FB',tx:'#1A4480'}; return h('span', { style:{ fontSize:11, padding:'2px 8px', borderRadius:10, whiteSpace:'nowrap', background:col.bg, color:col.tx } }, st); })()
+                  h('td', { style:{ padding:'10px 6px' }, onClick:e=>e.stopPropagation() },
+                    (() => {
+                      const st = v.statusEntrega || 'En agencia/planta';
+                      const col = st==='Cobrada'?{bg:'#C8E9D9',tx:'#085041'}:st==='Entregada'?{bg:'#E1F5EE',tx:'#085041'}:st==='En armadora'?{bg:'#FAEEDA',tx:'#633806'}:{bg:'#E6F1FB',tx:'#1A4480'};
+                      return h('select', {
+                        value: st,
+                        onChange: e => onSave({ ...v, statusEntrega: e.target.value }),
+                        style: { fontSize:11, fontWeight:500, padding:'3px 22px 3px 10px', borderRadius:10, whiteSpace:'nowrap', background:col.bg, color:col.tx, border:'none', cursor:'pointer', appearance:'none', WebkitAppearance:'none', backgroundImage:'url("data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'10\' height=\'10\' viewBox=\'0 0 12 12\'><path d=\'M3 5l3 3 3-3\' stroke=\'%23666\' stroke-width=\'1.5\' fill=\'none\'/></svg>")', backgroundRepeat:'no-repeat', backgroundPosition:'right 6px center' },
+                      },
+                        ['En agencia/planta','En armadora','Entregada','Cobrada'].map(op => h('option', { key:op, value:op }, op))
+                      );
+                    })()
                   ),
                   h('td', { style:{ padding:'10px 6px', fontSize:11, color:fc===2?'var(--green)':'var(--amber)' } }, fc+'/2'),
                   h('td', { style:{ padding:'10px 6px' } },
