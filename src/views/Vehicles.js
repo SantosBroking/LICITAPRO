@@ -10,6 +10,7 @@ import { DOC_CATEGORIES, EMPRESA_BASE_DOCS } from '../lib/constants.js';
 import { fmt, TODAY, NOW, uid, dlFile, fmtBytes } from '../lib/utils.js';
 import { Inp, Metric, EmptyState, ConfirmAction, NumInput } from '../ui/primitives.js';
 import { DocumentosMembretados } from './Companies.js';
+import { printDocumentoMembretado } from '../lib/pdf_export.js';
 
 // ── Parseo de CFDI (XML) ──────────────────────────────────────
 function findByLocal(doc, localName) {
@@ -611,7 +612,18 @@ export function DocsTab({ project, vehicles, companies, config, onSaveCompany, o
   };
 
   const rmDoc = id => { if(confirm('¿Quitar este documento del expediente?')) onUpdate({ ...project, docs:docs.filter(d=>d.id!==id) }); };
-  const verDoc = d => { if (d.fileUrl) window.open(d.fileUrl, '_blank'); };
+  const verDoc = d => {
+    // Si es un documento membretado, regenerar el PDF desde la empresa
+    if (d.membretadoId) {
+      const emp = (companies||[]).find(c => c.id === d.empresaId) || (companies||[]).find(c => c.name === project.company);
+      const docM = emp && (emp.documentosMembretados||[]).find(x => x.id === d.membretadoId);
+      if (docM) { printDocumentoMembretado({ empresa:emp, titulo:docM.titulo, cuerpo:docM.cuerpo, folio:docM.folio }); return; }
+      alert('No se encontró el documento membretado original. Pudo haber sido eliminado desde la empresa.');
+      return;
+    }
+    if (d.fileUrl) window.open(d.fileUrl, '_blank');
+  };
+  const puedeVer = d => !!(d.fileUrl || d.membretadoId);
 
   // Combinar documentos manuales + automáticos del sistema
   const todosDocs = [...docs, ...autoDocs];
@@ -637,14 +649,14 @@ export function DocsTab({ project, vehicles, companies, config, onSaveCompany, o
   const renderDoc = (d) => h('div', { key:d.id, style:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, padding:'10px 0', borderBottom:'.5px solid var(--b3)' } },
     h('div', { style:{ flex:1, minWidth:0 } },
       h('div', { style:{ fontSize:13, fontWeight:500, display:'flex', alignItems:'center', gap:6 } },
-        d.fileUrl && h('span', null, iconoTipo(d.fileType)),
+        h('span', null, d.membretadoId?'📝':d.fileUrl?iconoTipo(d.fileType):'📄'),
         h('span', { style:{ overflow:'hidden', textOverflow:'ellipsis' } }, d.name),
       ),
       d.notes && h('div', { style:{ fontSize:12, color:'var(--t2)', marginTop:2 } }, d.notes),
-      h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:2 } }, (d.category||'')+(d.date?' · '+d.date:''), d.fileSize?' · '+fmtBytes(d.fileSize):'', d.auto?' · del sistema':d.fileUrl?'':' · (solo referencia)'),
+      h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:2 } }, (d.category||'')+(d.date?' · '+d.date:''), d.fileSize?' · '+fmtBytes(d.fileSize):'', d.auto?' · del sistema':(d.fileUrl||d.membretadoId)?'':' · (solo referencia)'),
     ),
     h('div', { style:{ display:'flex', gap:8, flexShrink:0 } },
-      d.fileUrl && h('button', { onClick:()=>verDoc(d), style:{ fontSize:11, color:'var(--blue)', background:'transparent', border:'none', cursor:'pointer' } }, 'Ver'),
+      puedeVer(d) && h('button', { onClick:()=>verDoc(d), style:{ fontSize:11, color:'var(--blue)', background:'transparent', border:'none', cursor:'pointer' } }, d.membretadoId?'Ver / Imprimir':'Ver'),
       !d.auto && h('button', { onClick:()=>rmDoc(d.id), style:{ fontSize:11, color:'var(--red)', background:'transparent', border:'none', cursor:'pointer' } }, 'Quitar'),
     ),
   );
