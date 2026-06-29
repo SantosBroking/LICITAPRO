@@ -614,19 +614,56 @@ export function DocsTab({ project, vehicles, onUpdate, user, logFn }) {
 
   // Combinar documentos manuales + automáticos del sistema
   const todosDocs = [...docs, ...autoDocs];
-  const ordenCat = DOC_CATEGORIES;
-  const byCategory = {};
-  todosDocs.forEach(d => { const c=d.category||'Otro'; if(!byCategory[c])byCategory[c]=[]; byCategory[c].push(d); });
-  const catsOrdenadas = Object.keys(byCategory).sort((a,b)=>{ const ia=ordenCat.indexOf(a), ib=ordenCat.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib); });
   const totalArchivos = todosDocs.filter(d=>d.fileUrl).length;
 
   const iconoTipo = (t='') => t.includes('pdf')?'📕':t.includes('image')?'🖼️':t.includes('xml')||t.includes('text')?'📄':t.includes('word')||t.includes('document')?'📘':t.includes('sheet')||t.includes('excel')?'📗':'📎';
+
+  // Clasificar cada documento en uno de los 4 grupos
+  const clasifica = (d) => {
+    const cat = d.category||'';
+    const nom = (d.name||'').toLowerCase();
+    if (cat==='Órdenes de compra' || nom.includes('orden de compra')) return 'oc';
+    if (cat==='Facturas') {
+      if (nom.includes('equipo')) return 'fequipo';
+      return 'fvehiculos'; // compra, reventa, venta a cliente
+    }
+    return 'docs'; // todo lo demás (bases, fallo, contrato, membretado, etc.)
+  };
+  const grupos = { fvehiculos:[], fequipo:[], oc:[], docs:[] };
+  todosDocs.forEach(d => grupos[clasifica(d)].push(d));
+
+  // Render de una fila de documento
+  const renderDoc = (d) => h('div', { key:d.id, style:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, padding:'10px 0', borderBottom:'.5px solid var(--b3)' } },
+    h('div', { style:{ flex:1, minWidth:0 } },
+      h('div', { style:{ fontSize:13, fontWeight:500, display:'flex', alignItems:'center', gap:6 } },
+        d.fileUrl && h('span', null, iconoTipo(d.fileType)),
+        h('span', { style:{ overflow:'hidden', textOverflow:'ellipsis' } }, d.name),
+      ),
+      d.notes && h('div', { style:{ fontSize:12, color:'var(--t2)', marginTop:2 } }, d.notes),
+      h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:2 } }, (d.category||'')+(d.date?' · '+d.date:''), d.fileSize?' · '+fmtBytes(d.fileSize):'', d.auto?' · del sistema':d.fileUrl?'':' · (solo referencia)'),
+    ),
+    h('div', { style:{ display:'flex', gap:8, flexShrink:0 } },
+      d.fileUrl && h('button', { onClick:()=>verDoc(d), style:{ fontSize:11, color:'var(--blue)', background:'transparent', border:'none', cursor:'pointer' } }, 'Ver'),
+      !d.auto && h('button', { onClick:()=>rmDoc(d.id), style:{ fontSize:11, color:'var(--red)', background:'transparent', border:'none', cursor:'pointer' } }, 'Quitar'),
+    ),
+  );
+
+  // Recuadro colapsable por grupo
+  const recuadro = (titulo, icono, lista, color) => h('details', { key:titulo, className:'card', style:{ marginBottom:12, borderLeft:'3px solid '+color }, open:lista.length>0 && lista.length<=8 },
+    h('summary', { style:{ cursor:'pointer', fontSize:14, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'space-between', listStyle:'none' } },
+      h('span', null, icono+' '+titulo),
+      h('span', { style:{ fontSize:12, fontWeight:400, color:'var(--t2)', background:'var(--bg2)', padding:'2px 10px', borderRadius:12 } }, lista.length),
+    ),
+    lista.length===0
+      ? h('div', { style:{ fontSize:12, color:'var(--t3)', padding:'12px 0 4px' } }, 'Sin documentos en esta sección.')
+      : h('div', { style:{ marginTop:10 } }, lista.map(renderDoc)),
+  );
 
   return h('div', null,
     // Encabezado del expediente
     h('div', { className:'card', style:{ marginBottom:16, background:'linear-gradient(135deg, var(--bg2), var(--bg1))' } },
       h('div', { style:{ fontSize:15, fontWeight:600, marginBottom:4 } }, '🗂️ Expediente del proyecto'),
-      h('div', { style:{ fontSize:12, color:'var(--t2)' } }, 'Respaldo completo: bases, fallos, contratos, facturas, documentos membretados y todo el soporte. ',
+      h('div', { style:{ fontSize:12, color:'var(--t2)' } }, 'Respaldo completo para defensa. ',
         h('strong', null, todosDocs.length+' documentos'),' · ',totalArchivos+' archivos guardados.'),
     ),
     // Subir / registrar
@@ -653,28 +690,10 @@ export function DocsTab({ project, vehicles, onUpdate, user, logFn }) {
         ),
       ),
     ),
-    todosDocs.length===0
-      ? h('div', { className:'card' }, h(EmptyState, { title:'Expediente vacío', description:'Sube las bases, el fallo, el contrato, las facturas y todo el soporte del proyecto para tenerlo respaldado.' }))
-      : catsOrdenadas.map(cat =>
-          h('div', { key:cat, className:'card', style:{ marginBottom:12 } },
-            h('div', { style:{ fontSize:11, color:'var(--t2)', textTransform:'uppercase', letterSpacing:.5, marginBottom:10, fontWeight:600 } }, cat,' (',byCategory[cat].length,')'),
-            byCategory[cat].map(d =>
-              h('div', { key:d.id, style:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, padding:'10px 0', borderBottom:'.5px solid var(--b3)' } },
-                h('div', { style:{ flex:1, minWidth:0 } },
-                  h('div', { style:{ fontSize:13, fontWeight:500, display:'flex', alignItems:'center', gap:6 } },
-                    d.fileUrl && h('span', null, iconoTipo(d.fileType)),
-                    h('span', { style:{ overflow:'hidden', textOverflow:'ellipsis' } }, d.name),
-                  ),
-                  d.notes && h('div', { style:{ fontSize:12, color:'var(--t2)', marginTop:2 } }, d.notes),
-                  h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:2 } }, d.date, d.fileSize?' · '+fmtBytes(d.fileSize):'', d.auto?' · del sistema':d.fileUrl?'':' · (solo referencia)'),
-                ),
-                h('div', { style:{ display:'flex', gap:8, flexShrink:0 } },
-                  d.fileUrl && h('button', { onClick:()=>verDoc(d), style:{ fontSize:11, color:'var(--blue)', background:'transparent', border:'none', cursor:'pointer' } }, 'Ver'),
-                  !d.auto && h('button', { onClick:()=>rmDoc(d.id), style:{ fontSize:11, color:'var(--red)', background:'transparent', border:'none', cursor:'pointer' } }, 'Quitar'),
-                ),
-              )
-            )
-          )
-        )
+    // 4 recuadros agrupados
+    recuadro('Facturas de vehículos', '🚗', grupos.fvehiculos, '#5B8DEF'),
+    recuadro('Facturas de equipo', '🔧', grupos.fequipo, '#EF9F27'),
+    recuadro('Órdenes de compra', '🛒', grupos.oc, '#9B7EDE'),
+    recuadro('Documentos', '📁', grupos.docs, '#1D9E75'),
   );
 }
