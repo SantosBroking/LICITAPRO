@@ -8,21 +8,27 @@ module.exports = async function handler(req, res) {
 
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }
-  const { from, to, subject, html } = body || {};
+  const { from, to, subject, html, attachments } = body || {};
 
   const dest = Array.isArray(to) ? to.filter(Boolean) : (to ? [to] : []);
   if (!dest.length)          return res.status(400).json({ ok: false, error: 'Falta destinatario' });
   if (!subject || !html)     return res.status(400).json({ ok: false, error: 'Falta asunto o contenido' });
 
+  const payload = {
+    from: from || 'MSMS CORP <santiago@brokingroup.com>',
+    to: dest,
+    subject,
+    html,
+  };
+  // Adjuntos opcionales: [{ filename, content (base64) }]
+  if (Array.isArray(attachments) && attachments.length) {
+    payload.attachments = attachments.filter(a => a && a.filename && a.content);
+  }
+
   const response = await fetch(RESEND_API, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      from: from || 'MSMS CORP <santiago@brokingroup.com>',
-      to: dest,
-      subject,
-      html,
-    }),
+    body: JSON.stringify(payload),
   });
 
   const data = await response.json();

@@ -11,10 +11,12 @@ import CatalogView from './views/Catalog.js';
 import Companies   from './views/Companies.js';
 import { ProjectsList, ProjectForm, ProjectDetail } from './views/Projects.js';
 import { Reports, Settings, AuditLogView } from './views/Admin.js';
+import FirmasView from './views/Firmas.js';
 
 const NAV_ITEMS = [
   { id:'dashboard', label:'Dashboard', icon:'◈' },
   { id:'projects',  label:'Proyectos', icon:'◉' },
+  { id:'firmas',    label:'Firmas',    icon:'✍' },
   { id:'companies', label:'Empresas',  icon:'◎' },
   { id:'catalog',   label:'Catálogo',  icon:'◳' },
   { id:'reports',   label:'Reportes',  icon:'◑' },
@@ -217,6 +219,7 @@ export default function App() {
     project_detail: projDetailView,
     companies:      h(Companies,     { companies, setCompanies, projects, config, appConfig:config, onUpdateProject:(p)=>handleSaveProject(p,false), onSave:async c=>{ const ex=companies.find(x=>x.id===c.id); setCompanies(ex?companies.map(x=>x.id===c.id?c:x):[...companies,c]); try{ await saveCompany(c, getUID()); log(user, ex?'actualizó':'creó', 'empresa', c.id, c.name); }catch(e){ console.error('Error guardando empresa:', e); } }, user, logFn:log }),
     catalog:        h(CatalogView, { config, onSaveConfig:handleSaveConfig }),
+    firmas:         h(FirmasView,    { projects, user, onUpdateProject:(p)=>handleSaveProject(p,false), onNav:nav }),
     reports:        h(Reports,       { projects, vehicles, companies, audit }),
     settings:       h(Settings,      { config, user, onSave:handleSaveConfig }),
     audit:          h(AuditLogView,  { audit }),
