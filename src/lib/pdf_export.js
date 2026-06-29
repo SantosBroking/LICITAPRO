@@ -768,9 +768,9 @@ export function printDocumentoMembretado({ empresa, titulo, cuerpo, folio }) {
   win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
 <title>${esc(titulo||'Documento')} ${esc(folio||'')}</title>
 <style>
-  @page { size: letter; margin: 2.2cm 2.4cm; }
+  @page { size: letter; margin: 0; }
   * { box-sizing: border-box; }
-  body { font-family: 'Helvetica Neue', Arial, sans-serif; color:#1a1917; font-size:12.5px; line-height:1.7; margin:0; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; color:#1a1917; font-size:12.5px; line-height:1.7; margin:0; padding:2.2cm 2.4cm; }
   .header { display:flex; align-items:flex-start; gap:16px; border-bottom:2px solid #1a1917; padding-bottom:14px; margin-bottom:8px; }
   .header img { height:64px; width:auto; max-width:130px; object-fit:contain; background:#fff; flex-shrink:0; }
   .emp-nombre { font-size:14px; font-weight:700; margin-bottom:3px; }
@@ -778,7 +778,7 @@ export function printDocumentoMembretado({ empresa, titulo, cuerpo, folio }) {
   .folio { font-size:9px; color:#888; text-align:right; margin-bottom:24px; }
   .cuerpo { white-space:normal; margin-top:28px; text-align:justify; }
   .no-print { display:none !important; }
-  @media screen { body { max-width:780px; margin:24px auto; padding:0 24px; } }
+  @media screen { body { max-width:780px; margin:24px auto; padding:24px; } }
 </style></head><body>
   <div class="header">
     ${logo ? `<img src="${logo}" />` : ''}

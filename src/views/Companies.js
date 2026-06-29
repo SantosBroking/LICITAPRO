@@ -144,7 +144,7 @@ function comprimirLogo(file, maxW = 400) {
 // ── Documentos membretados por empresa ────────────────────────
 // Generador de cartas/oficios con el membrete de la empresa, con ayuda de IA,
 // guardado en el expediente de la empresa y ligado a proyectos.
-export function DocumentosMembretados({ company, projects, config, onUpdate }) {
+export function DocumentosMembretados({ company, projects, config, onUpdate, onUpdateProject }) {
   const expediente = company.documentosMembretados || [];
   const projsEmpresa = (projects||[]).filter(p => p.company === company.name);
 
@@ -179,9 +179,12 @@ export function DocumentosMembretados({ company, projects, config, onUpdate }) {
 
   const guardar = () => {
     if (!titulo.trim() && !cuerpo.trim()) { setMsg('Ponle un título o contenido al documento.'); return; }
-    let nuevoExp;
+    let nuevoExp, docGuardado;
     if (editId) {
+      docGuardado = expediente.find(d=>d.id===editId);
+      const folioEdit = docGuardado?.folio || '';
       nuevoExp = expediente.map(d => d.id===editId ? { ...d, titulo, cuerpo, proyectoId, proyectoNombre:(projsEmpresa.find(p=>p.id===proyectoId)?.name)||'', updatedAt:TODAY() } : d);
+      docGuardado = { ...docGuardado, titulo, folio:folioEdit, proyectoId };
     } else {
       const doc = {
         id: uid('docm'), titulo: titulo||'(Sin título)', cuerpo, instrucciones,
@@ -190,9 +193,23 @@ export function DocumentosMembretados({ company, projects, config, onUpdate }) {
         createdAt: TODAY(), updatedAt: TODAY(),
       };
       nuevoExp = [doc, ...expediente];
+      docGuardado = doc;
     }
     onUpdate({ ...company, documentosMembretados: nuevoExp });
-    setMsg('✅ Documento guardado en el expediente.');
+    // Si está ligado a un proyecto, registrarlo también en la pestaña Documentos de ese proyecto
+    if (proyectoId && onUpdateProject) {
+      const proy = projsEmpresa.find(p => p.id === proyectoId);
+      if (proy) {
+        const docsProy = proy.docs || [];
+        const refId = 'docm-ref-' + docGuardado.id;
+        const entrada = { id: refId, name: docGuardado.titulo, category: 'Membretado', notes: 'Documento membretado · '+(docGuardado.folio||''), date: TODAY(), membretadoId: docGuardado.id, empresaId: company.id };
+        const docsActualizados = docsProy.some(d => d.id === refId)
+          ? docsProy.map(d => d.id === refId ? { ...d, name: docGuardado.titulo } : d)
+          : [...docsProy, entrada];
+        onUpdateProject({ ...proy, docs: docsActualizados });
+      }
+    }
+    setMsg('✅ Documento guardado'+(proyectoId?' y ligado al proyecto.':' en el expediente.'));
     limpiar();
   };
 
@@ -257,7 +274,7 @@ export function DocumentosMembretados({ company, projects, config, onUpdate }) {
   );
 }
 
-export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user, logFn, config, projects }) {
+export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user, logFn, config, projects, onUpdateProject }) {
   const [c, sC]       = useState(JSON.parse(JSON.stringify(company)));
   const [parsing, setParsing] = useState(false);
   const [parseMsg, setParseMsg] = useState('');
@@ -396,7 +413,7 @@ export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user,
       ),
     ),
     h(EmpresaDocsCard, { company:c, onUpdate:sC }),
-    h(DocumentosMembretados, { company:c, projects, config, onUpdate:(updated)=>{ sC(updated); onSave(updated); } }),
+    h(DocumentosMembretados, { company:c, projects, config, onUpdate:(updated)=>{ sC(updated); onSave(updated); }, onUpdateProject }),
     onRequestDelete && h('div', { className:'card', style:{ borderLeft:'3px solid #E24B4A', marginBottom:20 } },
       h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:8, color:'#E24B4A' } }, 'Zona de peligro'),
       h('button', { onClick:onRequestDelete, style:{ background:'transparent', color:'#E24B4A', border:'1px solid #E24B4A', fontSize:13, padding:'8px 18px', fontWeight:500 } }, '🗑 Eliminar esta empresa'),
@@ -404,7 +421,7 @@ export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user,
   );
 }
 
-export default function Companies({ companies, setCompanies, projects, onSave, user, logFn, config, appConfig }) {
+export default function Companies({ companies, setCompanies, projects, onSave, user, logFn, config, appConfig, onUpdateProject }) {
   const [sel, setSel]             = useState(null);
   const [deleteState, setDeleteState] = useState(null);
   const requestDelete = c => setDeleteState({ company:c, relatedProjects:projects.filter(p=>p.company===c.name) });
@@ -416,7 +433,7 @@ export default function Companies({ companies, setCompanies, projects, onSave, u
       : companies.find(c=>c.id===sel);
     if (!co) { setSel(null); return null; }
     return h('div', null,
-      h(CompanyProfile, { company:co, config, projects, onSave:c=>{ onSave(c); }, onBack:()=>setSel(null), onRequestDelete:sel==='new'?null:()=>requestDelete(co), user, logFn }),
+      h(CompanyProfile, { company:co, config, projects, onSave:c=>{ onSave(c); }, onBack:()=>setSel(null), onRequestDelete:sel==='new'?null:()=>requestDelete(co), user, logFn, onUpdateProject }),
       deleteState && renderDeleteModal(deleteState,setDeleteState,confirmDelete),
     );
   }
