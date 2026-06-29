@@ -793,6 +793,13 @@ export function printDocumentoMembretado({ empresa, titulo, cuerpo, folio }) {
   ${folio?`<div class="folio">${esc(folio)}</div>`:'<div style="margin-bottom:24px"></div>'}
   ${titulo?`<div style="text-align:center;font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">${esc(titulo)}</div>`:''}
   <div class="cuerpo">${cuerpoHtml}</div>
+  ${emp.representanteLegal ? `<div style="margin-top:70px;text-align:center">
+    <div style="border-top:1px solid #1a1917;width:280px;margin:0 auto;padding-top:6px">
+      <div style="font-size:12px;font-weight:700">${esc(emp.representanteLegal)}</div>
+      ${emp.cargoRepresentante?`<div style="font-size:10px;color:#555">${esc(emp.cargoRepresentante)}</div>`:''}
+      <div style="font-size:10px;color:#555">${esc(emp.nombreComercial || emp.name || '')}</div>
+    </div>
+  </div>` : ''}
   <script>setTimeout(()=>window.print(),400);</script>
 </body></html>`);
   win.document.close();

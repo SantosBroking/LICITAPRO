@@ -9,6 +9,7 @@ const uploadFileToStorage = async (path, file) => {
 import { DOC_CATEGORIES, EMPRESA_BASE_DOCS } from '../lib/constants.js';
 import { fmt, TODAY, NOW, uid, dlFile, fmtBytes } from '../lib/utils.js';
 import { Inp, Metric, EmptyState, ConfirmAction, NumInput } from '../ui/primitives.js';
+import { DocumentosMembretados } from './Companies.js';
 
 // ── Parseo de CFDI (XML) ──────────────────────────────────────
 function findByLocal(doc, localName) {
@@ -555,7 +556,7 @@ export function BillingTab({ project, vehicles, onNav }) {
 }
 
 // ── DocsTab ───────────────────────────────────────────────────
-export function DocsTab({ project, vehicles, onUpdate, user, logFn }) {
+export function DocsTab({ project, vehicles, companies, config, onSaveCompany, onUpdate, user, logFn }) {
   const [newDoc, setNewDoc] = useState({ name:'', category:'Bases', notes:'', date:TODAY() });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
@@ -690,6 +691,24 @@ export function DocsTab({ project, vehicles, onUpdate, user, logFn }) {
         ),
       ),
     ),
+    // Generador de documentos membretados (con la empresa del proyecto)
+    (() => {
+      const empresaProy = (companies||[]).find(c => c.name === project.company);
+      if (!empresaProy) return null;
+      return h('details', { className:'card', style:{ marginBottom:12, borderLeft:'3px solid #3B6CF4' } },
+        h('summary', { style:{ cursor:'pointer', fontSize:14, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'space-between', listStyle:'none' } },
+          h('span', null, '📝 Crear documento membretado'),
+          h('span', { style:{ fontSize:11, fontWeight:400, color:'var(--t2)' } }, empresaProy.nombreComercial||empresaProy.name),
+        ),
+        h('div', { style:{ marginTop:14 } },
+          h(DocumentosMembretados, {
+            company: empresaProy, projects:[project], config,
+            onUpdate: (updated)=>{ if(onSaveCompany) onSaveCompany(updated); },
+            onUpdateProject: (p)=>onUpdate(p),
+          }),
+        ),
+      );
+    })(),
     // 4 recuadros agrupados
     recuadro('Facturas de vehículos', '🚗', grupos.fvehiculos, '#5B8DEF'),
     recuadro('Facturas de equipo', '🔧', grupos.fequipo, '#EF9F27'),
