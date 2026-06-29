@@ -55,6 +55,47 @@ function parseCFDI(xmlText) {
 }
 
 // ── VehiclesTab ────────────────────────────────────────────────
+// Exporta la lista de vehículos a CSV (Excel) con toda su información
+function exportarExcel(vehicles, project) {
+  const esc = (val) => {
+    const s = (val==null?'':String(val));
+    return /[",\n;]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  };
+  const cols = [
+    ['VIN', v=>v.vin],
+    ['Marca', v=>v.marca],
+    ['Modelo', v=>v.modelo],
+    ['Versión', v=>v.version],
+    ['Año', v=>v.ano],
+    ['Color', v=>v.color],
+    ['Núm. motor', v=>v.numMotor],
+    ['Núm. inventario', v=>v.numInventario],
+    ['Precio unitario', v=>v.precioUnitario],
+    ['IVA', v=>v.iva],
+    ['Precio total', v=>v.precioTotal],
+    ['Estatus entrega', v=>v.statusEntrega],
+    ['Estatus documentación', v=>v.statusDocs],
+    ['Ubicación', v=>v.ubicacion],
+    ['Equipamiento', v=>v.equipamiento],
+    ['Factura compra (folio)', v=>v.facturaAgencia?.folio],
+    ['Factura compra (total)', v=>v.facturaAgencia?.total],
+    ['Factura compra (estatus)', v=>v.facturaAgencia?.statusPago],
+    ['Factura reventa (folio)', v=>v.facturaIntermedia?.folio],
+    ['Factura reventa (total)', v=>v.facturaIntermedia?.total],
+    ['Factura equipo (folio)', v=>v.facturaEquipo?.folio],
+    ['Factura cliente (folio)', v=>v.facturaGobierno?.folio],
+    ['Factura cliente (total)', v=>v.facturaGobierno?.total],
+    ['Factura cliente (estatus)', v=>v.facturaGobierno?.statusPago],
+    ['Acta firmada', v=>v.actaEntrega?.archivoFirmado?.url?'Sí':'No'],
+    ['Observaciones', v=>v.observaciones],
+  ];
+  const filas = [cols.map(c=>esc(c[0])).join(',')];
+  vehicles.forEach(v => filas.push(cols.map(c=>esc(c[1](v))).join(',')));
+  const csv = '\uFEFF' + filas.join('\r\n'); // BOM para acentos en Excel
+  const nombre = 'Vehiculos_'+(project.name||'proyecto').replace(/[^\w\-]+/g,'_')+'_'+TODAY()+'.csv';
+  dlFile('data:text/csv;charset=utf-8,'+encodeURIComponent(csv), nombre);
+}
+
 export function VehiclesTab({ project, vehicles, onSave, onDelete, onNav, user, logFn }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing]   = useState(null);
@@ -65,9 +106,12 @@ export function VehiclesTab({ project, vehicles, onSave, onDelete, onNav, user, 
       onCancel: () => { setShowForm(false); setEditing(null); },
     });
   return h('div', null,
-    h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 } },
+    h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14, gap:8, flexWrap:'wrap' } },
       h('div', { style:{ fontSize:14, fontWeight:500 } }, 'Vehículos del proyecto'),
-      h('button', { className:'bp', onClick:()=>setShowForm(true) }, '+ Agregar vehículo'),
+      h('div', { style:{ display:'flex', gap:8 } },
+        vehicles.length>0 && h('button', { onClick:()=>exportarExcel(vehicles, project), style:{ fontSize:13, padding:'8px 14px', background:'var(--bg2)', border:'1px solid var(--b2)', borderRadius:'var(--r)', cursor:'pointer' } }, '⬇ Exportar Excel'),
+        h('button', { className:'bp', onClick:()=>setShowForm(true) }, '+ Agregar vehículo'),
+      ),
     ),
     vehicles.length===0
       ? h('div', { className:'card' }, h(EmptyState, { icon:'🚓', title:'Sin vehículos registrados', description:'Registra los vehículos del proyecto.', actionLabel:'+ Agregar primer vehículo', onAction:()=>setShowForm(true) }))
