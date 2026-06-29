@@ -8,7 +8,8 @@ export default function Dashboard({ projects, vehicles, companies, onNav, onUpda
   const ac   = projects.filter(p => !FINAL_STATUS.includes(p.status));
   const won  = projects.filter(p => ['ganada','contrato','entrega','facturado','cobrado'].includes(p.status));
   const lost = projects.filter(p => p.status === 'perdida');
-  const pipeline  = ac.reduce((s,p) => s+(p.montoEstimado||0), 0);
+  // El pipeline solo considera proyectos ganados (ganada, contrato, entrega, facturado, cobrado)
+  const pipeline  = won.reduce((s,p) => s+(p.montoEstimado||0), 0);
   const wonTotal  = won.reduce((s,p) => s+(p.montoEstimado||0), 0);
   const totalVeh  = vehicles.length;
   const vehUnfact = vehicles.filter(v => !v.facturaGobierno?.folio).length;
@@ -54,8 +55,8 @@ export default function Dashboard({ projects, vehicles, companies, onNav, onUpda
       h('button', { className:'bp dash-new-btn', onClick:()=>onNav('project_new') }, '+ Nuevo proyecto'),
     ),
     h('div', { className:'grid-5', style:{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:12, marginBottom:20 } },
-      h(Metric, { label:'Pipeline activo', value:fmt(pipeline), sub:ac.length+' proyectos' }),
-      h(Metric, { label:'Ganado / contratado', value:fmt(wonTotal), sub:won.length+' proyectos', sc:'var(--green)' }),
+      h(Metric, { label:'Pipeline (ganados)', value:fmt(pipeline), sub:won.length+' ganados', sc:'var(--green)' }),
+      h(Metric, { label:'En proceso', value:fmt(ac.filter(p=>!['ganada','contrato','entrega','facturado','cobrado'].includes(p.status)).reduce((s,p)=>s+(p.montoEstimado||0),0)), sub:ac.filter(p=>!['ganada','contrato','entrega','facturado','cobrado'].includes(p.status)).length+' compitiendo' }),
       h(Metric, { label:'Total vehículos', value:fmtNum(totalVeh), sub:vehUnfact+' sin facturar', sc:vehUnfact>0?'var(--amber)':'var(--green)' }),
       h(Metric, { label:'Tasa conversión', value:conv+'%', sub:decided+' decididos' }),
       h(Metric, { label:'Proyectos activos', value:ac.length }),
