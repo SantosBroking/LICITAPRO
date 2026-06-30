@@ -1,5 +1,5 @@
 import { printCotizacionCliente, printResumenRetornos, printResumenInterno, printOrdenCompra } from '../lib/pdf_export.js';
-import { nuevoPendienteFirma, enviarSolicitudFirma } from '../lib/firmas.js';
+import { nuevoDocFlujo, avisarAprobacion } from '../lib/firmas.js';
 import { calcCotizacion } from '../lib/calc.js';
 // Projects.js — Lista, formulario y detalle de proyecto
 import { h, useState, useMemo, useCallback, useRef, useEffect } from '../lib/core.js';
@@ -509,24 +509,36 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
           printOrdenCompra({ project:{...project,ocProveedor:{name:oc.proveedor,rfc:oc.proveedorRfc,address:oc.proveedorAddress},cotizacion:{...cot2,agenciaProveedor:oc.proveedor}}, partidas:parts, condiciones:oc.condiciones||[], folio:oc.folio, companyObj:company });
         };
         const eliminar = oc => { if(confirm('¿Eliminar OC '+oc.folio+'?')) updProject({...project,ordenesCompra:(project.ordenesCompra||[]).filter(o=>o.id!==oc.id)}); };
-        const yaEnFirma = oc => (project.firmas||[]).some(f => f.ocId===oc.id && f.estatus==='pendiente');
-        const mandarAFirma = async (oc) => {
-          const nombre = prompt('Nombre del responsable que debe firmar esta OC:');
-          if (!nombre) return;
-          const email = prompt('Correo del responsable (se le enviará la notificación):');
-          if (!email) return;
-          const pend = nuevoPendienteFirma({
-            tipo:'oc', titulo:'Orden de compra · '+(oc.proveedor||''), folio:oc.folio,
-            responsableNombre:nombre, responsableEmail:email, solicitadoPor:(user?.name||user?.email||''),
+        const enFlujo = oc => (project.firmas||[]).find(f => f.ocId===oc.id && f.estatus!=='completado');
+        const equipo = (config && config.equipo) || [];
+        const enviarAprobacion = async (oc) => {
+          // Elegir responsable que firmará (de la lista de equipo o manual)
+          let respNombre = '', respEmail = '';
+          if (equipo.length > 0) {
+            const opciones = equipo.map((e,i)=>`${i+1}. ${e.name} (${e.email})`).join('\n');
+            const sel = prompt('¿Quién firmará esta OC? Escribe el número:\n\n'+opciones);
+            if (sel===null) return;
+            const idx = parseInt(sel,10)-1;
+            if (equipo[idx]) { respNombre = equipo[idx].name; respEmail = equipo[idx].email; }
+            else { alert('Opción no válida.'); return; }
+          } else {
+            respNombre = prompt('Nombre del responsable que firmará:') || '';
+            if (!respNombre) return;
+            respEmail = prompt('Correo del responsable:') || '';
+            if (!respEmail) return;
+          }
+          const doc = nuevoDocFlujo({
+            tipo:'oc', titulo:'Orden de compra · '+(oc.proveedor||''), folio:oc.folio, proyectoId:project.id,
+            creadoPorNombre:(user?.name||user?.email||''), creadoPorEmail:(user?.email||''),
+            responsableNombre:respNombre, responsableEmail:respEmail,
             ocId:oc.id, empresaId:(company&&company.id)||null,
           });
-          // Guardar el pendiente en el proyecto
-          updProject({ ...project, firmas:[...(project.firmas||[]), pend] });
-          // Enviar correo (con enlace a la app; el PDF se reimprime desde el sistema)
+          updProject({ ...project, firmas:[...(project.firmas||[]), doc] });
+          // Avisar al jefe (aprobador único)
           try {
-            await enviarSolicitudFirma({ pendiente:pend, proyectoNombre:project.name, linkApp:'https://licitapro-beta.vercel.app/' });
-            alert('✅ Pendiente creado y correo enviado a '+email+'. Aparecerá en el buzón de Firmas hasta que suba el documento firmado.');
-          } catch(e) { alert('Pendiente creado, pero el correo no se pudo enviar: '+e.message); }
+            await avisarAprobacion({ doc, proyectoNombre:project.name, jefeEmail:'santiago@brokingroup.com', linkApp:'https://licitapro-beta.vercel.app/' });
+            alert('✅ Enviado a aprobación. Santiago debe aprobarlo antes de que vaya a firma con '+respNombre+'.');
+          } catch(e) { alert('Documento creado y en aprobación, pero el correo no se pudo enviar: '+e.message); }
         };
         const ocsList = [...(project.ordenesCompra||[])].reverse();
         const vehTxt = oc => (oc.partidas||[]).map(p=>`${p.id} · ${p.vehiculo||''} ×${p.cantidad}`).join(' | ');
@@ -546,7 +558,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
                   h('td', { style:{ padding:'9px 8px', fontSize:11, color:'var(--t2)' } }, vehTxt(oc)),
                   h('td', { style:{ padding:'9px 8px', whiteSpace:'nowrap' } },
                     h('button', { style:{ fontSize:11, color:'var(--blue)', padding:'3px 8px' }, onClick:()=>reimprimir(oc) }, '📄 Reimprimir'),
-                    h('button', { style:{ fontSize:11, color:yaEnFirma(oc)?'var(--t3)':'var(--green)', padding:'3px 8px', marginLeft:4 }, onClick:()=>mandarAFirma(oc) }, yaEnFirma(oc)?'⏳ En firma':'✍ A firma'),
+                    (()=>{ const fl=enFlujo(oc); return h('button', { style:{ fontSize:11, color:fl?'var(--t3)':'var(--green)', padding:'3px 8px', marginLeft:4 }, onClick:()=>enviarAprobacion(oc) }, fl?'⏳ En flujo':'✍ A aprobación'); })(),
                     h('button', { style:{ fontSize:11, color:'var(--red)', padding:'3px 8px', marginLeft:4 }, onClick:()=>eliminar(oc) }, 'Eliminar'),
                   ),
                 )
@@ -564,7 +576,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
               vehTxt(oc) && h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:8, lineHeight:1.4 } }, vehTxt(oc)),
               h('div', { style:{ display:'flex', gap:8, flexWrap:'wrap' } },
                 h('button', { style:{ fontSize:12, color:'var(--blue)', padding:'6px 12px', border:'1px solid var(--blue-border)', borderRadius:'var(--r)', background:'var(--bg1)', flex:1 }, onClick:()=>reimprimir(oc) }, '📄 Reimprimir'),
-                h('button', { style:{ fontSize:12, color:yaEnFirma(oc)?'var(--t3)':'var(--green)', padding:'6px 12px', border:'1px solid var(--b2)', borderRadius:'var(--r)', background:'var(--bg1)', flex:1 }, onClick:()=>mandarAFirma(oc) }, yaEnFirma(oc)?'⏳ En firma':'✍ A firma'),
+                (()=>{ const fl=enFlujo(oc); return h('button', { style:{ fontSize:12, color:fl?'var(--t3)':'var(--green)', padding:'6px 12px', border:'1px solid var(--b2)', borderRadius:'var(--r)', background:'var(--bg1)', flex:1 }, onClick:()=>enviarAprobacion(oc) }, fl?'⏳ En flujo':'✍ A aprobación'); })(),
                 h('button', { style:{ fontSize:12, color:'var(--red)', padding:'6px 12px', border:'1px solid #E24B4A55', borderRadius:'var(--r)', background:'var(--bg1)' }, onClick:()=>eliminar(oc) }, 'Eliminar'),
               ),
             )),
