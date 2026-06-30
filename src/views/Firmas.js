@@ -4,7 +4,7 @@ import { EmptyState } from '../ui/primitives.js';
 import { TODAY } from '../lib/utils.js';
 import { uploadFileToStorage, abrirArchivo } from '../lib/supabase.js';
 import { ESTADO_INFO, aprobar, rechazar, reenviar, subirFirmadoDoc, vistoFinal, devolver,
-         avisarFirma, avisarRechazo, avisarVistoFinal } from '../lib/firmas.js';
+         avisarFirma, avisarRechazo, avisarVistoFinal, avisarAprobacion } from '../lib/firmas.js';
 
 const LINK_APP = 'https://licitapro-beta.vercel.app/';
 
@@ -88,7 +88,7 @@ export default function FirmasView({ projects, user, onUpdateProject, onNav }) {
   const doReenviar = async (d) => {
     const nuevo = reenviar(d, miNombre);
     actualizarDoc(d.proyecto, d.id, nuevo);
-    try { await avisarVistoFinal; } catch(e){}
+    try { await avisarAprobacion({ doc:nuevo, proyectoNombre:d.proyecto.name, jefeEmail, linkApp:LINK_APP }); } catch(e){ console.warn(e); }
     alert('Reenviado a aprobación.');
   };
 
