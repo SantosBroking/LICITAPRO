@@ -183,6 +183,18 @@ export function Settings({ config, user, onSave }) {
   const [newPType, setNewPType]   = useState('');
   const set = (k,v) => setCfg(p=>({...p,[k]:v}));
   const doSave = async () => { setSaving(true); setSaved(false); try{ await onSave(cfg); setSaved(true); setTimeout(()=>setSaved(false),2000); }catch(e){alert('Error: '+e.message);} setSaving(false); };
+  // ── Gestión de equipo ──
+  const equipo = cfg.equipo || [];
+  const [nuevoEmp, setNuevoEmp] = useState({ name:'', email:'', role:'empleado' });
+  const addEmpleado = () => {
+    const email = (nuevoEmp.email||'').trim().toLowerCase();
+    if (!nuevoEmp.name.trim() || !email) { alert('Pon nombre y correo del empleado.'); return; }
+    if (equipo.some(e => (e.email||'').toLowerCase() === email)) { alert('Ya existe un empleado con ese correo.'); return; }
+    set('equipo', [...equipo, { id:'emp-'+Date.now(), name:nuevoEmp.name.trim(), email, role:nuevoEmp.role, creado:new Date().toISOString().slice(0,10) }]);
+    setNuevoEmp({ name:'', email:'', role:'empleado' });
+  };
+  const rmEmpleado = (id) => { if(confirm('¿Quitar a este empleado del equipo? Ya no podrá entrar.')) set('equipo', equipo.filter(e=>e.id!==id)); };
+  const cambiarRol = (id, role) => set('equipo', equipo.map(e=>e.id===id?{...e,role}:e));
   const addStatus = () => { if(newStatus.trim()){set('customStatuses',[...(cfg.customStatuses||[]),newStatus.trim()]);setNewStatus('');} };
   const rmStatus  = i  => set('customStatuses',(cfg.customStatuses||[]).filter((_,j)=>j!==i));
   const addPType  = () => { if(newPType.trim()){set('customProductTypes',[...(cfg.customProductTypes||[]),newPType.trim()]);setNewPType('');} };
@@ -343,6 +355,35 @@ export function Settings({ config, user, onSave }) {
       ),
         h('div', { style:{ fontSize:10, color:'var(--t3)', marginTop:4 } }, '🔒 Tu API key se guarda en tu cuenta. Obtén créditos en console.anthropic.com/settings/billing')
       ),
+      ),
+      // ── Equipo (solo admin/jefe) ──
+      (user?.role==='admin' || user?.role==='jefe' || !user?.role) && h('div', { className:'card', style:{ marginBottom:16, borderLeft:'3px solid #3B6CF4' } },
+        h('div', { style:{ fontSize:14, fontWeight:600, marginBottom:4 } }, '👥 Equipo'),
+        h('div', { style:{ fontSize:12, color:'var(--t2)', marginBottom:16 } }, 'Da de alta a tus empleados. El rol "Jefe" puede aprobar documentos; "Empleado" solo puede crear y mandar a aprobación.'),
+        // Lista actual
+        equipo.length>0 && h('div', { style:{ marginBottom:16 } },
+          equipo.map(emp => h('div', { key:emp.id, style:{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, padding:'10px 0', borderBottom:'.5px solid var(--b3)' } },
+            h('div', { style:{ minWidth:0 } },
+              h('div', { style:{ fontSize:13, fontWeight:500 } }, emp.name),
+              h('div', { style:{ fontSize:11, color:'var(--t3)' } }, emp.email),
+            ),
+            h('div', { style:{ display:'flex', gap:8, alignItems:'center', flexShrink:0 } },
+              h('select', { value:emp.role, onChange:e=>cambiarRol(emp.id, e.target.value), style:{ fontSize:12, padding:'4px 8px', borderRadius:6, border:'1px solid var(--b2)', background:'var(--bg1)' } },
+                h('option', { value:'empleado' }, 'Empleado'),
+                h('option', { value:'jefe' }, 'Jefe (aprueba)'),
+              ),
+              h('button', { onClick:()=>rmEmpleado(emp.id), style:{ fontSize:11, color:'var(--red)', background:'transparent', border:'none', cursor:'pointer' } }, 'Quitar'),
+            ),
+          )),
+        ),
+        // Alta de empleado
+        h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr auto auto', gap:8, alignItems:'flex-end' } },
+          h(Inp, { label:'Nombre', value:nuevoEmp.name, onChange:v=>setNuevoEmp(p=>({...p,name:v})), placeholder:'Eduardo Pérez' }),
+          h(Inp, { label:'Correo', value:nuevoEmp.email, onChange:v=>setNuevoEmp(p=>({...p,email:v})), placeholder:'eduardo@brokingroup.com' }),
+          h(Inp, { label:'Rol', value:nuevoEmp.role, onChange:v=>setNuevoEmp(p=>({...p,role:v})), options:['empleado','jefe'] }),
+          h('button', { onClick:addEmpleado, style:{ fontSize:13, padding:'9px 14px', background:'var(--t1)', color:'#fff', border:'none', borderRadius:'var(--r)', cursor:'pointer', whiteSpace:'nowrap' } }, '+ Agregar'),
+        ),
+        h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:10, padding:'8px 10px', background:'var(--bg2)', borderRadius:8 } }, 'Nota: por ahora, el empleado entra con el correo que registres aquí. La contraseña se la defines tú aparte. Después haremos que reciban invitación por correo.'),
       ),
       h('div', { className:'card' },
         h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:10 } }, 'Dependencias personalizadas'),
