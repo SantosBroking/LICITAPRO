@@ -271,7 +271,13 @@ export function ProjectForm({ project, companies, config, onSave, onCancel }) {
         h(Inp, { label:'Municipio / Ciudad', value:p.municipio||'', onChange:v=>set('municipio',v), placeholder:'Tultitlán, Tlalnepantla…' }),
         h(Inp, { label:'Empresa licitante', value:p.company, onChange:v=>set('company',v), options:companies.map(c=>c.name) }),
         h(Inp, { label:'Núm. de licitación', value:p.numLicitacion, onChange:v=>set('numLicitacion',v), placeholder:'LA-019GYN999-E1-2025' }),
-        h(Inp, { label:'Responsable', value:p.responsable, onChange:v=>set('responsable',v) }),
+        (() => {
+          const equipo = (config && config.equipo) || [];
+          if (equipo.length === 0) return h(Inp, { label:'Responsable', value:p.responsable, onChange:v=>set('responsable',v), placeholder:'Da de alta tu equipo en Configuración' });
+          // Desplegable con los empleados + opción "Sin asignar"
+          const opciones = equipo.map(e=>e.name);
+          return h(Inp, { label:'Responsable', value:p.responsable||'', onChange:v=>set('responsable',v), options:opciones });
+        })(),
         h(Inp, { label:'Descripción', value:p.description, onChange:v=>set('description',v), textarea:true }),
       ),
       h('div', null,
