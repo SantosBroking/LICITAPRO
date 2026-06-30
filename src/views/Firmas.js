@@ -2,7 +2,7 @@
 import { h, useState, useRef } from '../lib/core.js';
 import { EmptyState } from '../ui/primitives.js';
 import { fmtBytes, TODAY } from '../lib/utils.js';
-import { uploadFileToStorage } from '../lib/supabase.js';
+import { uploadFileToStorage, abrirArchivo } from '../lib/supabase.js';
 
 export default function FirmasView({ projects, user, onUpdateProject, onNav }) {
   const [filtro, setFiltro] = useState('pendiente'); // 'pendiente' | 'firmado' | 'todos'
@@ -33,7 +33,7 @@ export default function FirmasView({ projects, user, onUpdateProject, onNav }) {
     setBusyId(null);
   };
 
-  const verFirmado = (pend) => { if (pend.archivoFirmado?.url) window.open(pend.archivoFirmado.url, '_blank'); };
+  const verFirmado = (pend) => { if (pend.archivoFirmado?.url) abrirArchivo(pend.archivoFirmado.url); };
 
   const quitarPendiente = (pend) => {
     if (!confirm('¿Eliminar este pendiente de firma? No se puede deshacer.')) return;

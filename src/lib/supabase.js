@@ -240,3 +240,45 @@ export function downloadFile(dataOrUrl, filename) {
   a.click();
   document.body.removeChild(a);
 }
+
+// ── Almacenamiento privado: URLs firmadas temporales ──────────
+// Extrae la ruta relativa dentro del bucket a partir de una URL pública o firmada
+function rutaDeStorage(urlOrPath) {
+  if (!urlOrPath) return null;
+  if (urlOrPath.startsWith('data:')) return null; // base64, no es de storage
+  // URL pública: .../object/public/<bucket>/<ruta>
+  if (urlOrPath.includes('/object/public/'+BUCKET+'/')) return urlOrPath.split('/object/public/'+BUCKET+'/')[1].split('?')[0];
+  // URL firmada: .../object/sign/<bucket>/<ruta>?token=...
+  if (urlOrPath.includes('/object/sign/'+BUCKET+'/')) return urlOrPath.split('/object/sign/'+BUCKET+'/')[1].split('?')[0];
+  // Genérico: si contiene el bucket en algún punto
+  if (urlOrPath.includes('/'+BUCKET+'/')) return urlOrPath.split('/'+BUCKET+'/')[1].split('?')[0];
+  // Ya es una ruta relativa (no es URL http)
+  if (!urlOrPath.startsWith('http')) return urlOrPath;
+  return null;
+}
+
+// Genera una URL firmada temporal (por defecto 1 hora) para un archivo privado.
+// Si no es de storage (base64 o URL externa), regresa el valor tal cual.
+export async function signedUrl(urlOrPath, expiresSec = 3600) {
+  const rel = rutaDeStorage(urlOrPath);
+  if (!rel) return urlOrPath; // base64 o URL externa: devolver tal cual
+  try {
+    const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(decodeURIComponent(rel), expiresSec);
+    if (error || !data?.signedUrl) {
+      console.warn('[Storage] signedUrl error:', error?.message);
+      return urlOrPath; // fallback: intentar con la URL original (compat con archivos públicos viejos)
+    }
+    return data.signedUrl;
+  } catch(e) { console.warn('[Storage] signedUrl exception:', e.message); return urlOrPath; }
+}
+
+// Abre un archivo (privado o no) en una pestaña nueva, resolviendo la URL firmada si aplica.
+export async function abrirArchivo(urlOrPath) {
+  if (!urlOrPath) return;
+  // Para base64 y URLs externas, abrir directo
+  if (urlOrPath.startsWith('data:') || (!rutaDeStorage(urlOrPath) && urlOrPath.startsWith('http'))) {
+    window.open(urlOrPath, '_blank'); return;
+  }
+  const url = await signedUrl(urlOrPath, 3600);
+  window.open(url, '_blank');
+}

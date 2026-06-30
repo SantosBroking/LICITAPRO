@@ -1,7 +1,7 @@
 // Vehicles.js — Vehículos, Facturas, Acta entrega, Billing, Docs
 import { h, useState, useRef } from '../lib/core.js';
 import { analyzeFactura } from '../lib/ai_analyzer.js';
-import { uploadFileToStorage as _uploadFile, uploadImageToStorage, isBase64, downloadFile as dlStorage } from '../lib/supabase.js';
+import { uploadFileToStorage as _uploadFile, uploadImageToStorage, isBase64, downloadFile as dlStorage, abrirArchivo, signedUrl } from '../lib/supabase.js';
 // Guard: si Storage no está disponible, devuelve null y el código cae a base64
 const uploadFileToStorage = async (path, file) => {
   try { return await _uploadFile(path, file); } catch(e) { console.warn('Storage no disponible:', e); return null; }
@@ -356,7 +356,7 @@ export function FacturaCard({ title, subtitle, color, data, onSave }) {
       h('button', { onClick:()=>pdfRef.current?.click(), disabled:analizando, style:{ fontSize:12, padding:'7px 12px', border:'1px solid var(--b2)', borderRadius:8, background:'var(--bg1)', color:'var(--t1)', cursor:'pointer', opacity:analizando?.6:1 } }, analizando?'⏳ Analizando...':'🤖 Analizar PDF'),
       h('input', { ref:pdfRef, type:'file', accept:'.pdf', style:{ display:'none' }, onChange:e=>{ handlePDF(e.target.files[0]); e.target.value=''; } }),
       f.xmlNombre && h('span', { style:{ fontSize:11, color:'var(--green)', display:'flex', alignItems:'center', gap:4 } }, '📎 '+f.xmlNombre,
-        h('span', { onClick:()=>dlStorage(f.xmlData,f.xmlNombre), style:{ color:'var(--blue)', cursor:'pointer', textDecoration:'underline' } }, 'descargar')),
+        h('span', { onClick:async()=>{ const u = await signedUrl(f.xmlData, 3600); dlStorage(u, f.xmlNombre); }, style:{ color:'var(--blue)', cursor:'pointer', textDecoration:'underline' } }, 'descargar')),
     ),
     msg && h('div', { style:{ marginTop:8, fontSize:11, color:msg.startsWith('Error')?'var(--red)':'var(--t2)', padding:'6px 10px', background:'var(--bg2)', borderRadius:6 } }, msg),
     h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12, marginTop:14 } },
@@ -492,7 +492,7 @@ ${acta.observaciones?`<p><strong>Observaciones:</strong> ${acta.observaciones}</
                 h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:2 } }, 'Subida '+acta.archivoFirmado.fecha+(acta.archivoFirmado.size?' · '+fmtBytes(acta.archivoFirmado.size):'')),
               ),
               h('div', { style:{ display:'flex', gap:8, flexShrink:0 } },
-                h('button', { onClick:()=>window.open(acta.archivoFirmado.url,'_blank'), style:{ fontSize:11, color:'var(--blue)', background:'transparent', border:'none', cursor:'pointer' } }, 'Ver'),
+                h('button', { onClick:()=>abrirArchivo(acta.archivoFirmado.url), style:{ fontSize:11, color:'var(--blue)', background:'transparent', border:'none', cursor:'pointer' } }, 'Ver'),
                 h('button', { onClick:()=>set('archivoFirmado',null), style:{ fontSize:11, color:'var(--red)', background:'transparent', border:'none', cursor:'pointer' } }, 'Quitar'),
               ),
             )
@@ -707,7 +707,7 @@ export function DocsTab({ project, vehicles, companies, config, onSaveCompany, o
       alert('No se encontró el documento membretado original. Pudo haber sido eliminado desde la empresa.');
       return;
     }
-    if (d.fileUrl) window.open(d.fileUrl, '_blank');
+    if (d.fileUrl) abrirArchivo(d.fileUrl);
   };
   const puedeVer = d => !!(d.fileUrl || d.membretadoId);
 
