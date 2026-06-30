@@ -1,6 +1,6 @@
 // Catalog.js — Catálogo de equipo MSMS con productos personalizados
 import { h, useState, useRef } from '../lib/core.js';
-import { NumInput } from '../ui/primitives.js';
+import { NumInput, StorageImg } from '../ui/primitives.js';
 import { CATALOG_PRODUCTS } from '../lib/catalog.js';
 import { CATALOG_IMAGES } from '../lib/catalog_images.js';
 import { uid } from '../lib/utils.js';
@@ -208,7 +208,7 @@ function KitEditor({ kit, allProducts, existingCats, onSave, onCancel }) {
         const sel = items.includes(x.id);
         return h('label', { key:x.id, style:{ display:'flex', alignItems:'center', gap:10, padding:'8px 14px', cursor:'pointer', borderBottom:'1px solid var(--b1)', background:sel?'var(--blue-bg)':'transparent' } },
           h('input', { type:'checkbox', checked:sel, onChange:()=>toggleItem(x.id), style:{ accentColor:'var(--blue)' } }),
-          (x.photo || CATALOG_IMAGES[x.id]) && h('img', { src:x.photo||CATALOG_IMAGES[x.id], style:{ width:36, height:36, objectFit:'contain', borderRadius:4, flexShrink:0 } }),
+          (x.photo || CATALOG_IMAGES[x.id]) && h(StorageImg, { src:x.photo||CATALOG_IMAGES[x.id], style:{ width:36, height:36, objectFit:'contain', borderRadius:4, flexShrink:0 } }),
           h('div', null,
             h('div', { style:{ fontSize:12, fontWeight:sel?600:400 } }, x.nom),
             h('div', { style:{ fontSize:10, color:'var(--t3)' } }, x.cat),
@@ -415,7 +415,7 @@ export default function CatalogView({ config, onSaveConfig }) {
               : h('button', { onClick:()=>deleteProduct(prod.id),
                   style:{ fontSize:11, padding:'4px 10px', color:'var(--red)', background:'var(--bg1)', border:'1px solid #E24B4A55', borderRadius:'var(--r)', cursor:'pointer' } }, '🗑 Borrar'),
           ),
-          (prod.photo || CATALOG_IMAGES[prod.id]) && h('img', { src:prod.photo || CATALOG_IMAGES[prod.id], style:{ width:'100%', height:120, objectFit:'cover', borderRadius:'var(--r)', marginBottom:10, border:'1px solid var(--b1)' } }),
+          (prod.photo || CATALOG_IMAGES[prod.id]) && h(StorageImg, { src:prod.photo || CATALOG_IMAGES[prod.id], style:{ width:'100%', height:120, objectFit:'cover', borderRadius:'var(--r)', marginBottom:10, border:'1px solid var(--b1)' } }),
           h('div', { style:{ fontSize:13, fontWeight:500, marginBottom:3 } }, prod.nom),
           h('div', { style:{ fontSize:11, color:'var(--blue)', marginBottom:4 } }, prod.sub, prod.sub?' · ':'', prod.prov, ' · ID: ', prod.id),
           h('div', { style:{ fontSize:12, color:'var(--t2)', lineHeight:1.5, marginBottom:6 } }, prod.desc),

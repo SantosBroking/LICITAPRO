@@ -3,7 +3,7 @@ import { h, useState, useEffect, useMemo, useCallback } from '../lib/core.js';
 import { CATALOG_PRODUCTS } from '../lib/catalog.js';
 import { calcCotizacion } from '../lib/calc.js';
 import { fmt, pctS, daysOld, TODAY, uid } from '../lib/utils.js';
-import { NumInput } from '../ui/primitives.js';
+import { NumInput, StorageImg } from '../ui/primitives.js';
 
 // Construye catálogo en vivo (base + personalizados) para que editar el catálogo
 // se refleje inmediatamente en la cotización sin necesidad de re-agregar productos.
@@ -176,7 +176,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
           h('input', { type:'checkbox', checked:p.activo, onChange:e=>updPartida(p.id,'activo',e.target.checked), style:{ width:15, height:15, cursor:'pointer', accentColor:'var(--blue)' } }),
           (() => {
             const vehFoto = p.foto || (window._lpConfig?.customProducts||[]).find(x=>x.id===p.vehiculoId)?.photo || '';
-            if (vehFoto) return h('img', { src:vehFoto, style:{ width:36, height:28, objectFit:'contain', borderRadius:4, flexShrink:0 } });
+            if (vehFoto) return h(StorageImg, { src:vehFoto, style:{ width:36, height:28, objectFit:'contain', borderRadius:4, flexShrink:0 } });
             if (p.vehiculoId) return h('span', { style:{ fontSize:10, color:'var(--amber)', padding:'2px 6px', background:'#FEF3C7', borderRadius:4 } }, '⚠ sin foto');
             return h('span', { style:{ fontSize:10, color:'var(--t3)', padding:'2px 6px', background:'var(--bg2)', borderRadius:4 } }, '🚗 sin seleccionar');
           })(),
@@ -194,7 +194,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
                   style:{ flexShrink:0, width:90, cursor:'pointer', borderRadius:10, border:'2px solid '+(sel?'var(--blue)':'var(--b2)'),
                     background:sel?'var(--blue-bg)':'var(--bg1)', padding:6, textAlign:'center', transition:'all .15s' } },
                   veh.photo
-                    ? h('img', { src:veh.photo, style:{ width:56, height:44, objectFit:'contain', borderRadius:6, display:'block', margin:'0 auto 4px' } })
+                    ? h(StorageImg, { src:veh.photo, style:{ width:56, height:44, objectFit:'contain', borderRadius:6, display:'block', margin:'0 auto 4px' } })
                     : h('div', { style:{ width:56, height:44, display:'flex', alignItems:'center', justifyContent:'center', fontSize:24, margin:'0 auto 4px' } }, '🚗'),
                   h('div', { style:{ fontSize:9, fontWeight:sel?600:400, color:sel?'var(--blue)':'var(--t1)', lineHeight:1.2, wordBreak:'break-word' } },
                     veh.nom || (veh.v_marca+' '+veh.v_modelo)),

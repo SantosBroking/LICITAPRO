@@ -1,8 +1,29 @@
 // primitives.js — Componentes UI reutilizables (sin htm, sin eval)
 import { h, useState, useEffect } from '../lib/core.js';
 import { STATUSES } from '../lib/constants.js';
+import { signedUrl } from '../lib/supabase.js';
 
 const s = style => style; // identidad para claridad
+
+// Imagen que resuelve URLs firmadas para archivos privados de Storage.
+// Para base64 (data:) y URLs externas las usa directo. Para storage privado,
+// pide una URL firmada temporal antes de mostrar.
+export function StorageImg({ src, alt, style, fallback }) {
+  const [resolved, setResolved] = useState(src && src.startsWith('data:') ? src : '');
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    let cancel = false;
+    setError(false);
+    if (!src) { setResolved(''); return; }
+    if (src.startsWith('data:')) { setResolved(src); return; }
+    // Resolver URL firmada (si no es de storage, signedUrl devuelve la misma)
+    signedUrl(src, 3600).then(u => { if (!cancel) setResolved(u); }).catch(() => { if (!cancel) setResolved(src); });
+    return () => { cancel = true; };
+  }, [src]);
+  if (!src || error) return fallback || null;
+  if (!resolved) return h('div', { style:{ ...style, background:'var(--bg2)', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--t3)', fontSize:10 } }, '…');
+  return h('img', { src:resolved, alt:alt||'', style, onError:()=>setError(true) });
+}
 
 export function Badge({ statusId }) {
   const st = STATUSES.find(x => x.id === statusId);

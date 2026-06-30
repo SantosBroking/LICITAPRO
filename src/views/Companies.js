@@ -5,7 +5,7 @@ import { sendReminderEmail, getRecipients } from '../lib/email_reminders.js';
 import { AIAnalyzerButton } from '../ui/AIAnalyzerButton.js';
 import { EMPRESA_BASE_DOCS } from '../lib/constants.js';
 import { TODAY, uid, dlFile, fmtBytes } from '../lib/utils.js';
-import { Inp, EmptyState, DeleteConfirmModal, InfoModal } from '../ui/primitives.js';
+import { Inp, EmptyState, DeleteConfirmModal, InfoModal, StorageImg } from '../ui/primitives.js';
 import { redactarDocumento } from '../lib/ai_analyzer.js';
 import { printDocumentoMembretado } from '../lib/pdf_export.js';
 
@@ -389,7 +389,7 @@ export function CompanyProfile({ company, onSave, onBack, onRequestDelete, user,
       h('div', { style:{ display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' } },
         c.logo
           ? h('div', { style:{ display:'flex', alignItems:'center', gap:12 } },
-              h('img', { src:c.logo, style:{ height:56, width:'auto', maxWidth:180, objectFit:'contain', border:'1px solid var(--b1)', borderRadius:8, padding:6, background:'#fff' } }),
+              h(StorageImg, { src:c.logo, style:{ height:56, width:'auto', maxWidth:180, objectFit:'contain', border:'1px solid var(--b1)', borderRadius:8, padding:6, background:'#fff' } }),
               h('button', { onClick:()=>set('logo',''), style:{ fontSize:12, color:'var(--red)', background:'transparent', border:'1px solid var(--b1)', borderRadius:'var(--r)', padding:'6px 12px', cursor:'pointer' } }, 'Quitar logo'),
             )
           : h('div', { style:{ fontSize:12, color:'var(--t3)', padding:'16px 20px', border:'1px dashed var(--b1)', borderRadius:8 } }, 'Sin logo'),
