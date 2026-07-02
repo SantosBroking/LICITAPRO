@@ -163,3 +163,19 @@ export async function avisarAsignacionProyecto(opts) {
     + btnLink(linkApp, 'Ver el proyecto');
   return enviar(responsableEmail, 'Se te asignó el proyecto: ' + proyectoNombre, wrapEmail('Nuevo proyecto asignado', cuerpo), undefined);
 }
+
+// Correo: avisar al jefe que un empleado cambió el estatus de su proyecto
+export async function avisarCambioEstatus(opts) {
+  var proyectoNombre=opts.proyectoNombre, estatusAnterior=opts.estatusAnterior, estatusNuevo=opts.estatusNuevo;
+  var cambiadoPor=opts.cambiadoPor, jefeEmail=opts.jefeEmail, linkApp=opts.linkApp;
+  if (!jefeEmail) return;
+  var cuerpo = '<p style="font-size:14px;line-height:1.6;margin:0 0 16px">Hola,</p>'
+    + '<p style="font-size:14px;line-height:1.6;margin:0 0 16px"><strong>' + esc(cambiadoPor||'Un empleado') + '</strong> actualizó el estatus de un proyecto que tiene asignado.</p>'
+    + '<div style="background:#f7f5f1;border-radius:10px;padding:16px;margin:16px 0">'
+    + '<table style="width:100%;font-size:13px;border-collapse:collapse">'
+    + '<tr><td style="color:#888;padding:4px 0;width:120px">Proyecto</td><td style="font-weight:600">' + esc(proyectoNombre) + '</td></tr>'
+    + '<tr><td style="color:#888;padding:4px 0">Cambio</td><td>' + esc(estatusAnterior||'—') + ' &rarr; <strong>' + esc(estatusNuevo) + '</strong></td></tr>'
+    + '</table></div>'
+    + btnLink(linkApp, 'Ver el proyecto');
+  return enviar(jefeEmail, 'Estatus actualizado: ' + proyectoNombre + ' → ' + estatusNuevo, wrapEmail('Cambio de estatus', cuerpo), undefined);
+}

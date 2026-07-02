@@ -1,5 +1,5 @@
 import { printCotizacionCliente, printResumenRetornos, printResumenInterno, printOrdenCompra } from '../lib/pdf_export.js';
-import { nuevoDocFlujo, avisarAprobacion, avisarAsignacionProyecto } from '../lib/firmas.js';
+import { nuevoDocFlujo, avisarAprobacion, avisarAsignacionProyecto, avisarCambioEstatus } from '../lib/firmas.js';
 import { calcCotizacion } from '../lib/calc.js';
 // Projects.js — Lista, formulario y detalle de proyecto
 import { h, useState, useMemo, useCallback, useRef, useEffect } from '../lib/core.js';
@@ -124,12 +124,31 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate, user }) {
       const headerRow = h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b3)' } },
         ['PROYECTO','DEPENDENCIA','EMPRESA','MONTO','ESTADO','FALLO',''].map(hd=>h('th',{key:hd,style:{padding:'10px 8px',color:'var(--t3)',fontSize:11,fontWeight:600,letterSpacing:'.4px',textAlign:'left',whiteSpace:'nowrap',borderBottom:'1px solid var(--b1)'}},hd))
       ));
+      const esJefe = user?.role==='admin' || user?.role==='jefe' || !user?.role;
+      const cambiarEstatus = async (p, nuevoStatus) => {
+        if (nuevoStatus === p.status) return;
+        const stAnt = STATUSES.find(s=>s.id===p.status);
+        const stNue = STATUSES.find(s=>s.id===nuevoStatus);
+        const quien = user?.name || user?.email || 'Usuario';
+        const entrada = { de:p.status, a:nuevoStatus, por:quien, fecha:new Date().toISOString().slice(0,16).replace('T',' ') };
+        const actualizado = { ...p, status:nuevoStatus, statusHistory:[...(p.statusHistory||[]), entrada] };
+        onUpdate && onUpdate(actualizado);
+        // Si quien cambia NO es el jefe (es un empleado), avisar al jefe
+        if (!esJefe) {
+          try {
+            await avisarCambioEstatus({
+              proyectoNombre:p.name, estatusAnterior:stAnt?.label||p.status, estatusNuevo:stNue?.label||nuevoStatus,
+              cambiadoPor:quien, jefeEmail:'santiago@brokingroup.com', linkApp:'https://licitapro-beta.vercel.app/',
+            });
+          } catch(e) { console.warn(e); }
+        }
+      };
       const statusSelect = (p, maxW) => {
         const stRow=STATUSES.find(s=>s.id===p.status);
         return h('select', {
           value:p.status,
           onClick:e=>e.stopPropagation(),
-          onChange:e=>{ e.stopPropagation(); onUpdate && onUpdate({...p, status:e.target.value}); },
+          onChange:e=>{ e.stopPropagation(); cambiarEstatus(p, e.target.value); },
           style:{ fontSize:12, fontWeight:600, padding:'4px 8px', borderRadius:'var(--r)', border:'1px solid '+(stRow?stRow.color:'var(--b1)'), background:stRow?stRow.bg:'var(--bg2)', color:stRow?stRow.tx:'var(--t1)', cursor:'pointer', maxWidth:maxW||170 }
         }, STATUSES.map(s=>h('option',{key:s.id,value:s.id,style:{background:'#fff',color:'#18181b'}}, s.label)));
       };
@@ -491,6 +510,22 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
           )
         ),
         project.description && h('div', { style:{ marginTop:12, fontSize:13, lineHeight:1.6 } }, project.description),
+      ),
+      // Historial de cambios de estatus
+      (project.statusHistory||[]).length > 0 && h('div', { className:'card' },
+        h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:14 } }, '📊 Historial de estatus'),
+        [...(project.statusHistory||[])].reverse().map((hh,i) => {
+          const stDe = STATUSES.find(s=>s.id===hh.de);
+          const stA = STATUSES.find(s=>s.id===hh.a);
+          return h('div', { key:i, style:{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'8px 0', borderBottom:'.5px solid var(--b3)', fontSize:12, flexWrap:'wrap' } },
+            h('div', null,
+              h('span', { style:{ color:'var(--t3)' } }, (stDe?.label||hh.de||'inicio')),
+              h('span', { style:{ margin:'0 6px', color:'var(--t3)' } }, '→'),
+              h('span', { style:{ fontWeight:600, color:stA?.color||'var(--t1)' } }, stA?.label||hh.a),
+            ),
+            h('div', { style:{ color:'var(--t3)', fontSize:11 } }, hh.por+' · '+hh.fecha),
+          );
+        }),
       ),
       h('div', { className:'card' },
         h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:14 } }, 'Fechas clave'),
