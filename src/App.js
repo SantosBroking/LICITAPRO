@@ -16,7 +16,7 @@ import FirmasView from './views/Firmas.js';
 const NAV_ITEMS = [
   { id:'dashboard', label:'Dashboard', icon:'◈' },
   { id:'projects',  label:'Proyectos', icon:'◉' },
-  { id:'firmas',    label:'Firmas',    icon:'◭' },
+  { id:'firmas',    label:'Firmas',    icon:'' },
   { id:'companies', label:'Empresas',  icon:'◎' },
   { id:'catalog',   label:'Catálogo',  icon:'◳' },
   { id:'reports',   label:'Reportes',  icon:'◑' },
