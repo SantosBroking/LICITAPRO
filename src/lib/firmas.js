@@ -141,3 +141,25 @@ export async function avisarVistoFinal(opts) {
     + btnLink(linkApp, 'Dar visto final');
   return enviar(jefeEmail, 'Visto final: ' + doc.titulo + (doc.folio?' ('+doc.folio+')':''), wrapEmail('Documento firmado · visto final', cuerpo), undefined);
 }
+
+// Correo: avisar a un empleado que se le asignó un proyecto
+export async function avisarAsignacionProyecto(opts) {
+  var responsableNombre=opts.responsableNombre, responsableEmail=opts.responsableEmail;
+  var proyectoNombre=opts.proyectoNombre, dependencia=opts.dependencia, asignadoPor=opts.asignadoPor;
+  var numLicitacion=opts.numLicitacion, fechaFallo=opts.fechaFallo, linkApp=opts.linkApp;
+  if (!responsableEmail) throw new Error('El responsable no tiene correo registrado');
+  var detalles = '<div style="background:#f7f5f1;border-radius:10px;padding:16px;margin:16px 0">'
+    + '<table style="width:100%;font-size:13px;border-collapse:collapse">'
+    + '<tr><td style="color:#888;padding:4px 0;width:130px">Proyecto</td><td style="font-weight:600">' + esc(proyectoNombre) + '</td></tr>'
+    + (dependencia?'<tr><td style="color:#888;padding:4px 0">Dependencia</td><td>' + esc(dependencia) + '</td></tr>':'')
+    + (numLicitacion?'<tr><td style="color:#888;padding:4px 0">No. Licitación</td><td style="font-family:monospace">' + esc(numLicitacion) + '</td></tr>':'')
+    + (fechaFallo?'<tr><td style="color:#888;padding:4px 0">Fecha de fallo</td><td>' + esc(fechaFallo) + '</td></tr>':'')
+    + '</table></div>';
+  var cuerpo = '<p style="font-size:14px;line-height:1.6;margin:0 0 16px">Hola' + (responsableNombre?' '+esc(responsableNombre):'') + ',</p>'
+    + '<p style="font-size:14px;line-height:1.6;margin:0 0 16px"><strong>' + esc(asignadoPor||'La dirección') + '</strong> te ha asignado como responsable del siguiente proyecto de licitación:</p>'
+    + detalles
+    + '<div style="background:#E6F1FB;border-radius:10px;padding:14px 16px;font-size:13px;color:#1A4480;line-height:1.6">'
+    + '<strong>Es tu responsabilidad:</strong><br>Recopilar la información y documentación requerida, dar seguimiento a las fechas clave del proceso, y mantener el expediente del proyecto completo y actualizado en LicitaPro.</div>'
+    + btnLink(linkApp, 'Ver el proyecto');
+  return enviar(responsableEmail, 'Se te asignó el proyecto: ' + proyectoNombre, wrapEmail('Nuevo proyecto asignado', cuerpo), undefined);
+}

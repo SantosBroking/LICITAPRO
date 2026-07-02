@@ -1,5 +1,5 @@
 import { printCotizacionCliente, printResumenRetornos, printResumenInterno, printOrdenCompra } from '../lib/pdf_export.js';
-import { nuevoDocFlujo, avisarAprobacion } from '../lib/firmas.js';
+import { nuevoDocFlujo, avisarAprobacion, avisarAsignacionProyecto } from '../lib/firmas.js';
 import { calcCotizacion } from '../lib/calc.js';
 // Projects.js — Lista, formulario y detalle de proyecto
 import { h, useState, useMemo, useCallback, useRef, useEffect } from '../lib/core.js';
@@ -211,7 +211,7 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate }) {
   );
 }
 
-export function ProjectForm({ project, companies, config, onSave, onCancel }) {
+export function ProjectForm({ project, companies, config, onSave, onCancel, user }) {
   const isE = !!project;
   const [p, sP] = useState(project || { id:uid('proj'), name:'', dependencia:'', nivelGobierno:'', municipio:'', company:'', numLicitacion:'', status:'prospecto', tipoProcedimiento:'', productType:'Patrullas y vehículos', responsable:'', montoEstimado:0, probability:50, description:'', observaciones:'', fechaPublicacion:'', fechaAclaraciones:'', fechaPropuesta:'', fechaFallo:'', fechaContrato:'', notes:[], activity:[], preguntas:[], docs:[], preparation:{}, cotizacion:{} });
   const set = (k,v) => sP(prev=>({...prev,[k]:v}));
@@ -244,7 +244,31 @@ export function ProjectForm({ project, companies, config, onSave, onCancel }) {
     ].filter(Boolean);
     setBasesMsg(campos.length ? '✅ Datos extraídos: ' + campos.join(', ') + '. Revisa y guarda.' : 'No se detectaron datos. Verifica que el PDF sea de bases de licitación.');
   };
-  const doSave = async () => { if(!p.name.trim()){alert('El nombre del proyecto es obligatorio');return;} await onSave(p,true); };
+  const doSave = async () => {
+    if(!p.name.trim()){alert('El nombre del proyecto es obligatorio');return;}
+    // ¿Cambió el responsable? Si es uno nuevo (distinto al original), ofrecer avisarle
+    const respAnterior = project?.responsable || '';
+    const respNuevo = p.responsable || '';
+    let avisar = false;
+    if (respNuevo && respNuevo !== respAnterior) {
+      const equipo = (config && config.equipo) || [];
+      const emp = equipo.find(e => e.name === respNuevo);
+      if (emp && emp.email) {
+        avisar = confirm('¿Enviar correo a '+respNuevo+' avisándole que es responsable de este proyecto?');
+        if (avisar) {
+          try {
+            await avisarAsignacionProyecto({
+              responsableNombre:emp.name, responsableEmail:emp.email,
+              proyectoNombre:p.name, dependencia:p.dependencia, numLicitacion:p.numLicitacion, fechaFallo:p.fechaFallo,
+              asignadoPor:(user?.name||user?.email||'La dirección'), linkApp:'https://licitapro-beta.vercel.app/',
+            });
+            alert('✅ Correo enviado a '+emp.email);
+          } catch(e) { alert('El proyecto se guardará, pero el correo no se pudo enviar: '+e.message); }
+        }
+      }
+    }
+    await onSave(p,true);
+  };
   return h('div', null,
     h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 } },
       h('div', { className:'page-title' }, isE?'Editar proyecto':'Nuevo proyecto'),
@@ -367,7 +391,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
     setBasesAiMsg(campos.length ? '✅ Datos extraídos de las bases: ' + campos.join(', ') : 'No se detectaron datos en el PDF.');
   };
 
-  if(showEdit) return h(ProjectForm, { project, companies, config, onSave:async(updated)=>{ await onSave(updated); setShowEdit(false); }, onCancel:()=>setShowEdit(false) });
+  if(showEdit) return h(ProjectForm, { project, companies, config, user, onSave:async(updated)=>{ await onSave(updated); setShowEdit(false); }, onCancel:()=>setShowEdit(false) });
   if(selVehicle) return h(VehicleDetail, {
     vehicle:vehicles.find(v=>v.id===selVehicle), project, company,
     onNav:(view,id)=>{ if(view==='project_detail'){setSelVehicle(null);setTab('vehiculos');}else onNav(view,id); },
