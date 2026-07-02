@@ -113,7 +113,7 @@ export default function FirmasView({ projects, user, onUpdateProject, onNav }) {
     ),
 
     lista.length===0
-      ? h('div', { className:'card' }, h(EmptyState, { icon:'✍️', title:'Nada por aquí', description:'No hay documentos en esta vista.' }))
+      ? h('div', { className:'card' }, h(EmptyState, { icon:'◭', title:'Nada por aquí', description:'No hay documentos en esta vista.' }))
       : h('div', { style:{ display:'flex', flexDirection:'column', gap:12 } },
           lista.map(d => {
             const info = ESTADO_INFO[d.estatus] || ESTADO_INFO.en_aprobacion;
