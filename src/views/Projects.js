@@ -20,13 +20,15 @@ const GRUPOS = {
   cerradas:     ['perdida','cancelada'],
 };
 
-export function ProjectsList({ projects, vehicles, onNav, onUpdate }) {
+export function ProjectsList({ projects, vehicles, onNav, onUpdate, user }) {
   const [view, setView]     = useState('table');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
   const [empresa, setEmpresa] = useState('all');
   const [sort, setSort]     = useState('etapa');
   const [grupo, setGrupo]   = useState('todos');
+  const [soloMios, setSoloMios] = useState(false);
+  const miNombre = user?.name || '';
 
   // Orden por etapa del pipeline (ganados primero, luego avanzados, prospectos al final)
   const etapaRank = id => { const i = STATUSES.findIndex(s=>s.id===id); return i<0 ? 99 : i; };
@@ -41,6 +43,7 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate }) {
   const empresasUnicas = useMemo(()=>[...new Set(projects.map(p=>p.company).filter(Boolean))].sort(),[projects]);
 
   const aplicarFiltros = (list) => {
+    if(soloMios && miNombre) list=list.filter(p=>p.responsable===miNombre);
     if(search){const q=search.toLowerCase();list=list.filter(p=>(p.name||'').toLowerCase().includes(q)||(p.dependencia||'').toLowerCase().includes(q)||(p.numLicitacion||'').toLowerCase().includes(q));}
     if(empresa!=='all')list=list.filter(p=>p.company===empresa);
     if(status!=='all')list=list.filter(p=>p.status===status);
@@ -57,7 +60,7 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate }) {
     let list=[...projects];
     if(grupo!=='todos')list=list.filter(p=>(GRUPOS[grupo]||[]).includes(p.status));
     return aplicarFiltros(list);
-  },[projects,search,status,empresa,sort,grupo]);
+  },[projects,search,status,empresa,sort,grupo,soloMios]);
 
   const activos  = useMemo(()=>aplicarFiltros(visible.filter(p=>!esCerrado(p))),[visible]);
   const cerrados = useMemo(()=>aplicarFiltros(visible.filter(esCerrado)),[visible]);
@@ -90,6 +93,11 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate }) {
       sumaGanados>0 && h('span', null, '✅ Ganado/contratado: ', h('strong', { style:{ color:'#1D9E75' } }, fmt(sumaGanados))),
     ),
     h('div', { className:'filtros-bar', style:{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' } },
+      miNombre && h('button', { onClick:()=>setSoloMios(!soloMios),
+        style:{ fontSize:13, padding:'6px 14px', borderRadius:'var(--r)', cursor:'pointer', whiteSpace:'nowrap',
+          background: soloMios?'var(--t1)':'var(--bg2)', color: soloMios?'#fff':'var(--t2)',
+          border:'1px solid '+(soloMios?'var(--t1)':'var(--b2)'), fontWeight: soloMios?600:400 } },
+        soloMios?'★ Mis proyectos':'☆ Mis proyectos'),
       h('input', { value:search, onChange:e=>setSearch(e.target.value), placeholder:'Buscar...', style:{ maxWidth:200 } }),
       h('select', { value:empresa, onChange:e=>setEmpresa(e.target.value), style:{ maxWidth:200 } },
         h('option', { value:'all' }, '🏢 Todas las empresas'),
@@ -362,6 +370,17 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
     setPregunta('');
   };
   const updRespuesta = (id,r) => updProject({...project,preguntas:(project.preguntas||[]).map(q=>q.id===id?{...q,respuesta:r}:q)});
+
+  // Cambiar estatus del proyecto y registrarlo en la actividad (para seguimiento)
+  const cambiarEstatus = (nuevoStatus) => {
+    if (nuevoStatus === project.status) return;
+    const stAnt = STATUSES.find(s=>s.id===project.status);
+    const stNue = STATUSES.find(s=>s.id===nuevoStatus);
+    const quien = user?.name || user?.email || 'Usuario';
+    const entrada = { id:uid('act'), tipo:'estatus', texto:'Cambió el estatus de "'+(stAnt?.label||project.status)+'" a "'+(stNue?.label||nuevoStatus)+'"', author:quien, date:NOW() };
+    updProject({ ...project, status:nuevoStatus, activity:[entrada, ...(project.activity||[])] });
+    if(logFn)logFn(user,'cambió estatus a '+(stNue?.label||nuevoStatus),'proyecto',project.id,project.name);
+  };
 
   const [basesAiMsg, setBasesAiMsg] = useState('');
   const handleBasesAI = (data) => {
