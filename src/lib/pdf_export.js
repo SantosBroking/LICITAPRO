@@ -574,7 +574,7 @@ export function printResumenRetornos({ project, cot, calc, companyObj }) {
 // ══════════════════════════════════════════════════════════════
 // 3. RESUMEN INTERNO
 // ══════════════════════════════════════════════════════════════
-export function printResumenInterno({ project, cot, calc }) {
+export function printResumenInterno({ project, cot, calc, companyObj }) {
   const activeParts = (cot.partidas||[]).filter(p => p.activo && p.cantidad > 0);
 
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
