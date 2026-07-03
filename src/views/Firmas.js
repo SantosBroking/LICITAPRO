@@ -7,7 +7,7 @@ import { ESTADO_INFO, aprobar, rechazar, reenviar, subirFirmadoDoc, vistoFinal, 
          avisarFirma, avisarRechazo, avisarVistoFinal, avisarAprobacion } from '../lib/firmas.js';
 import { ordenCompraPdfBase64, documentoMembretadoPdfBase64 } from '../lib/pdf_export.js';
 
-const LINK_APP = 'https://licitapro-beta.vercel.app/';
+const LINK_APP = 'https://licitapro-beta.vercel.app/?view=firmas';
 
 export default function FirmasView({ projects, companies, user, onUpdateProject, onNav }) {
   const [busyId, setBusyId] = useState(null);

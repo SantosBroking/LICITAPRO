@@ -138,7 +138,7 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate, user }) {
           try {
             await avisarCambioEstatus({
               proyectoNombre:p.name, estatusAnterior:stAnt?.label||p.status, estatusNuevo:stNue?.label||nuevoStatus,
-              cambiadoPor:quien, jefeEmail:'santiago@brokingroup.com', linkApp:'https://licitapro-beta.vercel.app/',
+              cambiadoPor:quien, jefeEmail:'santiago@brokingroup.com', linkApp:'https://licitapro-beta.vercel.app/?view=project_detail&project='+p.id,
             });
           } catch(e) { console.warn(e); }
         }
@@ -287,7 +287,7 @@ export function ProjectForm({ project, companies, config, onSave, onCancel, user
             await avisarAsignacionProyecto({
               responsableNombre:emp.name, responsableEmail:emp.email,
               proyectoNombre:p.name, dependencia:p.dependencia, numLicitacion:p.numLicitacion, fechaFallo:p.fechaFallo,
-              asignadoPor:(user?.name||user?.email||'La dirección'), linkApp:'https://licitapro-beta.vercel.app/',
+              asignadoPor:(user?.name||user?.email||'La dirección'), linkApp:'https://licitapro-beta.vercel.app/?view=project_detail&project='+p.id,
             });
             alert('✅ Correo enviado a '+emp.email);
           } catch(e) { alert('El proyecto se guardará, pero el correo no se pudo enviar: '+e.message); }
@@ -620,7 +620,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
           updProject({ ...project, firmas:[...(project.firmas||[]), doc] });
           // Avisar al jefe (aprobador único)
           try {
-            await avisarAprobacion({ doc, proyectoNombre:project.name, jefeEmail:'santiago@brokingroup.com', linkApp:'https://licitapro-beta.vercel.app/' });
+            await avisarAprobacion({ doc, proyectoNombre:project.name, jefeEmail:'santiago@brokingroup.com', linkApp:'https://licitapro-beta.vercel.app/?view=firmas' });
             alert('✅ Enviado a aprobación. Santiago debe aprobarlo antes de que vaya a firma con '+respNombre+'.');
           } catch(e) { alert('Documento creado y en aprobación, pero el correo no se pudo enviar: '+e.message); }
         };

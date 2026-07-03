@@ -32,7 +32,9 @@ export default function App() {
   const [companies, setCompanies] = useState([]);
   const [config,    setConfig]    = useState(DEFAULT_CONFIG);
   const [audit,     setAudit]     = useState([]);
-  const [view,      setView]      = useState('dashboard');
+  const _urlParams = (() => { try { return new URLSearchParams(window.location.search); } catch(e){ return new URLSearchParams(); } })();
+  const _viewInicial = _urlParams.get('view') || 'dashboard';
+  const [view,      setView]      = useState(_viewInicial);
   const [projId,    setProjId]    = useState(null);
   const [projTab,   setProjTab]   = useState('info');
   const _lastProjId    = useRef(null);
@@ -118,6 +120,23 @@ export default function App() {
 
     return () => subscription?.unsubscribe();
   }, []);
+
+  // Si la URL trae ?view=project_detail&project=ID, abrir ese proyecto al cargar
+  const _urlProcesada = useRef(false);
+  useEffect(() => {
+    if (loading || _urlProcesada.current) return;
+    const pid = _urlParams.get('project');
+    if (pid && projects.find(p => p.id === pid)) {
+      _urlProcesada.current = true;
+      setProjId(pid); _lastProjId.current = pid; setView('project_detail');
+    } else if (_viewInicial !== 'dashboard') {
+      _urlProcesada.current = true;
+    }
+    // Limpiar los parámetros de la URL para que no se reprocesen al navegar
+    if ((_urlParams.get('view') || _urlParams.get('project'))) {
+      try { window.history.replaceState({}, '', window.location.pathname); } catch(e){}
+    }
+  }, [loading, projects]);
 
   const log = useCallback((u, action, entity, entityId, details='') => {
     const entry = { id:uid('log'), timestamp:NOW(), userId:u?.id||'local', userName:u?.email||'Usuario', action, entity, entityId, details };
