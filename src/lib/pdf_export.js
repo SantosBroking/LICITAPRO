@@ -409,7 +409,17 @@ ${cot.condicionesComerciales ? `<div style="background:#f6f6f4;padding:12px 16px
 // ══════════════════════════════════════════════════════════════
 // 2. RESUMEN RETORNOS
 // ══════════════════════════════════════════════════════════════
-export function printResumenRetornos({ project, cot, calc }) {
+export function printResumenRetornos({ project, cot, calc, companyObj }) {
+  const emp = companyObj && companyObj.name ? {
+    nombre: companyObj.nombreComercial || companyObj.name,
+    razonSocial: companyObj.name || '',
+    rfc: companyObj.rfc || '',
+    direccion: [companyObj.address, companyObj.cp, companyObj.ciudad, companyObj.estado].filter(Boolean).join(', '),
+    contacto: [companyObj.telefono, companyObj.correo].filter(Boolean).join(' · '),
+    representante: companyObj.representanteLegal || '',
+    cargo: companyObj.cargoRepresentante || '',
+  } : { nombre:'MSMS CORP', razonSocial:'', rfc:'', direccion:'', contacto:'', representante:'', cargo:'' };
+  const logoRet = getCompanyLogo(project.company, companyObj);
   const activeParts = (cot.partidas||[]).filter(p => p.activo && p.cantidad > 0);
   const retActivos  = (cot.retornos||[]).filter(r => r.activo);
 
@@ -424,20 +434,28 @@ export function printResumenRetornos({ project, cot, calc }) {
 
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <title>Resumen Retornos ${cot.folio||''}</title>
-<style>${BASE_CSS}</style></head><body>
-
-<div class="no-print" style="position:fixed;top:0;left:0;right:0;z-index:100;background:#1a1917;color:white;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px">
-  <span style="font-weight:500">Resumen Retornos — ${cot.folio||''}</span>
-  <span style="display:flex;gap:8px"><button onclick="try{window.close()}catch(e){};setTimeout(function(){if(history.length>1)history.back()},100)" style="background:transparent;color:white;border:1px solid rgba(255,255,255,.4);padding:6px 16px;border-radius:4px;cursor:pointer;font-weight:500">← Cerrar</button><button onclick="window.print()" style="background:white;color:#1a1917;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-weight:500">Imprimir / Guardar PDF</button></span>
-</div>
+<style>${BASE_CSS}
+  .sheet h2 { font-size:12px; margin-bottom:8px; }
+  .sheet table { font-size:11px; }
+  .sheet th { font-size:9.5px; padding:6px 8px; }
+  .sheet td { font-size:11px; padding:6px 8px; }
+  .sheet .section { margin-bottom:18px; }
+  .sheet .total-row td { font-size:11px; }
+</style></head><body>
 <div class="sheet">
 
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #1a1917">
-  <div>
-    <h1>Resumen de Retornos</h1>
-    <div style="color:#6b6862;margin-top:4px">Para entrega al responsable del retorno</div>
+  <div style="display:flex;align-items:flex-start;gap:14px;flex:1;min-width:0;padding-right:20px">
+    ${logoRet ? `<img src="${logoRet}" style="height:60px;width:auto;max-width:120px;flex-shrink:0;object-fit:contain;background:#fff;padding:3px;border-radius:4px" />` : ''}
+    <div style="min-width:0">
+      <div style="font-size:12px;font-weight:700;line-height:1.3">${emp.nombre}</div>
+      ${emp.rfc?`<div style="font-size:9.5px;color:#6b6862;line-height:1.45">${emp.rfc}${emp.direccion?' · '+emp.direccion:''}</div>`:''}
+      ${emp.contacto?`<div style="font-size:9.5px;color:#6b6862;line-height:1.45">${emp.contacto}</div>`:''}
+      <div style="margin-top:6px"><h1 style="font-size:16px">Resumen de Retornos</h1></div>
+      <div style="color:#6b6862;font-size:10px">Para entrega al responsable del retorno</div>
+    </div>
   </div>
-  <div style="text-align:right;font-size:22px;font-weight:300;color:#3b6cf4">${cot.folio||'—'}</div>
+  <div style="text-align:right;font-size:22px;font-weight:300;color:#3b6cf4;flex-shrink:0">${cot.folio||'—'}</div>
 </div>
 
 <div class="section">
@@ -531,13 +549,26 @@ export function printResumenRetornos({ project, cot, calc }) {
   }
 </div>
 
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:50px;margin-top:50px">
+  <div style="border-top:1.5px solid #1a1917;padding-top:8px;text-align:center">
+    <div style="font-size:11px;font-weight:600">${emp.representante || emp.nombre}</div>
+    <div style="font-size:9.5px;color:#6b6862">${emp.cargo ? emp.cargo+' · ' : ''}${emp.nombre}</div>
+    <div style="font-size:9px;color:#a0998f;margin-top:2px;text-transform:uppercase;letter-spacing:.4px">Entrega el retorno</div>
+  </div>
+  <div style="border-top:1.5px solid #1a1917;padding-top:8px;text-align:center">
+    <div style="font-size:11px;font-weight:600">&nbsp;</div>
+    <div style="font-size:9.5px;color:#6b6862">Nombre y firma</div>
+    <div style="font-size:9px;color:#a0998f;margin-top:2px;text-transform:uppercase;letter-spacing:.4px">Recibe el retorno</div>
+  </div>
+</div>
+
 <div class="footer">
-  <span>MSMS CORP — Documento confidencial</span>
+  <span>${emp.nombre} — Documento confidencial</span>
   <span>Generado: ${new Date().toLocaleDateString('es-MX')}</span>
 </div>
 </div></body></html>`;
 
-  openPrint(html);
+  openPrint(html, 'Resumen Retornos '+(cot.folio||''));
 }
 
 // ══════════════════════════════════════════════════════════════
