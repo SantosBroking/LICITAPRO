@@ -5,11 +5,13 @@ import { TODAY } from '../lib/utils.js';
 import { uploadFileToStorage, abrirArchivo } from '../lib/supabase.js';
 import { ESTADO_INFO, aprobar, rechazar, reenviar, subirFirmadoDoc, vistoFinal, devolver,
          avisarFirma, avisarRechazo, avisarVistoFinal, avisarAprobacion } from '../lib/firmas.js';
+import { ordenCompraPdfBase64, documentoMembretadoPdfBase64 } from '../lib/pdf_export.js';
 
 const LINK_APP = 'https://licitapro-beta.vercel.app/';
 
-export default function FirmasView({ projects, user, onUpdateProject, onNav }) {
+export default function FirmasView({ projects, companies, user, onUpdateProject, onNav }) {
   const [busyId, setBusyId] = useState(null);
+  const [genPdfId, setGenPdfId] = useState(null);
   const fileRefs = useRef({});
 
   const esJefe = user?.role === 'admin' || user?.role === 'jefe' || !user?.role;
@@ -43,12 +45,45 @@ export default function FirmasView({ projects, user, onUpdateProject, onNav }) {
     onUpdateProject({ ...proy, firmas:(proy.firmas||[]).map(f=>f.id===docId?nuevoDoc:f) });
   };
 
+  // Genera el PDF del documento (OC o membretado) para adjuntarlo al correo del responsable
+  const generarPdfAdjunto = async (d) => {
+    try {
+      if (d.tipo === 'oc' && d.ocId) {
+        const proy = d.proyecto;
+        const oc = (proy.ordenesCompra||[]).find(o => o.id === d.ocId);
+        if (!oc) return null;
+        const cot2 = proy.cotizacion || {};
+        const partidas = (oc.partidas||[]).map(op => {
+          const orig = (cot2.partidas||[]).find(p=>p.id===op.id) || {};
+          return { ...orig, ...op, costoMSMS: op.precioUnit || orig.costoMSMS || 0 };
+        });
+        const companyObj = (companies||[]).find(c => c.name === proy.company);
+        const { base64, filename } = await ordenCompraPdfBase64({
+          project: { ...proy, ocProveedor:{ name:oc.proveedor, rfc:oc.proveedorRfc, address:oc.proveedorAddress }, cotizacion:{ ...cot2, agenciaProveedor:oc.proveedor } },
+          partidas, condiciones: oc.condiciones||[], folio: oc.folio, companyObj,
+        });
+        return { base64, filename };
+      }
+      if (d.tipo === 'documento' && d.docMembretadoId) {
+        const empresa = (companies||[]).find(c => c.id === d.empresaId);
+        const docM = empresa && (empresa.documentosMembretados||[]).find(x => x.id === d.docMembretadoId);
+        if (!empresa || !docM) return null;
+        return await documentoMembretadoPdfBase64({ empresa, titulo:docM.titulo, cuerpo:docM.cuerpo, folio:docM.folio });
+      }
+    } catch(e) { console.warn('No se pudo generar el PDF adjunto:', e); }
+    return null;
+  };
+
   // ── Acciones del jefe ──
   const doAprobar = async (d) => {
+    setGenPdfId(d.id);
     const nuevo = aprobar(d, miNombre);
     actualizarDoc(d.proyecto, d.id, nuevo);
-    try { await avisarFirma({ doc:nuevo, proyectoNombre:d.proyecto.name, linkApp:LINK_APP }); } catch(e){ console.warn(e); }
-    alert('✅ Aprobado. Se notificó a '+(d.responsable?.nombre||d.responsable?.email||'el responsable')+' para que firme.');
+    const pdf = await generarPdfAdjunto(d);
+    setGenPdfId(null);
+    try { await avisarFirma({ doc:nuevo, proyectoNombre:d.proyecto.name, linkApp:LINK_APP, pdfBase64:pdf?.base64, pdfNombre:pdf?.filename }); } catch(e){ console.warn(e); }
+    alert(pdf ? '✅ Aprobado. Se notificó a '+(d.responsable?.nombre||d.responsable?.email||'el responsable')+' con el documento adjunto para firmar.'
+              : '✅ Aprobado. Se notificó a '+(d.responsable?.nombre||d.responsable?.email||'el responsable')+', pero el PDF no se pudo adjuntar (puede reimprimirlo desde el sistema).');
   };
   const doRechazar = async (d) => {
     const motivo = prompt('Motivo del rechazo (se le enviará al empleado):');
@@ -139,8 +174,8 @@ export default function FirmasView({ projects, user, onUpdateProject, onNav }) {
               h('div', { style:{ display:'flex', gap:8, marginTop:14, flexWrap:'wrap', alignItems:'center' } },
                 // JEFE aprobando (paso 2)
                 esJefe && d.estatus==='en_aprobacion' && h('div', { style:{ display:'flex', gap:8 } },
-                  h('button', { className:'bp', onClick:()=>doAprobar(d) }, '✅ Aprobar'),
-                  h('button', { onClick:()=>doRechazar(d), style:{ fontSize:13, padding:'8px 14px', background:'transparent', border:'1px solid #E24B4A55', borderRadius:'var(--r)', cursor:'pointer', color:'var(--red)' } }, '❌ Rechazar'),
+                  h('button', { className:'bp', disabled:genPdfId===d.id, onClick:()=>doAprobar(d) }, genPdfId===d.id?'Generando PDF...':'✅ Aprobar'),
+                  h('button', { onClick:()=>doRechazar(d), disabled:genPdfId===d.id, style:{ fontSize:13, padding:'8px 14px', background:'transparent', border:'1px solid #E24B4A55', borderRadius:'var(--r)', cursor:'pointer', color:'var(--red)' } }, '❌ Rechazar'),
                 ),
                 // JEFE visto final (paso 4)
                 esJefe && d.estatus==='en_visto' && h('div', { style:{ display:'flex', gap:8, flexWrap:'wrap' } },

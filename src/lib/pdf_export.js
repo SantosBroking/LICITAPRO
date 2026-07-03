@@ -52,6 +52,50 @@ const BASE_CSS = `
   }
 `;
 
+// Genera un PDF en segundo plano (iframe oculto) y devuelve su base64, sin mostrar nada en pantalla.
+// Útil para adjuntar el documento a un correo automáticamente.
+function htmlToPdfBase64(html, filename) {
+  return new Promise((resolve, reject) => {
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;left:-10000px;top:0;width:850px;height:1100px;border:none;opacity:0;pointer-events:none';
+    document.body.appendChild(iframe);
+
+    const cleanup = () => { try { document.body.removeChild(iframe); } catch(e){} };
+    let intentos = 0;
+    const maxIntentos = 40; // ~10s máximo esperando que cargue html2pdf
+
+    const generar = () => {
+      const win = iframe.contentWindow;
+      if (!win || !win.html2pdf) {
+        intentos++;
+        if (intentos > maxIntentos) { cleanup(); reject(new Error('No se pudo cargar el generador de PDF')); return; }
+        setTimeout(generar, 250);
+        return;
+      }
+      const el = win.document.querySelector('.sheet') || win.document.body;
+      win.html2pdf().set({
+        margin: 0,
+        filename: filename || 'documento.pdf',
+        image: { type:'jpeg', quality:0.96 },
+        html2canvas: { scale:2, useCORS:true, backgroundColor:'#ffffff' },
+        jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
+        pagebreak: { mode:['css'], avoid:'tr' },
+      }).from(el).outputPdf('datauristring').then(dataUri => {
+        cleanup();
+        resolve(dataUri.split(',')[1]); // solo el base64, sin el prefijo data:
+      }).catch(e => { cleanup(); reject(e); });
+    };
+
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(html.replace('</head>',
+      '<scr' + 'ipt src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"></scr' + 'ipt>' +
+      '</head>'));
+    doc.close();
+    setTimeout(generar, 400);
+  });
+}
+
 function openPrint(html, title) {
   // Overlay in-app con generación de PDF propia (sin encabezado/pie del navegador)
   const prev = document.getElementById('lp-print-overlay');
@@ -610,7 +654,7 @@ export function printResumenInterno({ project, cot, calc }) {
 }
 
 // ── Orden de Compra ───────────────────────────────────────────
-export function printOrdenCompra({ project, partidas, condiciones, folio: folioParam, companyObj }) {
+function buildOrdenCompraHTML({ project, partidas, condiciones, folio: folioParam, companyObj }) {
   const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const hoy = new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'});
   const folio = folioParam || ('OC-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-5));
@@ -751,21 +795,32 @@ ${BASE_CSS}
 
 </div></body></html>`;
 
+  return { html, folio };
+}
+
+export function printOrdenCompra(args) {
+  const { html, folio } = buildOrdenCompraHTML(args);
   openPrint(html, folio);
 }
 
+// Genera el PDF de la Orden de Compra como base64 (para adjuntar a correo), sin abrir ventana
+export async function ordenCompraPdfBase64(args) {
+  const { html, folio } = buildOrdenCompraHTML(args);
+  const filename = (folio || 'orden_compra') + '.pdf';
+  const base64 = await htmlToPdfBase64(html, filename);
+  return { base64, filename };
+}
+
 // ── Documento membretado de empresa ───────────────────────────
-export function printDocumentoMembretado({ empresa, titulo, cuerpo, folio }) {
+function buildDocumentoMembretadoHTML({ empresa, titulo, cuerpo, folio }) {
   const emp = empresa || {};
   const logo = getCompanyLogo(emp.name, emp);
   const dir = [emp.address, emp.cp, emp.ciudad, emp.estado].filter(Boolean).join(', ');
   const contacto = [emp.telefono, emp.correo].filter(Boolean).join(' · ');
-  // Escapar HTML del cuerpo y respetar saltos de línea
   const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const cuerpoHtml = esc(cuerpo).replace(/\n/g, '<br>');
 
-  const win = window.open('', '_blank');
-  win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
 <title>${esc(titulo||'Documento')} ${esc(folio||'')}</title>
 <style>
   @page { size: letter; margin: 0; }
@@ -800,7 +855,20 @@ export function printDocumentoMembretado({ empresa, titulo, cuerpo, folio }) {
       <div style="font-size:10px;color:#555">${esc(emp.nombreComercial || emp.name || '')}</div>
     </div>
   </div>` : ''}
-  <script>setTimeout(()=>window.print(),400);</script>
-</body></html>`);
+</body></html>`;
+}
+
+export function printDocumentoMembretado({ empresa, titulo, cuerpo, folio }) {
+  const html = buildDocumentoMembretadoHTML({ empresa, titulo, cuerpo, folio });
+  const win = window.open('', '_blank');
+  win.document.write(html.replace('</body>', '<script>setTimeout(()=>window.print(),400);</script></body>'));
   win.document.close();
+}
+
+// Genera el PDF del documento membretado como base64 (para adjuntar a correo)
+export async function documentoMembretadoPdfBase64({ empresa, titulo, cuerpo, folio }) {
+  const html = buildDocumentoMembretadoHTML({ empresa, titulo, cuerpo, folio });
+  const filename = (folio || titulo || 'documento').replace(/[^a-z0-9áéíóúñ_\-]/gi,'_') + '.pdf';
+  const base64 = await htmlToPdfBase64(html, filename);
+  return { base64, filename };
 }
