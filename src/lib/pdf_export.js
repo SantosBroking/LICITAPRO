@@ -345,7 +345,7 @@ export async function printCotizacionCliente({ project, cot, calc, config, compa
   </div>
   <div class="cot-title" style="flex-shrink:0">
     <h1>COTIZACIÓN</h1>
-    <div style="font-size:22px;font-weight:300;color:#3b6cf4;margin-top:4px">${cot.folio||'—'}</div>
+    <div style="font-size:12px;font-weight:500;color:#3b6cf4;margin-top:3px;letter-spacing:.5px">${cot.folio||'—'}</div>
   </div>
 </div>
 
@@ -531,7 +531,7 @@ export function printResumenRetornos({ project, cot, calc, companyObj }) {
       <div style="color:#6b6862;font-size:10px">Para entrega al responsable del retorno</div>
     </div>
   </div>
-  <div style="text-align:right;font-size:22px;font-weight:300;color:#3b6cf4;flex-shrink:0">${cot.folio||'—'}</div>
+  <div style="text-align:right;font-size:12px;font-weight:500;color:#3b6cf4;flex-shrink:0;letter-spacing:.5px">${cot.folio||'—'}</div>
 </div>
 
 <div class="section">
