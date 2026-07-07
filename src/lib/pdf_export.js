@@ -359,6 +359,7 @@ export async function printCotizacionCliente({ project, cot, calc, config, compa
     <div class="value">${project.dependencia||'—'}</div>
   </div>
   <div><div class="label">Proyecto</div><div class="value">${project.name||'—'}</div></div>
+  ${cot.vendedor?`<div><div class="label">Vendedor</div><div class="value">${cot.vendedor}${cot.vendedorCorreo?`<br><span style="font-size:9px;color:#6b6862">${cot.vendedorCorreo}</span>`:''}</div></div>`:''}
   ${project.ubicacion&&!project.municipio?`<div><div class="label">Ubicación</div><div class="value">${project.ubicacion}</div></div>`:''}
   ${cot.condicionesComerciales?`<div style="grid-column:1/-1"><div class="label">Condiciones</div><div class="value">${cot.condicionesComerciales}</div></div>`:''}
 </div>
@@ -464,9 +465,14 @@ ${(cot.condicionesLista||[]).length > 0 ? `<div style="background:#f6f6f4;paddin
   <div class="firma-line">_______________________<br>Representante autorizado<br>${project.dependencia||'Cliente'}</div>
 </div>
 
-<div class="footer">
-  <span>${emp.razonSocial||'MSMS CORP'} • ${emp.rfc||''}</span>
-  <span>Generado: ${new Date().toLocaleDateString('es-MX')}</span>
+<div class="footer" style="flex-direction:column;gap:6px;align-items:stretch">
+  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;border-top:1px solid #e0ddd8;padding-top:10px">
+    <div style="font-size:9px;color:#6b6862;line-height:1.5">
+      <strong style="color:#1a1917">${emp.razonSocial||'MSMS CORP'}</strong>${emp.rfc?` &nbsp;·&nbsp; RFC: ${emp.rfc}`:''}<br>
+      ${emp.direccion||''}${emp.telefono?`<br>Tel: ${emp.telefono}`:''}${emp.correo?` &nbsp;·&nbsp; ${emp.correo}`:''}
+    </div>
+    <div style="font-size:9px;color:#a0998f;text-align:right">Generado: ${new Date().toLocaleDateString('es-MX')}</div>
+  </div>
 </div>
 </div></body></html>`;
 

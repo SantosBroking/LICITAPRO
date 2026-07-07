@@ -49,6 +49,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
     return {
       version:c.version||'V1', folio:c.folio||'', municipio:c.municipio||'', fechaCotizacion:c.fechaCotizacion||TODAY(), vigenciaDias:c.vigenciaDias||20,
       condicionesComerciales:c.condicionesComerciales||'', agenciaProveedor:c.agenciaProveedor||'',
+      vendedor:c.vendedor||'', vendedorCorreo:c.vendedorCorreo||'',
       condicionesLista:c.condicionesLista||[],
       pctIvaSat:c.pctIvaSat!=null?c.pctIvaSat:0.5, pctIvaUtil:c.pctIvaUtil!=null?c.pctIvaUtil:0.5,
       ivaSelectivo:c.ivaSelectivo!==false,
@@ -172,6 +173,8 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
         h('div', null, h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:3 } }, 'Folio'), h('input', { value:cot.folio||'', onChange:e=>updCot({...cot,folio:e.target.value}), style:{ fontSize:12 } })),
         h('div', null, h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:3 } }, 'Agencia / Proveedor'), h('input', { value:cot.agenciaProveedor||'', onChange:e=>updCot({...cot,agenciaProveedor:e.target.value}), style:{ fontSize:12 }, placeholder:'Ej: Grupo Surman' })),
         h('div', { style:{ gridColumn:'1/-1' } }, h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:3 } }, 'Municipio / Destinatario (aparece en el PDF como «Para»)'), h('input', { value:cot.municipio||'', onChange:e=>updCot({...cot,municipio:e.target.value}), style:{ fontSize:12 }, placeholder:'Ej: Tultitlán, Estado de México' })),
+        h('div', null, h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:3 } }, 'Vendedor'), h('input', { value:cot.vendedor||'', onChange:e=>updCot({...cot,vendedor:e.target.value}), style:{ fontSize:12 }, placeholder:'Nombre del ejecutivo' })),
+        h('div', null, h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:3 } }, 'Correo del vendedor'), h('input', { value:cot.vendedorCorreo||'', onChange:e=>updCot({...cot,vendedorCorreo:e.target.value}), style:{ fontSize:12 }, placeholder:'vendedor@empresa.com' })),
       ),
       h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 } },
         h('div', { style:{ fontSize:12, color:'var(--t2)', background:'var(--bg2)', padding:'8px 12px', borderRadius:'var(--r)', flex:1 } }, 'Una ', h('strong', null, 'partida'), ' = grupo de vehículos con el mismo equipamiento.'),
