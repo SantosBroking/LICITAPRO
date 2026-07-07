@@ -50,22 +50,13 @@ export function calcCotizacion(cot) {
     modoEquipo = 'margen', montoGanar = 0,
   } = cot;
 
-  // En modo "monto a ganar", calcular el costo total del equipo primero para repartir la ganancia
-  let _costoEqTotalSIVA = 0;
+  // En modo "monto a ganar": la venta total ES el monto (los costos se ignoran).
+  // Se reparte en partes iguales por unidad.
+  let _totalUnidadesMonto = 0;
   if (soloEquipo && modoEquipo === 'monto') {
-    partidas.filter(p => p.activo && p.cantidad > 0).forEach(p => {
-      const pi = parseInt(p.id.replace('P', '')) - 1;
-      const qty = p.cantidad || 0;
-      equipo.filter(e => e.usar).forEach(e => {
-        const cnt = (e.cnts && e.cnts[pi] != null) ? Number(e.cnts[pi]) : 0;
-        const cost = (e.costoConIVA || 0) * cnt;
-        const costSIVA = e.llevaIVA ? cost / (1 + IVA) : cost;
-        _costoEqTotalSIVA += costSIVA * qty;
-      });
-    });
+    partidas.filter(p => p.activo && p.cantidad > 0).forEach(p => { _totalUnidadesMonto += (p.cantidad || 0); });
   }
-  // Factor de venta = (costo + ganancia) / costo, repartido proporcional al costo de cada pieza
-  const _factorMonto = (_costoEqTotalSIVA > 0) ? (_costoEqTotalSIVA + (montoGanar || 0)) / _costoEqTotalSIVA : 1;
+  const _ventaUnitMonto = (_totalUnidadesMonto > 0) ? (montoGanar || 0) / _totalUnidadesMonto : 0;
 
   // ── Por partida ───────────────────────────────────────────
   let ventaSIVA = 0, ivaVenta = 0;
@@ -93,12 +84,8 @@ export function calcCotizacion(cot) {
       eqCIVA_unit += cost;
       eqSIVA_unit += costSIVA;
       ivaEq_unit  += iva;
-      // Precio de venta del equipo según el modo
-      if (modoEquipo === 'monto') {
-        // Reparte la ganancia total proporcional al costo
-        ventaEqSIVA_unit += costSIVA * _factorMonto;
-      } else {
-        // Margen propio de la pieza si existe, si no el general
+      // Precio de venta del equipo (solo para modo margen; en modo monto se usa el monto directo)
+      if (modoEquipo !== 'monto') {
         const margen = (e.margenPropio != null) ? e.margenPropio : margenEquipo;
         ventaEqSIVA_unit += costSIVA * (1 + margen);
       }
@@ -111,8 +98,8 @@ export function calcCotizacion(cot) {
     const costoUnitSIVA = vehSIVA / qty + eqSIVA_unit;
     let pvUnitSIVA = 0;
     if (soloEquipo) {
-      // Solo equipo: la venta es el equipo con su margen (sin vehículo)
-      pvUnitSIVA = ventaEqSIVA_unit;
+      // Solo equipo: monto directo por unidad, o equipo con margen
+      pvUnitSIVA = (modoEquipo === 'monto') ? _ventaUnitMonto : ventaEqSIVA_unit;
     } else if (p.modoPrecio === 'Techo presupuestal') {
       pvUnitSIVA = (p.techo || 0) > 0 ? (p.techo || 0) / (1 + IVA) / qty : costoUnitSIVA;
     } else if (p.modoPrecio === 'Utilidad deseada $') {

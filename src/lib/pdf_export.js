@@ -269,19 +269,12 @@ export async function printCotizacionCliente({ project, cot, calc, config, compa
   const soloEq = cot.soloEquipo === true;
   const modoEq = cot.modoEquipo || 'margen';
   const margenGeneral = cot.margenEquipo != null ? cot.margenEquipo : 0.30;
-  // Factor para modo "monto a ganar": reparte la ganancia proporcional al costo total del equipo
-  let _costoEqTotSIVA = 0;
+  // Modo "monto a ganar": venta total = monto directo, repartido por unidad (costos ignorados)
+  let _totalUnidsMonto = 0;
   if (soloEq && modoEq === 'monto') {
-    activeParts.forEach(p => {
-      const pi = parseInt(p.id.replace('P','')) - 1; const qty = p.cantidad || 0;
-      (cot.equipo||[]).filter(e => e.usar && e.vis).forEach(e => {
-        const cnt = (e.cnts && e.cnts[pi]) || 0;
-        const cSIVA = (e.llevaIVA ? (e.costoConIVA||0)/(1+IVA) : (e.costoConIVA||0)) * cnt;
-        _costoEqTotSIVA += cSIVA * qty;
-      });
-    });
+    activeParts.forEach(p => { _totalUnidsMonto += (p.cantidad || 0); });
   }
-  const factorMonto = (_costoEqTotSIVA > 0) ? (_costoEqTotSIVA + (cot.montoGanar||0)) / _costoEqTotSIVA : 1;
+  const ventaUnitMonto = (_totalUnidsMonto > 0) ? (cot.montoGanar || 0) / _totalUnidsMonto : 0;
   const partRows = activeParts.map(p => {
     const pi = parseInt(p.id.replace('P','')) - 1;
     const qty = p.cantidad || 0;
@@ -293,14 +286,17 @@ export async function printCotizacionCliente({ project, cot, calc, config, compa
     const costoUnit = vehSIVA_unit + eqSIVA_unit;
     let pvUnit = 0;
     if (soloEq) {
-      // Precio = suma del equipo con su margen (por pieza/general) o repartiendo el monto a ganar
-      pvUnit = (cot.equipo || []).filter(e => e.usar && e.vis).reduce((s,e) => {
-        const cnt = (e.cnts && e.cnts[pi]) || 0;
-        const cSIVA = (e.llevaIVA ? (e.costoConIVA||0)/(1+IVA) : (e.costoConIVA||0)) * cnt;
-        if (modoEq === 'monto') return s + cSIVA * factorMonto;
-        const m = (e.margenPropio != null) ? e.margenPropio : margenGeneral;
-        return s + cSIVA * (1 + m);
-      }, 0);
+      if (modoEq === 'monto') {
+        pvUnit = ventaUnitMonto; // precio unitario directo (monto / total unidades)
+      } else {
+        // Precio = suma del equipo con su margen (por pieza/general)
+        pvUnit = (cot.equipo || []).filter(e => e.usar && e.vis).reduce((s,e) => {
+          const cnt = (e.cnts && e.cnts[pi]) || 0;
+          const cSIVA = (e.llevaIVA ? (e.costoConIVA||0)/(1+IVA) : (e.costoConIVA||0)) * cnt;
+          const m = (e.margenPropio != null) ? e.margenPropio : margenGeneral;
+          return s + cSIVA * (1 + m);
+        }, 0);
+      }
     }
     else if (p.modoPrecio === 'Techo presupuestal') pvUnit = (p.techo||0) > 0 ? (p.techo||0)/(1+IVA)/qty : costoUnit;
     else if (p.modoPrecio === 'Utilidad deseada %') pvUnit = costoUnit * (1 + (p.utilidadPct||0));

@@ -270,7 +270,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
         cot.soloEquipo && h('div', { style:{ marginTop:14, paddingTop:14, borderTop:'.5px solid var(--b3)' } },
           // Selector de modo
           h('div', { style:{ display:'flex', gap:8, marginBottom:12 } },
-            [['margen','Por margen %'],['monto','Por monto a ganar $']].map(([k,label])=>
+            [['margen','Por margen %'],['monto','Por precio total $']].map(([k,label])=>
               h('button', { key:k, onClick:()=>updCot({...cot, modoEquipo:k}),
                 style:{ fontSize:12, padding:'6px 12px', borderRadius:'var(--r)', cursor:'pointer',
                   background:(cot.modoEquipo||'margen')===k?'#9B7EDE':'var(--bg2)', color:(cot.modoEquipo||'margen')===k?'#fff':'var(--t2)',
@@ -286,25 +286,20 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
                 h('div', { style:{ fontSize:11, color:'var(--t3)', flex:1, minWidth:180 } }, 'Se aplica a todo el equipo. Puedes ajustar piezas puntuales en su renglón. Precio = costo × (1 + margen).'),
               )
             : (() => {
-                // Costo total del equipo (s/IVA) para mostrar el precio de venta resultante
-                const costoTotalEq = (cot.partidas||[]).filter(p=>p.activo&&p.cantidad>0).reduce((tot,p)=>{
-                  const pi=parseInt(p.id.replace('P',''))-1; const qty=p.cantidad||0;
-                  const eqU=(cot.equipo||[]).filter(e=>e.usar).reduce((s,e)=>{ const cnt=(e.cnts&&e.cnts[pi])||0; const c=(e.costoConIVA||0)*cnt; return s+(e.llevaIVA?c/1.16:c); },0);
-                  return tot+eqU*qty;
-                },0);
-                const ventaTotal = costoTotalEq + (cot.montoGanar||0);
+                // Total de unidades activas (para mostrar precio por unidad)
+                const totalUnids = (cot.partidas||[]).filter(p=>p.activo&&p.cantidad>0).reduce((s,p)=>s+(p.cantidad||0),0);
+                const porUnidad = totalUnids>0 ? (cot.montoGanar||0)/totalUnids : 0;
                 return h('div', null,
                   h('div', { style:{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' } },
                     h('div', null,
-                      h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:3 } }, 'Monto a ganar total ($ s/IVA)'),
+                      h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:3 } }, 'Precio de venta total ($ s/IVA)'),
                       h(NumInput, { value:cot.montoGanar||0, onChange:v=>updCot({...cot, montoGanar:v}), style:{ fontSize:13, width:140 } }),
                     ),
-                    h('div', { style:{ fontSize:11, color:'var(--t3)', flex:1, minWidth:180 } }, 'Pones cuánto quieres ganar en total y el sistema calcula el precio de venta. No necesitas margen por pieza.'),
+                    h('div', { style:{ fontSize:11, color:'var(--t3)', flex:1, minWidth:180 } }, 'El monto que pones ES el precio de venta total. Los costos no se suman. Se reparte en partes iguales entre las unidades.'),
                   ),
                   h('div', { style:{ marginTop:12, padding:'10px 12px', background:'#F1ECF9', borderRadius:8, fontSize:12, color:'#4A2A7A', display:'flex', gap:20, flexWrap:'wrap' } },
-                    h('span', null, 'Costo equipo: ', h('strong', null, fmt(costoTotalEq))),
-                    h('span', null, '+ Ganancia: ', h('strong', null, fmt(cot.montoGanar||0))),
-                    h('span', null, '= Venta s/IVA: ', h('strong', null, fmt(ventaTotal))),
+                    h('span', null, 'Venta total s/IVA: ', h('strong', null, fmt(cot.montoGanar||0))),
+                    totalUnids>0 && h('span', null, 'Por unidad (', totalUnids, '): ', h('strong', null, fmt(porUnidad))),
                   ),
                 );
               })(),
