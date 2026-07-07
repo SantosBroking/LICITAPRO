@@ -238,11 +238,54 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate, user }) {
   );
 }
 
-export function ProjectForm({ project, companies, config, onSave, onCancel, user }) {
+export function ProjectForm({ project, companies, config, onSave, onCancel, user, onSaveConfig }) {
   const isE = !!project;
-  const [p, sP] = useState(project || { id:uid('proj'), name:'', dependencia:'', nivelGobierno:'', municipio:'', company:'', numLicitacion:'', status:'prospecto', tipoProcedimiento:'', productType:'Patrullas y vehículos', responsable:'', montoEstimado:0, probability:50, description:'', observaciones:'', fechaPublicacion:'', fechaAclaraciones:'', fechaPropuesta:'', fechaFallo:'', fechaContrato:'', notes:[], activity:[], preguntas:[], docs:[], preparation:{}, cotizacion:{} });
+  const [p, sP] = useState(project || { id:uid('proj'), name:'', dependencia:'', nivelGobierno:'', municipio:'', company:'', numLicitacion:'', status:'prospecto', tipoProcedimiento:'', productType:'Patrullas y vehículos', responsable:'', montoEstimado:0, probability:50, description:'', observaciones:'', fechaPublicacion:'', fechaAclaraciones:'', fechaPropuesta:'', fechaFallo:'', fechaContrato:'', clienteEmpresaId:'', clienteRfc:'', clienteDomicilio:'', clienteCorreo:'', clienteTelefono:'', notes:[], activity:[], preguntas:[], docs:[], preparation:{}, cotizacion:{} });
   const set = (k,v) => sP(prev=>({...prev,[k]:v}));
   const [basesMsg, setBasesMsg] = useState('');
+  // ── Cliente fiscal: reusar empresas guardadas (config.proveedores, compartido con OC) ──
+  const empresasGuardadas = (config && config.proveedores) || [];
+  const [csfMsg, setCsfMsg] = useState('');
+  const [csfAnalizando, setCsfAnalizando] = useState(false);
+  const clienteFileRef = useRef(null);
+  const seleccionarCliente = (id) => {
+    if (!id) { sP(prev=>({...prev, clienteEmpresaId:'', clienteRfc:'', clienteDomicilio:'', clienteCorreo:'', clienteTelefono:'' })); return; }
+    const e = empresasGuardadas.find(x=>x.id===id);
+    if (!e) return;
+    sP(prev=>({ ...prev, clienteEmpresaId:e.id, dependencia:e.name||prev.dependencia, clienteRfc:e.rfc||'', clienteDomicilio:e.address||'', clienteCorreo:e.correo||prev.clienteCorreo||'', clienteTelefono:e.telefono||prev.clienteTelefono||'' }));
+  };
+  const persistirEmpresaCliente = async (emp) => {
+    if (!onSaveConfig || (!emp.name && !emp.rfc)) return emp;
+    const cfg = config || {};
+    const lista = cfg.proveedores || [];
+    const existe = lista.find(x => (emp.rfc && x.rfc===emp.rfc) || (!emp.rfc && x.name===emp.name));
+    let nuevos, id;
+    if (existe) { id = existe.id; nuevos = lista.map(x => x===existe ? {...x, ...emp} : x); }
+    else { id = 'prov-'+Date.now(); nuevos = [...lista, { id, ...emp }]; }
+    await onSaveConfig({ ...cfg, proveedores: nuevos });
+    return { ...emp, id };
+  };
+  const analizarCSFCliente = async (file) => {
+    if (!file) return;
+    setCsfAnalizando(true); setCsfMsg('Analizando constancia...');
+    try {
+      const apiKey = (config && config.anthropicApiKey) || window._lpConfig?.anthropicApiKey;
+      if (!apiKey) { setCsfMsg('❌ Agrega tu API Key en Configuración → 🤖 IA'); setCsfAnalizando(false); return; }
+      const { analyzeDocument } = await import('../lib/ai_analyzer.js');
+      const data = await analyzeDocument(file, 'constancia', apiKey);
+      const emp = {
+        name: data.razonSocial || '',
+        rfc:  data.rfc || '',
+        address: [data.domicilioFiscal, data.codigoPostal, data.ciudad, data.estado].filter(Boolean).join(', '),
+        correo: data.correo || '',
+        telefono: data.telefono || '',
+      };
+      const guardada = await persistirEmpresaCliente(emp);
+      sP(prev=>({ ...prev, clienteEmpresaId:guardada.id||'', dependencia:emp.name||prev.dependencia, clienteRfc:emp.rfc, clienteDomicilio:emp.address, clienteCorreo:emp.correo||prev.clienteCorreo, clienteTelefono:emp.telefono||prev.clienteTelefono }));
+      setCsfMsg('✓ Datos extraídos y empresa guardada (disponible también en OC)');
+    } catch(e) { console.error(e); setCsfMsg('❌ No se pudo analizar: '+e.message); }
+    setCsfAnalizando(false);
+  };
   const handleBasesForm = (data) => {
     sP(prev => ({
       ...prev,
@@ -344,6 +387,32 @@ export function ProjectForm({ project, companies, config, onSave, onCancel, user
           ),
         ),
         h('div', { className:'card' },
+          h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:4 } }, '🏛️ Datos fiscales del cliente'),
+          h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:14 } }, 'Para cotizaciones dirigidas a una empresa. Elige una empresa guardada o sube su Constancia de Situación Fiscal (queda ligada con las de OC).'),
+          // Selector de empresa guardada
+          empresasGuardadas.length > 0 && h('div', { style:{ marginBottom:12 } },
+            h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:3 } }, 'Empresa guardada'),
+            h('select', { value:p.clienteEmpresaId||'', onChange:e=>seleccionarCliente(e.target.value), style:{ fontSize:13, width:'100%', padding:'8px' } },
+              h('option', { value:'' }, '— Seleccionar empresa / capturar manual —'),
+              empresasGuardadas.map(e=>h('option', { key:e.id, value:e.id }, e.name+(e.rfc?' · '+e.rfc:''))),
+            ),
+          ),
+          // Subir CSF
+          h('div', { style:{ marginBottom:14 } },
+            h('input', { ref:clienteFileRef, type:'file', accept:'application/pdf,image/*', style:{ display:'none' }, onChange:e=>{ analizarCSFCliente(e.target.files[0]); e.target.value=''; } }),
+            h('button', { type:'button', disabled:csfAnalizando, onClick:()=>clienteFileRef.current&&clienteFileRef.current.click(), style:{ fontSize:12, padding:'7px 14px', background:'var(--bg2)', border:'1px solid var(--b2)', borderRadius:'var(--r)', cursor:csfAnalizando?'wait':'pointer' } }, csfAnalizando?'Analizando...':'📎 Subir Constancia de Situación Fiscal'),
+            csfMsg && h('div', { style:{ fontSize:11, color: csfMsg.startsWith('❌')?'var(--red)':'var(--green)', marginTop:6 } }, csfMsg),
+          ),
+          // Campos fiscales editables
+          h('div', { className:'mob-2col', style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 } },
+            h(Inp, { label:'Razón social / Cliente', value:p.dependencia, onChange:v=>set('dependencia',v), placeholder:'Nombre de la empresa cliente' }),
+            h(Inp, { label:'RFC', value:p.clienteRfc||'', onChange:v=>set('clienteRfc',v), placeholder:'XAXX010101000' }),
+            h('div', { style:{ gridColumn:'1/-1' } }, h(Inp, { label:'Domicilio fiscal', value:p.clienteDomicilio||'', onChange:v=>set('clienteDomicilio',v), placeholder:'Calle, número, colonia, CP, ciudad' })),
+            h(Inp, { label:'Correo', value:p.clienteCorreo||'', onChange:v=>set('clienteCorreo',v), placeholder:'contacto@empresa.com' }),
+            h(Inp, { label:'Teléfono', value:p.clienteTelefono||'', onChange:v=>set('clienteTelefono',v), placeholder:'55 1234 5678' }),
+          ),
+        ),
+        h('div', { className:'card' },
           h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:14 } }, 'Fechas clave'),
           h('div', { className:'mob-2col', style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 } },
             h(Inp, { label:'Publicación', value:p.fechaPublicacion, onChange:v=>set('fechaPublicacion',v), type:'date' }),
@@ -429,7 +498,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
     setBasesAiMsg(campos.length ? '✅ Datos extraídos de las bases: ' + campos.join(', ') : 'No se detectaron datos en el PDF.');
   };
 
-  if(showEdit) return h(ProjectForm, { project, companies, config, user, onSave:async(updated)=>{ await onSave(updated); setShowEdit(false); }, onCancel:()=>setShowEdit(false) });
+  if(showEdit) return h(ProjectForm, { project, companies, config, user, onSaveConfig, onSave:async(updated)=>{ await onSave(updated); setShowEdit(false); }, onCancel:()=>setShowEdit(false) });
   if(selVehicle) return h(VehicleDetail, {
     vehicle:vehicles.find(v=>v.id===selVehicle), project, company,
     onNav:(view,id)=>{ if(view==='project_detail'){setSelVehicle(null);setTab('vehiculos');}else onNav(view,id); },

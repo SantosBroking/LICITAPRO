@@ -234,7 +234,7 @@ export default function App() {
   const content = ({
     dashboard:      h(Dashboard,     { projects, vehicles, companies, onNav:nav, onUpdate:upProject }),
     projects:       h(ProjectsList,  { projects, vehicles, onNav:nav, onUpdate:p=>handleSaveProject(p,false), user }),
-    project_new:    h(ProjectForm,   { companies, config, user, onSave:handleSaveProject, onCancel:()=>nav('projects') }),
+    project_new:    h(ProjectForm,   { companies, config, user, onSaveConfig:handleSaveConfig, onSave:handleSaveProject, onCancel:()=>nav('projects') }),
     project_detail: projDetailView,
     companies:      h(Companies,     { companies, setCompanies, projects, config, appConfig:config, onUpdateProject:(p)=>handleSaveProject(p,false), onSave:async c=>{ const ex=companies.find(x=>x.id===c.id); setCompanies(ex?companies.map(x=>x.id===c.id?c:x):[...companies,c]); try{ await saveCompany(c, getUID()); log(user, ex?'actualizó':'creó', 'empresa', c.id, c.name); }catch(e){ console.error('Error guardando empresa:', e); } }, user, logFn:log }),
     catalog:        h(CatalogView, { config, onSaveConfig:handleSaveConfig }),
