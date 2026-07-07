@@ -23,7 +23,7 @@ function liveEquipo(e) {
 }
 
 const TABS = ['partidas','equipo','extras','corrida','unitario','agente'];
-const TAB_LABELS = { partidas:'1 · Partidas', equipo:'2 · Equipo', extras:'3 · Retornos e ISR', corrida:'4 · Corrida financiera', unitario:'5 · Unitario', agente:'6 · Agente Claude' };
+const TAB_LABELS = { partidas:'1 · Partidas', equipo:'2 · Equipo', extras:'3 · Retornos y condiciones', corrida:'4 · Corrida financiera', unitario:'5 · Unitario', agente:'6 · Agente Claude' };
 const BASES_RETORNO = ['% sobre venta c/IVA','% sobre venta s/IVA','Monto fijo total','Monto fijo por unidad'];
 const BASES_FIANZA  = ['% sobre venta c/IVA','% sobre venta s/IVA','Monto fijo total','Monto fijo por unidad'];
 const IVA = 0.16;
