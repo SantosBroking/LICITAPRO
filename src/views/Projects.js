@@ -653,7 +653,14 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
     tab==='docs' && h('div', null,
       // Órdenes de Compra generadas
       (project.ordenesCompra||[]).length > 0 && (() => {
+        const esJefeDetalle = user?.role==='admin' || user?.role==='jefe' || !user?.role;
+        const ocAprobada = oc => (project.firmas||[]).some(f => f.ocId===oc.id && (f.estatus==='en_firma' || f.estatus==='en_visto' || f.estatus==='completado'));
         const reimprimir = oc => {
+          // Los empleados solo pueden imprimir OC ya aprobadas por el jefe
+          if (!esJefeDetalle && !ocAprobada(oc)) {
+            alert('⛔ Esta orden de compra aún no ha sido aprobada por Santiago.\n\nDale "✍ A aprobación" para enviarla. Podrás imprimirla cuando él la apruebe.');
+            return;
+          }
           const cot2=project.cotizacion||{};
           const parts=(oc.partidas||[]).map(op=>{
             const orig=(cot2.partidas||[]).find(p=>p.id===op.id)||{};
@@ -764,7 +771,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
     // Borrador
     tab==='borrador' && h(BorradorTab, { project, config, onUpdate:updProject, logFn }),
     // Modal Orden de Compra
-    showOC && h(OCModal, { project, companies, config, onSaveConfig, onSaveCompany, onUpdate:updProject, onClose:()=>setShowOC(false) }),
+    showOC && h(OCModal, { project, companies, config, onSaveConfig, onSaveCompany, onUpdate:updProject, onClose:()=>setShowOC(false), user }),
     // Modal eliminar
     showDelete && h(DeleteConfirmModal, { title:'¿Eliminar proyecto?', message:'Vas a eliminar el proyecto "'+project.name+'".\n\nSe eliminarán también todos los vehículos asociados.', warning:'Esta acción no se puede deshacer.', confirmLabel:'Sí, eliminar proyecto', onConfirm:()=>{ onDelete(project.id); setShowDelete(false); onNav('projects'); }, onCancel:()=>setShowDelete(false) }),
   );
@@ -918,7 +925,7 @@ function BorradorTab(props){
 }
 
 // ── Modal Orden de Compra ─────────────────────────────────────
-function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUpdate, onClose }) {
+function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUpdate, onClose, user }) {
   const cot = project.cotizacion || {};
   const partidas = (cot.partidas || []).filter(p => p.activo && (p.cantidad||0) > 0);
 
@@ -1080,7 +1087,15 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
     };
     const ocs = [...(project.ordenesCompra||[]).filter(o=>o.id!==folio), nuevaOC];
     onUpdate({ ...project, ocProveedor: prov, ordenesCompra: ocs, ocCondiciones: conds });
-    printOrdenCompra({ project: proyConProv, partidas: partidasSel, condiciones: conds, folio, companyObj: companies.find(c=>c.name===project.company) });
+    const esJefe = user?.role==='admin' || user?.role==='jefe' || !user?.role;
+    if (esJefe) {
+      // El jefe puede imprimir directo
+      printOrdenCompra({ project: proyConProv, partidas: partidasSel, condiciones: conds, folio, companyObj: companies.find(c=>c.name===project.company) });
+    } else {
+      // Empleado: NO se imprime. Debe pasar por aprobación del jefe.
+      alert('✅ Orden de compra creada.\n\nComo no eres administrador, esta OC NO se puede imprimir hasta que Santiago la apruebe. Ve a la lista de OC y dale "✍ A aprobación" para enviarla.');
+    }
+    onClose();
   };
 
   const inputStyle = { fontSize:12, padding:'6px 10px' };
