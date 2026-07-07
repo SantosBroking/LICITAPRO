@@ -534,10 +534,15 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
         // Plantillas rápidas frecuentes
         h('div', { style:{ marginBottom:12, display:'flex', gap:6, flexWrap:'wrap' } },
           [
-            ['Tiempo de entrega','30 días naturales a partir de la recepción de la orden de compra.'],
-            ['Forma de pago','50% de anticipo y 50% contra entrega.'],
-            ['Garantía','12 meses contra defectos de fabricación en el equipamiento instalado.'],
-            ['Lugar de entrega','Instalaciones del cliente dentro de la República Mexicana.'],
+            ['Forma de pago','Favor de especificar en la orden de compra: uso de CFDI, método y forma de pago.'],
+            ['Tiempo de entrega','Tiempo de entrega aproximado; las fechas de entrega pueden variar.'],
+            ['Garantía','12 meses a partir de la entrega en almacén del cliente contra defectos de fabricación.'],
+            ['Garantía (logística)','En caso de garantía, no nos responsabilizamos por pago de fletes o servicio de logística para el arribo a revisión y diagnóstico en laboratorio.'],
+            ['Envío','Servicio de envío no incluido.'],
+            ['Instalación','Ninguna solución incluye servicio de instalación en el costo ofertado, salvo que se especifique.'],
+            ['Cambios y devoluciones','No se hacen cambios ni devoluciones de equipo en línea industrial.'],
+            ['Cancelación','Una vez aceptada la cotización y/o enviada la orden de compra, si desea cancelar tendrá una penalización del 10% sobre el monto de la cotización u orden de compra.'],
+            ['Trabajos de terceros','No nos hacemos responsables por instalaciones o modificaciones efectuadas por personal ajeno a esta empresa.'],
             ['Vigencia','Esta cotización tiene una vigencia de 20 días naturales.'],
           ].map(([t,tx])=>h('button', { key:t, onClick:()=>addCondicion(t,tx), style:{ fontSize:11, padding:'4px 10px', color:'var(--t2)', border:'.5px solid var(--b2)', borderRadius:8 } }, '+ '+t))
         ),
