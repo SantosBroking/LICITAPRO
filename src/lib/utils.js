@@ -106,3 +106,37 @@ export const fmtBytes = (b) => {
   if (b < 1048576) return `${(b / 1024).toFixed(0)}KB`;
   return `${(b / 1048576).toFixed(1)}MB`;
 };
+
+// Convierte un número a letras en español (para importes de cotización)
+export function numeroALetras(num) {
+  const n = Math.floor(Math.abs(num || 0));
+  const centavos = Math.round((Math.abs(num || 0) - n) * 100);
+  const UNI = ['','UNO','DOS','TRES','CUATRO','CINCO','SEIS','SIETE','OCHO','NUEVE','DIEZ','ONCE','DOCE','TRECE','CATORCE','QUINCE','DIECISÉIS','DIECISIETE','DIECIOCHO','DIECINUEVE','VEINTE'];
+  const DEC = ['','','VEINTE','TREINTA','CUARENTA','CINCUENTA','SESENTA','SETENTA','OCHENTA','NOVENTA'];
+  const CEN = ['','CIENTO','DOSCIENTOS','TRESCIENTOS','CUATROCIENTOS','QUINIENTOS','SEISCIENTOS','SETECIENTOS','OCHOCIENTOS','NOVECIENTOS'];
+  function seccion(x) {
+    let t = '';
+    const c = Math.floor(x/100), d = Math.floor((x%100)/10), u = x%10;
+    if (x === 100) return 'CIEN';
+    if (c) t += CEN[c] + ' ';
+    const dd = x%100;
+    if (dd <= 20) t += UNI[dd];
+    else if (dd < 30) t += 'VEINTI' + UNI[u];
+    else { t += DEC[d]; if (u) t += ' Y ' + UNI[u]; }
+    return t.trim();
+  }
+  function convertir(x) {
+    if (x === 0) return 'CERO';
+    let t = '';
+    const millones = Math.floor(x/1000000);
+    const miles = Math.floor((x%1000000)/1000);
+    const resto = x%1000;
+    if (millones) t += (millones === 1 ? 'UN MILLÓN' : seccion(millones)+' MILLONES') + ' ';
+    if (miles) t += (miles === 1 ? 'MIL' : seccion(miles)+' MIL') + ' ';
+    if (resto) t += seccion(resto);
+    return t.trim();
+  }
+  const letras = convertir(n);
+  const centStr = String(centavos).padStart(2,'0');
+  return `${letras} PESOS ${centStr}/100 M.N.`;
+}

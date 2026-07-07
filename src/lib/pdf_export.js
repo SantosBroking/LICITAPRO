@@ -1,6 +1,6 @@
 // pdf_export.js — Generador de PDFs para LicitaPro
 // Tres plantillas: Cotización Cliente, Resumen Retornos, Resumen Interno
-import { fmt, pctS } from './utils.js';
+import { fmt, pctS, numeroALetras } from './utils.js';
 import { calcCotizacion } from './calc.js';
 import { CATALOG_IMAGES } from './catalog_images.js';
 import { CATALOG_PRODUCTS, KIT_MAP } from './catalog.js';
@@ -369,11 +369,13 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
   <table>
     <colgroup>
       <col class="c-num"/><col class="c-img"/><col class="c-nom"/>
-      <col class="c-desc"/><col class="c-cant"/><col class="c-pu"/><col class="c-sub"/>
+      <col class="c-desc"/><col style="width:9%"/><col style="width:8%"/><col class="c-cant"/><col style="width:5%"/><col class="c-pu"/><col class="c-sub"/>
     </colgroup>
     <thead><tr>
       <th>#</th><th></th><th>Concepto</th><th>Descripción</th>
+      <th>Modelo</th><th>Marca</th>
       <th style="text-align:center">Cant.</th>
+      <th style="text-align:center">Unidad</th>
       <th style="text-align:right">P.Unit s/IVA</th>
       <th style="text-align:right">Subtotal</th>
     </tr></thead>
@@ -383,7 +385,9 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
         <td style="text-align:center;padding:4px">${(()=>{const foto=liveCatMap[p.vehiculoId]?.photo||p.foto||'';const r=resolveImg(foto);return r?`<img src="${r}" style="width:58px;height:58px;object-fit:contain;border-radius:3px;" />`:'';})()}</td>
         <td><strong>Vehículo base con equipamiento</strong></td>
         <td>${p.tipo||''} ${p.marca||''} ${p.modelo||''} ${p.version||''} ${p.ano||''}</td>
+        <td>${p.modelo||''}</td><td>${p.marca||''}</td>
         <td style="text-align:center">${qty}</td>
+        <td style="text-align:center">pz</td>
         <td style="text-align:right">${fmt(pvUnit)}</td>
         <td style="text-align:right">${fmt(pvUnit * qty)}</td>
       </tr>`}
@@ -401,7 +405,9 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
               <td style="text-align:center;padding:4px">${(()=>{const r=resolveImg(img);return r?`<img src="${r}" style="width:58px;height:58px;object-fit:contain;border-radius:3px;" />`:'';})()}</td>
               <td style="font-weight:600;font-size:11px">${comp.nom}</td>
               <td style="font-size:10px;color:#6b6862">${comp.desc||''}</td>
+              <td style="font-size:10px">${comp.modelo||''}</td><td style="font-size:10px">${comp.marca||''}</td>
               <td style="text-align:center">${(e.cnts&&e.cnts[pi])!=null?(e.cnts[pi]||0):1}</td>
+              <td style="text-align:center;font-size:10px">${e.unidad||'pz'}</td>
               <td></td><td></td>
             </tr>`;
           }).join('');
@@ -414,7 +420,9 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
             <td style="text-align:center;padding:4px">${(()=>{const r=resolveImg(img);return r?`<img src="${r}" style="width:58px;height:58px;object-fit:contain;border-radius:3px;" />`:'';})()}</td>
             <td style="font-weight:600;font-size:11px">${liveProd?.nom||e.nombre}</td>
             <td style="font-size:10px;color:#6b6862">${liveProd?.desc||e.descripcion||''}</td>
+            <td style="font-size:10px">${e.modelo||''}</td><td style="font-size:10px">${e.marca||''}</td>
             <td style="text-align:center">${(e.cnts&&e.cnts[pi])!=null?(e.cnts[pi]||0):1}</td>
+            <td style="text-align:center;font-size:10px">${e.unidad||'pz'}</td>
             <td style="text-align:right"></td>
             <td style="text-align:right"></td>
           </tr>`;
@@ -423,9 +431,9 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
       })()}
     </tbody>
     <tfoot>
-      <tr class="total-row"><td colspan="5"></td><td style="text-align:right">Subtotal:</td><td style="text-align:right">${fmt(subtotal)}</td></tr>
-      <tr class="total-row"><td colspan="5"></td><td style="text-align:right">IVA (16%):</td><td style="text-align:right">${fmt(subtotal*IVA)}</td></tr>
-      <tr class="total-row"><td colspan="5"></td><td style="text-align:right"><strong>TOTAL c/IVA:</strong></td><td style="text-align:right"><strong style="color:#3b6cf4">${fmt(subtotal*(1+IVA))}</strong></td></tr>
+      <tr class="total-row"><td colspan="8"></td><td style="text-align:right">Subtotal:</td><td style="text-align:right">${fmt(subtotal)}</td></tr>
+      <tr class="total-row"><td colspan="8"></td><td style="text-align:right">IVA (16%):</td><td style="text-align:right">${fmt(subtotal*IVA)}</td></tr>
+      <tr class="total-row"><td colspan="8"></td><td style="text-align:right"><strong>TOTAL c/IVA:</strong></td><td style="text-align:right"><strong style="color:#3b6cf4">${fmt(subtotal*(1+IVA))}</strong></td></tr>
     </tfoot>
   </table>
 </div>
@@ -439,6 +447,10 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
       <tr class="total-row"><td><strong>TOTAL CONTRATO c/IVA:</strong></td><td class="right"><strong style="font-size:14px;color:#3b6cf4">${fmt(calc.ventaTotal)}</strong></td></tr>
     </table>
   </div>
+</div>
+
+<div style="clear:both;background:#1a1917;color:#fff;padding:8px 14px;border-radius:6px;font-size:10.5px;font-weight:600;letter-spacing:.3px;margin:8px 0 20px">
+  Importe con letra: ${numeroALetras(calc.ventaTotal)}
 </div>
 
 ${cot.condicionesComerciales ? `<div style="background:#f6f6f4;padding:12px 16px;border-radius:6px;font-size:10px;color:#6b6862;margin-bottom:20px"><strong>Condiciones comerciales:</strong> ${cot.condicionesComerciales}</div>` : ''}

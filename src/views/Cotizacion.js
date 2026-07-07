@@ -98,7 +98,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
   };
   const addEquipo = prod => {
     if(cot.equipo.some(e=>e.productoId===prod.id))return;
-    updCot({...cot,equipo:[...cot.equipo,{id:uid('EQ'),productoId:prod.id,nombre:prod.nom,cat:prod.cat,usar:true,vis:prod.vis,costoConIVA:prod.price||0,llevaIVA:prod.cat!=='08 Mano de obra',cnts:new Array(cot.partidas.length).fill(0),est:'Estimado',fechaCosto:TODAY(),notas:''}]});
+    updCot({...cot,equipo:[...cot.equipo,{id:uid('EQ'),productoId:prod.id,nombre:prod.nom,cat:prod.cat,marca:prod.marca||'',modelo:prod.modelo||'',unidad:'pz',usar:true,vis:prod.vis,costoConIVA:prod.price||0,llevaIVA:prod.cat!=='08 Mano de obra',cnts:new Array(cot.partidas.length).fill(0),est:'Estimado',fechaCosto:TODAY(),notas:''}]});
   };
   const removeEquipo  = eid => updCot({...cot,equipo:cot.equipo.filter(e=>e.id!==eid)});
   const addRetorno    = ()  => updCot({...cot,retornos:[...cot.retornos,{id:uid('RET'),nombre:'Retorno',base:'% sobre venta c/IVA',valor:0,activo:true,llevaIVA:false}]});
@@ -430,7 +430,12 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
               })()),
               h('td', { style:{ padding:'6px 8px' } },
                 h('div', { style:{ fontWeight:e.usar?500:400 } }, e.nombre),
-                h('div', { style:{ fontSize:10, color:'var(--t2)' } }, e.cat),
+                h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:4 } }, e.cat),
+                h('div', { style:{ display:'flex', gap:4, flexWrap:'wrap' } },
+                  h('input', { value:e.marca||'', onChange:ev=>updEquipo(e.id,'marca',ev.target.value), placeholder:'Marca', style:{ fontSize:10, padding:'2px 5px', width:80, border:'1px solid var(--b2)', borderRadius:5 } }),
+                  h('input', { value:e.modelo||'', onChange:ev=>updEquipo(e.id,'modelo',ev.target.value), placeholder:'Modelo', style:{ fontSize:10, padding:'2px 5px', width:90, border:'1px solid var(--b2)', borderRadius:5 } }),
+                  h('input', { value:e.unidad||'pz', onChange:ev=>updEquipo(e.id,'unidad',ev.target.value), placeholder:'Unidad', style:{ fontSize:10, padding:'2px 5px', width:44, border:'1px solid var(--b2)', borderRadius:5 } }),
+                ),
               ),
               h('td', { style:{ padding:'6px 4px' } }, h(NumInput, { value:e.costoConIVA, onChange:v=>updEquipo(e.id,'costoConIVA',v), style:{ width:90, fontSize:11, padding:'3px 5px' } })),
               cot.soloEquipo && (cot.modoEquipo||'margen')==='margen' && h('td', { style:{ padding:'6px 4px', textAlign:'center' } },
