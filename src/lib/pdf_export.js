@@ -5,6 +5,26 @@ import { calcCotizacion } from './calc.js';
 import { CATALOG_IMAGES } from './catalog_images.js';
 import { CATALOG_PRODUCTS, KIT_MAP } from './catalog.js';
 import { getCompanyLogo } from './company_logos.js';
+import { signedUrl } from './supabase.js';
+
+// Convierte una URL de imagen (incluida storage privado) a base64 para incrustarla en el PDF.
+// Si ya es base64 (data:), la devuelve tal cual. Si falla, devuelve cadena vacía.
+async function imgABase64(url) {
+  if (!url) return '';
+  if (url.startsWith('data:')) return url;
+  try {
+    const firmada = await signedUrl(url, 3600);
+    const resp = await fetch(firmada);
+    if (!resp.ok) return '';
+    const blob = await resp.blob();
+    return await new Promise((resolve) => {
+      const r = new FileReader();
+      r.onloadend = () => resolve(r.result || '');
+      r.onerror = () => resolve('');
+      r.readAsDataURL(blob);
+    });
+  } catch(e) { console.warn('No se pudo cargar imagen para PDF:', e); return ''; }
+}
 
 const IVA = 0.16;
 
@@ -194,10 +214,11 @@ export async function printCotizacionCliente({ project, cot, calc, config, compa
   const preloadImg = async (url) => {
     if (!url || url.startsWith('data:') || imgCache[url]) return;
     try {
-      const resp = await fetch(url);
+      const firmada = await signedUrl(url, 3600);  // firmar para storage privado
+      const resp = await fetch(firmada);
       const blob = await resp.blob();
       imgCache[url] = await new Promise(r => { const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(blob); });
-    } catch(e) { imgCache[url] = url; }
+    } catch(e) { imgCache[url] = ''; }
   };
   // Diagnóstico de fotos de vehículos
   const debugInfo = (cot.partidas||[]).map(p => ({
@@ -214,13 +235,21 @@ export async function printCotizacionCliente({ project, cot, calc, config, compa
     const live = liveCatMap[p.vehiculoId]?.photo || '';
     return live || p.foto || '';
   }).filter(Boolean);
-  await Promise.all([...new Set(allFotos)].map(preloadImg));
+  // Incluir el logo de la empresa y las fotos de equipo (solo las que son URL de storage, no base64 del catálogo)
+  const logoEmpresa = getCompanyLogo(project.company, companyObj);
+  const fotosEquipo = (cot.equipo||[]).map(e => {
+    const live = liveCatMap[e.productoId];
+    return (live?.photo) || '';
+  }).filter(Boolean);
+  const todasImgs = [...new Set([...allFotos, ...fotosEquipo, logoEmpresa].filter(Boolean))];
+  await Promise.all(todasImgs.map(preloadImg));
   const resolveImg = (url) => {
     if (!url) return '';
     if (imgCache[url]) return imgCache[url];      // ya cargada como base64
     if (url.startsWith('data:')) return url;      // ya es base64
-    return url;                                   // URL (fallback, se carga en el img)
+    return url;                                   // URL (fallback)
   };
+  const logoResuelto = resolveImg(logoEmpresa);
 
   // Función para enriquecer cada entrada de equipo con datos actuales del catálogo
   const liveEq = (e) => {
@@ -281,7 +310,7 @@ export async function printCotizacionCliente({ project, cot, calc, config, compa
 
 <div class="header-top">
   <div class="empresa-info" style="display:flex;align-items:flex-start;gap:14px;flex:1;min-width:0;padding-right:20px">
-    ${(() => { const logo = getCompanyLogo(project.company, companyObj); return logo ? `<img src="${logo}" style="height:60px;width:auto;max-width:120px;flex-shrink:0;object-fit:contain;background:#ffffff;padding:3px;border-radius:4px" />` : ''; })()}
+    ${logoResuelto ? `<img src="${logoResuelto}" style="height:60px;width:auto;max-width:120px;flex-shrink:0;object-fit:contain;background:#ffffff;padding:3px;border-radius:4px" />` : ''}
     <div style="min-width:0">
       <div style="font-size:12px;font-weight:700;color:#1a1917;margin-bottom:3px;line-height:1.3">${emp.nombreComercial||emp.razonSocial||'MSMS CORP'}</div>
       <div style="font-size:9.5px;line-height:1.45">${emp.razonSocial||''}</div>
@@ -329,7 +358,7 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
     <tbody>
       <tr>
         <td style="text-align:center;color:#6b6862">1</td>
-        <td style="text-align:center;padding:4px">${(()=>{const foto=liveCatMap[p.vehiculoId]?.photo||p.foto||'';return foto?`<img src="${foto}" style="width:58px;height:58px;object-fit:contain;border-radius:3px;" />`:'';})()}</td>
+        <td style="text-align:center;padding:4px">${(()=>{const foto=liveCatMap[p.vehiculoId]?.photo||p.foto||'';const r=resolveImg(foto);return r?`<img src="${r}" style="width:58px;height:58px;object-fit:contain;border-radius:3px;" />`:'';})()}</td>
         <td><strong>Vehículo base con equipamiento</strong></td>
         <td>${p.tipo||''} ${p.marca||''} ${p.modelo||''} ${p.version||''} ${p.ano||''}</td>
         <td style="text-align:center">${qty}</td>
@@ -347,7 +376,7 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
             const num = rowNum++;
             return `<tr>
               <td style="text-align:center;color:#6b6862;font-size:10px">${num}</td>
-              <td style="text-align:center;padding:4px">${img ? `<img src="${img}" style="width:58px;height:58px;object-fit:contain;border-radius:3px;" />` : ''}</td>
+              <td style="text-align:center;padding:4px">${(()=>{const r=resolveImg(img);return r?`<img src="${r}" style="width:58px;height:58px;object-fit:contain;border-radius:3px;" />`:'';})()}</td>
               <td style="font-weight:600;font-size:11px">${comp.nom}</td>
               <td style="font-size:10px;color:#6b6862">${comp.desc||''}</td>
               <td style="text-align:center">${(e.cnts&&e.cnts[pi])!=null?(e.cnts[pi]||0):1}</td>
@@ -360,7 +389,7 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
           const num = rowNum++;
           return `<tr>
             <td style="text-align:center;color:#6b6862;font-size:10px">${num}</td>
-            <td style="text-align:center;padding:4px">${img ? `<img src="${img}" style="width:58px;height:58px;object-fit:contain;border-radius:3px;" />` : ''}</td>
+            <td style="text-align:center;padding:4px">${(()=>{const r=resolveImg(img);return r?`<img src="${r}" style="width:58px;height:58px;object-fit:contain;border-radius:3px;" />`:'';})()}</td>
             <td style="font-weight:600;font-size:11px">${liveProd?.nom||e.nombre}</td>
             <td style="font-size:10px;color:#6b6862">${liveProd?.desc||e.descripcion||''}</td>
             <td style="text-align:center">${(e.cnts&&e.cnts[pi])!=null?(e.cnts[pi]||0):1}</td>
