@@ -170,7 +170,10 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
     // ══ 1. PARTIDAS ══
     tab==='partidas' && h('div', null,
       h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:12 } },
-        h('div', null, h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:3 } }, 'Folio'), h('input', { value:cot.folio||'', onChange:e=>updCot({...cot,folio:e.target.value}), style:{ fontSize:12 } })),
+        h('div', null, h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:3 } }, 'Folio'), h('div', { style:{ display:'flex', gap:4 } },
+          h('input', { value:cot.folio||'', onChange:e=>updCot({...cot,folio:e.target.value}), style:{ fontSize:12, flex:1 } }),
+          h('button', { onClick:()=>{ const y=new Date().getFullYear(); const n=String(Math.floor(Math.random()*9000)+1000); updCot({...cot,folio:'COT-'+y+'-'+n}); }, title:'Generar folio', style:{ fontSize:11, padding:'0 10px', border:'1px solid var(--b2)', borderRadius:6, background:'var(--bg2)', cursor:'pointer', whiteSpace:'nowrap' } }, '⚙'),
+        )),
         h('div', null, h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:3 } }, 'Agencia / Proveedor'), h('input', { value:cot.agenciaProveedor||'', onChange:e=>updCot({...cot,agenciaProveedor:e.target.value}), style:{ fontSize:12 }, placeholder:'Ej: Grupo Surman' })),
         h('div', { style:{ gridColumn:'1/-1' } }, h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:3 } }, 'Municipio / Destinatario (aparece en el PDF como «Para»)'), h('input', { value:cot.municipio||'', onChange:e=>updCot({...cot,municipio:e.target.value}), style:{ fontSize:12 }, placeholder:'Ej: Tultitlán, Estado de México' })),
         h('div', null, h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:3 } }, 'Vendedor'), h('input', { value:cot.vendedor||'', onChange:e=>updCot({...cot,vendedor:e.target.value}), style:{ fontSize:12 }, placeholder:'Nombre del ejecutivo' })),

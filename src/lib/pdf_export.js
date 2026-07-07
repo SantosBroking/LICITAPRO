@@ -441,11 +441,11 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
 `).join('')}
 
 <div class="total-section">
-  <div class="total-box">
-    <table>
-      <tr><td>Subtotal s/IVA:</td><td class="right">${fmt(calc.ventaSIVA)}</td></tr>
-      <tr><td>IVA (16%):</td><td class="right">${fmt(calc.ivaVenta)}</td></tr>
-      <tr class="total-row"><td><strong>TOTAL CONTRATO c/IVA:</strong></td><td class="right"><strong style="font-size:14px;color:#3b6cf4">${fmt(calc.ventaTotal)}</strong></td></tr>
+  <div class="total-box" style="overflow:hidden;border-radius:8px;border:1px solid #e0ddd8">
+    <table style="width:100%;border-collapse:collapse">
+      <tr style="background:#f6f6f4"><td style="padding:8px 14px;font-size:11px;color:#3a3835">Subtotal s/IVA:</td><td class="right" style="padding:8px 14px;font-weight:600">${fmt(calc.ventaSIVA)}</td></tr>
+      <tr style="background:#f6f6f4"><td style="padding:8px 14px;font-size:11px;color:#3a3835">IVA (16%):</td><td class="right" style="padding:8px 14px;font-weight:600">${fmt(calc.ivaVenta)}</td></tr>
+      <tr style="background:#1a1917;color:#fff"><td style="padding:11px 14px;font-size:13px;font-weight:700">TOTAL c/IVA:</td><td class="right" style="padding:11px 14px;font-size:15px;font-weight:700;color:#fff">${fmt(calc.ventaTotal)}</td></tr>
     </table>
   </div>
 </div>
