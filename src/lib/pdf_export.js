@@ -478,7 +478,8 @@ ${(cot.condicionesLista||[]).length > 0 ? `<div style="background:#f6f6f4;paddin
 </div>
 </div></body></html>`;
 
-  openPrint(html);
+  const nombreArchivo = (cot.folio || ('Cotizacion ' + (project.name || ''))).trim() || 'Cotizacion';
+  openPrint(html, nombreArchivo);
 }
 
 // ══════════════════════════════════════════════════════════════
