@@ -39,12 +39,12 @@ const BASE_CSS = `
   table { width: 100%; border-collapse: collapse; margin-bottom: 20px; table-layout: fixed; }
   td { vertical-align: middle; overflow: hidden; }
   col.c-num  { width: 22px; }
-  col.c-img  { width: 60px; }
-  col.c-nom  { width: 21%; }
-  col.c-desc { width: 20%; }
-  col.c-cant { width: 34px; }
-  col.c-pu   { width: 62px; }
-  col.c-sub  { width: 74px; }
+  col.c-img  { width: 56px; }
+  col.c-nom  { width: 16%; }
+  col.c-desc { width: 22%; }
+  col.c-cant { width: 30px; }
+  col.c-pu   { width: 60px; }
+  col.c-sub  { width: 70px; }
   /* Evitar que una fila (con su imagen) se parta entre páginas */
   tr, td { page-break-inside: avoid; break-inside: avoid; }
   td img { page-break-inside: avoid; break-inside: avoid; display: inline-block; vertical-align: middle; }
@@ -457,9 +457,9 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
 </div>
 
 ${cot.condicionesComerciales ? `<div style="background:#f6f6f4;padding:12px 16px;border-radius:6px;font-size:10px;color:#6b6862;margin-bottom:20px"><strong>Condiciones comerciales:</strong> ${cot.condicionesComerciales}</div>` : ''}
-${(cot.condicionesLista||[]).length > 0 ? `<div style="background:#f6f6f4;padding:14px 18px;border-radius:6px;margin-bottom:20px">
-  <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#1a1917;margin-bottom:10px">Condiciones</div>
-  ${(cot.condicionesLista||[]).map(c => `<div style="margin-bottom:8px;font-size:10.5px;line-height:1.5;color:#3a3835">${c.titulo?`<strong>${String(c.titulo).replace(/</g,'&lt;')}:</strong> `:''}${String(c.texto||'').replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>`).join('')}
+${(cot.condicionesLista||[]).length > 0 ? `<div style="background:#f6f6f4;padding:10px 14px;border-radius:6px;margin-bottom:16px">
+  <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#1a1917;margin-bottom:7px">Condiciones</div>
+  ${(cot.condicionesLista||[]).map(c => `<div style="margin-bottom:5px;font-size:9px;line-height:1.4;color:#3a3835">${c.titulo?`<strong>${String(c.titulo).replace(/</g,'&lt;')}:</strong> `:''}${String(c.texto||'').replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>`).join('')}
 </div>` : ''}
 
 <div class="firma">
