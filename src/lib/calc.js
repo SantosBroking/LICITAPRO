@@ -46,6 +46,7 @@ export function calcCotizacion(cot) {
     partidas = [], equipo = [], retornos = [], fianzas = [],
     pctIvaSat = 0.5, pctIvaUtil = 0.5,
     ivaSelectivo = true,
+    soloEquipo = false, margenEquipo = 0.30,
   } = cot;
 
   // ── Por partida ───────────────────────────────────────────
@@ -58,13 +59,14 @@ export function calcCotizacion(cot) {
     const pi = parseInt(p.id.replace('P', '')) - 1;
     const qty = p.cantidad || 0;
 
-    // Costo vehículo
-    const vehCIVA  = (p.costoMSMS || 0) * qty;
+    // Costo vehículo (0 en modo solo-equipo)
+    const vehCIVA  = soloEquipo ? 0 : (p.costoMSMS || 0) * qty;
     const vehSIVA  = vehCIVA / (1 + IVA);
     const ivaV     = vehCIVA - vehSIVA;
 
-    // Costo equipo para esta partida
+    // Costo equipo para esta partida + precio de venta del equipo con su margen (modo solo-equipo)
     let eqCIVA_unit = 0, eqSIVA_unit = 0, ivaEq_unit = 0;
+    let ventaEqSIVA_unit = 0; // venta del equipo (con margen) por unidad, en modo solo-equipo
     equipo.filter(e => e.usar).forEach(e => {
       const cnt = (e.cnts && e.cnts[pi] != null) ? Number(e.cnts[pi]) : 0;
       const cost = (e.costoConIVA || 0) * cnt;
@@ -73,6 +75,9 @@ export function calcCotizacion(cot) {
       eqCIVA_unit += cost;
       eqSIVA_unit += costSIVA;
       ivaEq_unit  += iva;
+      // Precio de venta del equipo: margen propio de la pieza si existe, si no el general
+      const margen = (e.margenPropio != null) ? e.margenPropio : margenEquipo;
+      ventaEqSIVA_unit += costSIVA * (1 + margen);
     });
     const eqCIVA  = eqCIVA_unit * qty;
     const eqSIVA  = eqSIVA_unit * qty;
@@ -81,7 +86,10 @@ export function calcCotizacion(cot) {
     // Precio de venta unitario s/IVA
     const costoUnitSIVA = vehSIVA / qty + eqSIVA_unit;
     let pvUnitSIVA = 0;
-    if (p.modoPrecio === 'Techo presupuestal') {
+    if (soloEquipo) {
+      // Solo equipo: la venta es el equipo con su margen (sin vehículo)
+      pvUnitSIVA = ventaEqSIVA_unit;
+    } else if (p.modoPrecio === 'Techo presupuestal') {
       pvUnitSIVA = (p.techo || 0) > 0 ? (p.techo || 0) / (1 + IVA) / qty : costoUnitSIVA;
     } else if (p.modoPrecio === 'Utilidad deseada $') {
       pvUnitSIVA = costoUnitSIVA + (p.utilidadDeseada || 0);
