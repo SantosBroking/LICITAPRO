@@ -446,6 +446,10 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
 </div>
 
 ${cot.condicionesComerciales ? `<div style="background:#f6f6f4;padding:12px 16px;border-radius:6px;font-size:10px;color:#6b6862;margin-bottom:20px"><strong>Condiciones comerciales:</strong> ${cot.condicionesComerciales}</div>` : ''}
+${(cot.condicionesLista||[]).length > 0 ? `<div style="background:#f6f6f4;padding:14px 18px;border-radius:6px;margin-bottom:20px">
+  <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#1a1917;margin-bottom:10px">Condiciones</div>
+  ${(cot.condicionesLista||[]).map(c => `<div style="margin-bottom:8px;font-size:10.5px;line-height:1.5;color:#3a3835">${c.titulo?`<strong>${String(c.titulo).replace(/</g,'&lt;')}:</strong> `:''}${String(c.texto||'').replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>`).join('')}
+</div>` : ''}
 
 <div class="firma">
   <div class="firma-line">${emp.responsable||'_______________________'}<br>${emp.cargo||'Responsable comercial'}<br>${emp.nombreComercial||'MSMS CORP'}</div>

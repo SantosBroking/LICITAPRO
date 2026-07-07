@@ -49,6 +49,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
     return {
       version:c.version||'V1', folio:c.folio||'', municipio:c.municipio||'', fechaCotizacion:c.fechaCotizacion||TODAY(), vigenciaDias:c.vigenciaDias||20,
       condicionesComerciales:c.condicionesComerciales||'', agenciaProveedor:c.agenciaProveedor||'',
+      condicionesLista:c.condicionesLista||[],
       pctIvaSat:c.pctIvaSat!=null?c.pctIvaSat:0.5, pctIvaUtil:c.pctIvaUtil!=null?c.pctIvaUtil:0.5,
       ivaSelectivo:c.ivaSelectivo!==false,
       soloEquipo:c.soloEquipo===true,
@@ -103,6 +104,10 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
   const addRetorno    = ()  => updCot({...cot,retornos:[...cot.retornos,{id:uid('RET'),nombre:'Retorno',base:'% sobre venta c/IVA',valor:0,activo:true,llevaIVA:false}]});
   const updRetorno    = (id,k,v) => updCot({...cot,retornos:cot.retornos.map(r=>r.id===id?{...r,[k]:v}:r)});
   const removeRetorno = id  => updCot({...cot,retornos:cot.retornos.filter(r=>r.id!==id)});
+  const addCondicion    = (titulo,texto) => updCot({...cot,condicionesLista:[...(cot.condicionesLista||[]),{id:uid('COND'),titulo:titulo||'',texto:texto||''}]});
+  const updCondicion    = (id,k,v) => updCot({...cot,condicionesLista:(cot.condicionesLista||[]).map(c=>c.id===id?{...c,[k]:v}:c)});
+  const removeCondicion = id => updCot({...cot,condicionesLista:(cot.condicionesLista||[]).filter(c=>c.id!==id)});
+  const moverCondicion  = (id,dir) => { const l=[...(cot.condicionesLista||[])]; const i=l.findIndex(c=>c.id===id); const j=i+dir; if(i<0||j<0||j>=l.length)return; [l[i],l[j]]=[l[j],l[i]]; updCot({...cot,condicionesLista:l}); };
   const addFianza     = ()  => updCot({...cot,fianzas:[...cot.fianzas,{id:uid('FZ'),nombre:'Fianza de cumplimiento',base:'% sobre venta c/IVA',valor:0,activo:true,llevaIVA:false}]});
   const updFianza     = (id,k,v) => updCot({...cot,fianzas:cot.fianzas.map(f=>f.id===id?{...f,[k]:v}:f)});
   const removeFianza  = id  => updCot({...cot,fianzas:cot.fianzas.filter(f=>f.id!==id)});
@@ -493,6 +498,38 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
           h('button', { onClick:()=>removeFianza(f.id), style:{ background:'transparent', border:'none', color:'var(--red)', cursor:'pointer', fontSize:16, padding:0 } }, '×'),
         )),
         cot.fianzas.filter(f=>f.activo).length>0 && h('div', { style:{ display:'flex', justifyContent:'flex-end', paddingTop:10, fontSize:13, fontWeight:500 } }, 'Total fianzas: ', h('span', { style:{ color:'var(--red)', marginLeft:8 } }, fmt(calc.totalFianzas))),
+      ),
+      // ── Condiciones de la cotización (lista) ──
+      h('div', { className:'card' },
+        h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, flexWrap:'wrap', gap:8 } },
+          h('div', null,
+            h('div', { style:{ fontSize:14, fontWeight:500 } }, 'Condiciones de la cotización'),
+            h('div', { style:{ fontSize:11, color:'var(--t2)', marginTop:2 } }, 'Cada condición (título + texto) aparece en el PDF de la cotización al cliente.'),
+          ),
+          h('button', { className:'bp', onClick:()=>addCondicion('',''), style:{ fontSize:12 } }, '+ Agregar condición'),
+        ),
+        // Plantillas rápidas frecuentes
+        h('div', { style:{ marginBottom:12, display:'flex', gap:6, flexWrap:'wrap' } },
+          [
+            ['Tiempo de entrega','30 días naturales a partir de la recepción de la orden de compra.'],
+            ['Forma de pago','50% de anticipo y 50% contra entrega.'],
+            ['Garantía','12 meses contra defectos de fabricación en el equipamiento instalado.'],
+            ['Lugar de entrega','Instalaciones del cliente dentro de la República Mexicana.'],
+            ['Vigencia','Esta cotización tiene una vigencia de 20 días naturales.'],
+          ].map(([t,tx])=>h('button', { key:t, onClick:()=>addCondicion(t,tx), style:{ fontSize:11, padding:'4px 10px', color:'var(--t2)', border:'.5px solid var(--b2)', borderRadius:8 } }, '+ '+t))
+        ),
+        (cot.condicionesLista||[]).length===0 && h('div', { style:{ color:'var(--t2)', fontSize:13, padding:'8px 0' } }, 'Sin condiciones. Agrega una o usa una plantilla de arriba.'),
+        (cot.condicionesLista||[]).map((c,idx)=>h('div', { key:c.id, style:{ display:'grid', gridTemplateColumns:'auto 1fr 30px', gap:10, alignItems:'start', padding:'12px 0', borderBottom:'.5px solid var(--b3)' } },
+          h('div', { style:{ display:'flex', flexDirection:'column', gap:2, paddingTop:20 } },
+            h('button', { onClick:()=>moverCondicion(c.id,-1), disabled:idx===0, style:{ background:'transparent', border:'none', cursor:idx===0?'default':'pointer', color:idx===0?'var(--b2)':'var(--t2)', fontSize:12, padding:0 } }, '▲'),
+            h('button', { onClick:()=>moverCondicion(c.id,1), disabled:idx===(cot.condicionesLista||[]).length-1, style:{ background:'transparent', border:'none', cursor:'pointer', color:'var(--t2)', fontSize:12, padding:0 } }, '▼'),
+          ),
+          h('div', null,
+            h('input', { value:c.titulo||'', onChange:e=>updCondicion(c.id,'titulo',e.target.value), placeholder:'Título (ej. Tiempo de entrega)', style:{ fontSize:12, fontWeight:600, marginBottom:6, width:'100%' } }),
+            h('textarea', { value:c.texto||'', onChange:e=>updCondicion(c.id,'texto',e.target.value), placeholder:'Texto de la condición...', rows:2, style:{ fontSize:12, width:'100%', resize:'vertical', fontFamily:'inherit' } }),
+          ),
+          h('button', { onClick:()=>removeCondicion(c.id), style:{ background:'transparent', border:'none', color:'var(--red)', cursor:'pointer', fontSize:16, padding:0, paddingTop:20 } }, '×'),
+        )),
       ),
       h(NavButtons),
     ),
