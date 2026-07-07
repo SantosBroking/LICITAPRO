@@ -266,17 +266,28 @@ export async function printCotizacionCliente({ project, cot, calc, config, compa
   });
   const activeParts = (cot.partidas || []).filter(p => p.activo && p.cantidad > 0);
 
+  const soloEq = cot.soloEquipo === true;
+  const margenGeneral = cot.margenEquipo != null ? cot.margenEquipo : 0.30;
   const partRows = activeParts.map(p => {
     const pi = parseInt(p.id.replace('P','')) - 1;
     const qty = p.cantidad || 0;
-    const vehSIVA_unit = (p.costoMSMS || 0) / (1 + IVA);
+    const vehSIVA_unit = soloEq ? 0 : (p.costoMSMS || 0) / (1 + IVA);
     const eqSIVA_unit = (cot.equipo || []).filter(e => e.usar && e.vis).reduce((s,e) => {
       const cnt = (e.cnts && e.cnts[pi]) || 0;
       return s + (e.llevaIVA ? (e.costoConIVA||0)/(1+IVA) : (e.costoConIVA||0)) * cnt;
     }, 0);
     const costoUnit = vehSIVA_unit + eqSIVA_unit;
     let pvUnit = 0;
-    if (p.modoPrecio === 'Techo presupuestal') pvUnit = (p.techo||0) > 0 ? (p.techo||0)/(1+IVA)/qty : costoUnit;
+    if (soloEq) {
+      // Precio = suma del equipo con su margen (por pieza o general)
+      pvUnit = (cot.equipo || []).filter(e => e.usar && e.vis).reduce((s,e) => {
+        const cnt = (e.cnts && e.cnts[pi]) || 0;
+        const cSIVA = (e.llevaIVA ? (e.costoConIVA||0)/(1+IVA) : (e.costoConIVA||0)) * cnt;
+        const m = (e.margenPropio != null) ? e.margenPropio : margenGeneral;
+        return s + cSIVA * (1 + m);
+      }, 0);
+    }
+    else if (p.modoPrecio === 'Techo presupuestal') pvUnit = (p.techo||0) > 0 ? (p.techo||0)/(1+IVA)/qty : costoUnit;
     else if (p.modoPrecio === 'Utilidad deseada %') pvUnit = costoUnit * (1 + (p.utilidadPct||0));
     else pvUnit = costoUnit + (p.utilidadDeseada||0);
     const subtotal = pvUnit * qty;
@@ -343,7 +354,7 @@ export async function printCotizacionCliente({ project, cot, calc, config, compa
 
 ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
 <div class="section">
-  <div class="partida-header">PARTIDA ${p.id}: ${p.marca} ${p.modelo} ${p.version||''} &nbsp;•&nbsp; ${qty} unidad(es)</div>
+  <div class="partida-header">${soloEq ? `EQUIPAMIENTO${(p.marca||p.modelo)?` — para ${p.marca||''} ${p.modelo||''} ${p.version||''}`:''}` : `PARTIDA ${p.id}: ${p.marca} ${p.modelo} ${p.version||''}`} &nbsp;•&nbsp; ${qty} unidad(es)</div>
   <table>
     <colgroup>
       <col class="c-num"/><col class="c-img"/><col class="c-nom"/>
@@ -356,7 +367,7 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
       <th style="text-align:right">Subtotal</th>
     </tr></thead>
     <tbody>
-      <tr>
+      ${soloEq ? '' : `<tr>
         <td style="text-align:center;color:#6b6862">1</td>
         <td style="text-align:center;padding:4px">${(()=>{const foto=liveCatMap[p.vehiculoId]?.photo||p.foto||'';const r=resolveImg(foto);return r?`<img src="${r}" style="width:58px;height:58px;object-fit:contain;border-radius:3px;" />`:'';})()}</td>
         <td><strong>Vehículo base con equipamiento</strong></td>
@@ -364,9 +375,9 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
         <td style="text-align:center">${qty}</td>
         <td style="text-align:right">${fmt(pvUnit)}</td>
         <td style="text-align:right">${fmt(pvUnit * qty)}</td>
-      </tr>
+      </tr>`}
       ${(() => {
-        let rowNum = 2;
+        let rowNum = soloEq ? 1 : 2;
         return eqItems.map((e,i) => {
         const kitItems = effKitMap[e.productoId];
         if (kitItems && kitItems.length > 0) {
