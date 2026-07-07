@@ -52,7 +52,9 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
       pctIvaSat:c.pctIvaSat!=null?c.pctIvaSat:0.5, pctIvaUtil:c.pctIvaUtil!=null?c.pctIvaUtil:0.5,
       ivaSelectivo:c.ivaSelectivo!==false,
       soloEquipo:c.soloEquipo===true,
+      modoEquipo:c.modoEquipo||'margen',
       margenEquipo:c.margenEquipo!=null?c.margenEquipo:0.30,
+      montoGanar:c.montoGanar!=null?c.montoGanar:0,
       partidas:c.partidas||[makeP('P1',true),makeP('P2',false),makeP('P3',false),makeP('P4',false),makeP('P5',false)],
       equipo:c.equipo||[], retornos:c.retornos||[], fianzas:c.fianzas||[],
     };
@@ -260,16 +262,51 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
             h('div', { style:{ fontSize:11, color:'var(--t2)' } }, 'Para clientes que ya tienen el vehículo. Solo se cotiza el equipo con un margen deseado.'),
           ),
         ),
-        cot.soloEquipo && h('div', { style:{ marginTop:14, paddingTop:14, borderTop:'.5px solid var(--b3)', display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' } },
-          h('div', null,
-            h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:3 } }, 'Margen deseado general (%)'),
-            h(NumInput, { value:Math.round((cot.margenEquipo||0)*100), onChange:v=>updCot({...cot, margenEquipo:v/100}), style:{ fontSize:13, width:100 } }),
+        cot.soloEquipo && h('div', { style:{ marginTop:14, paddingTop:14, borderTop:'.5px solid var(--b3)' } },
+          // Selector de modo
+          h('div', { style:{ display:'flex', gap:8, marginBottom:12 } },
+            [['margen','Por margen %'],['monto','Por monto a ganar $']].map(([k,label])=>
+              h('button', { key:k, onClick:()=>updCot({...cot, modoEquipo:k}),
+                style:{ fontSize:12, padding:'6px 12px', borderRadius:'var(--r)', cursor:'pointer',
+                  background:(cot.modoEquipo||'margen')===k?'#9B7EDE':'var(--bg2)', color:(cot.modoEquipo||'margen')===k?'#fff':'var(--t2)',
+                  border:'1px solid '+((cot.modoEquipo||'margen')===k?'#9B7EDE':'var(--b2)') } }, label)
+            ),
           ),
-          h('div', { style:{ fontSize:11, color:'var(--t3)', flex:1, minWidth:180 } }, 'Se aplica a todo el equipo. Puedes ajustar piezas puntuales en su renglón. Precio = costo × (1 + margen).'),
+          (cot.modoEquipo||'margen')==='margen'
+            ? h('div', { style:{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' } },
+                h('div', null,
+                  h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:3 } }, 'Margen deseado general (%)'),
+                  h(NumInput, { value:Math.round((cot.margenEquipo||0)*100), onChange:v=>updCot({...cot, margenEquipo:v/100}), style:{ fontSize:13, width:100 } }),
+                ),
+                h('div', { style:{ fontSize:11, color:'var(--t3)', flex:1, minWidth:180 } }, 'Se aplica a todo el equipo. Puedes ajustar piezas puntuales en su renglón. Precio = costo × (1 + margen).'),
+              )
+            : (() => {
+                // Costo total del equipo (s/IVA) para mostrar el precio de venta resultante
+                const costoTotalEq = (cot.partidas||[]).filter(p=>p.activo&&p.cantidad>0).reduce((tot,p)=>{
+                  const pi=parseInt(p.id.replace('P',''))-1; const qty=p.cantidad||0;
+                  const eqU=(cot.equipo||[]).filter(e=>e.usar).reduce((s,e)=>{ const cnt=(e.cnts&&e.cnts[pi])||0; const c=(e.costoConIVA||0)*cnt; return s+(e.llevaIVA?c/1.16:c); },0);
+                  return tot+eqU*qty;
+                },0);
+                const ventaTotal = costoTotalEq + (cot.montoGanar||0);
+                return h('div', null,
+                  h('div', { style:{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' } },
+                    h('div', null,
+                      h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:3 } }, 'Monto a ganar total ($ s/IVA)'),
+                      h(NumInput, { value:cot.montoGanar||0, onChange:v=>updCot({...cot, montoGanar:v}), style:{ fontSize:13, width:140 } }),
+                    ),
+                    h('div', { style:{ fontSize:11, color:'var(--t3)', flex:1, minWidth:180 } }, 'Pones cuánto quieres ganar en total y el sistema calcula el precio de venta. No necesitas margen por pieza.'),
+                  ),
+                  h('div', { style:{ marginTop:12, padding:'10px 12px', background:'#F1ECF9', borderRadius:8, fontSize:12, color:'#4A2A7A', display:'flex', gap:20, flexWrap:'wrap' } },
+                    h('span', null, 'Costo equipo: ', h('strong', null, fmt(costoTotalEq))),
+                    h('span', null, '+ Ganancia: ', h('strong', null, fmt(cot.montoGanar||0))),
+                    h('span', null, '= Venta s/IVA: ', h('strong', null, fmt(ventaTotal))),
+                  ),
+                );
+              })(),
         ),
       ),
       h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 } },
-        h('div', { style:{ fontSize:12, color:'var(--t2)' } }, cot.soloEquipo?'Precio de venta calculado con el margen':'Cantidades = por unidad del vehículo'),
+        h('div', { style:{ fontSize:12, color:'var(--t2)' } }, cot.soloEquipo?'Precio de venta calculado automáticamente':'Cantidades = por unidad del vehículo'),
         h('button', { onClick:()=>setShowCat(!showCat), style:{ fontSize:12, color:'var(--blue)', border:'.5px solid var(--blue)44', padding:'5px 12px' } }, showCat?'Ocultar catálogo':'+ Del catálogo'),
       ),
       showCat && h('div', { className:'card', style:{ marginBottom:12 } },
@@ -370,7 +407,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
             h('td', { style:{ padding:'6px 4px', color:'var(--t2)', fontSize:10, width:52 } }, 'Todas'),
             h('td', { style:{ padding:'6px 8px', color:'var(--t2)', fontSize:10 } }, 'Producto'),
             h('td', { style:{ padding:'6px 4px', color:'var(--t2)', fontSize:10, width:95 } }, 'Costo c/IVA'),
-            cot.soloEquipo && h('td', { style:{ padding:'6px 4px', color:'#9B7EDE', fontSize:10, width:70, textAlign:'center' } }, 'Margen %'),
+            cot.soloEquipo && (cot.modoEquipo||'margen')==='margen' && h('td', { style:{ padding:'6px 4px', color:'#9B7EDE', fontSize:10, width:70, textAlign:'center' } }, 'Margen %'),
             ...cot.partidas.filter(p=>p.activo).map(p=>h('td',{key:p.id,style:{padding:'6px 4px',color:'var(--blue)',fontSize:10,width:52,textAlign:'center'}},p.id,h('br'),h('span',{style:{fontSize:9,color:'var(--t3)'}},p.cantidad,' uds'))),
             h('td', { style:{ padding:'6px 4px', color:'var(--t2)', fontSize:10, width:38, textAlign:'center' } }, 'IVA'),
             h('td', { style:{ padding:'6px 4px', color:'var(--t2)', fontSize:10, width:115 } }, 'Estatus'),
@@ -396,7 +433,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
                 h('div', { style:{ fontSize:10, color:'var(--t2)' } }, e.cat),
               ),
               h('td', { style:{ padding:'6px 4px' } }, h(NumInput, { value:e.costoConIVA, onChange:v=>updEquipo(e.id,'costoConIVA',v), style:{ width:90, fontSize:11, padding:'3px 5px' } })),
-              cot.soloEquipo && h('td', { style:{ padding:'6px 4px', textAlign:'center' } },
+              cot.soloEquipo && (cot.modoEquipo||'margen')==='margen' && h('td', { style:{ padding:'6px 4px', textAlign:'center' } },
                 h('input', { type:'number', value:e.margenPropio!=null?Math.round(e.margenPropio*100):'', placeholder:Math.round((cot.margenEquipo||0)*100),
                   onChange:ev=>{ const v=ev.target.value; updEquipo(e.id,'margenPropio', v===''?null:Number(v)/100); },
                   style:{ width:56, fontSize:11, padding:'3px 5px', textAlign:'center', border:'1px solid var(--b2)', borderRadius:6, color: e.margenPropio!=null?'#9B7EDE':'var(--t3)' } })),

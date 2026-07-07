@@ -267,7 +267,21 @@ export async function printCotizacionCliente({ project, cot, calc, config, compa
   const activeParts = (cot.partidas || []).filter(p => p.activo && p.cantidad > 0);
 
   const soloEq = cot.soloEquipo === true;
+  const modoEq = cot.modoEquipo || 'margen';
   const margenGeneral = cot.margenEquipo != null ? cot.margenEquipo : 0.30;
+  // Factor para modo "monto a ganar": reparte la ganancia proporcional al costo total del equipo
+  let _costoEqTotSIVA = 0;
+  if (soloEq && modoEq === 'monto') {
+    activeParts.forEach(p => {
+      const pi = parseInt(p.id.replace('P','')) - 1; const qty = p.cantidad || 0;
+      (cot.equipo||[]).filter(e => e.usar && e.vis).forEach(e => {
+        const cnt = (e.cnts && e.cnts[pi]) || 0;
+        const cSIVA = (e.llevaIVA ? (e.costoConIVA||0)/(1+IVA) : (e.costoConIVA||0)) * cnt;
+        _costoEqTotSIVA += cSIVA * qty;
+      });
+    });
+  }
+  const factorMonto = (_costoEqTotSIVA > 0) ? (_costoEqTotSIVA + (cot.montoGanar||0)) / _costoEqTotSIVA : 1;
   const partRows = activeParts.map(p => {
     const pi = parseInt(p.id.replace('P','')) - 1;
     const qty = p.cantidad || 0;
@@ -279,10 +293,11 @@ export async function printCotizacionCliente({ project, cot, calc, config, compa
     const costoUnit = vehSIVA_unit + eqSIVA_unit;
     let pvUnit = 0;
     if (soloEq) {
-      // Precio = suma del equipo con su margen (por pieza o general)
+      // Precio = suma del equipo con su margen (por pieza/general) o repartiendo el monto a ganar
       pvUnit = (cot.equipo || []).filter(e => e.usar && e.vis).reduce((s,e) => {
         const cnt = (e.cnts && e.cnts[pi]) || 0;
         const cSIVA = (e.llevaIVA ? (e.costoConIVA||0)/(1+IVA) : (e.costoConIVA||0)) * cnt;
+        if (modoEq === 'monto') return s + cSIVA * factorMonto;
         const m = (e.margenPropio != null) ? e.margenPropio : margenGeneral;
         return s + cSIVA * (1 + m);
       }, 0);

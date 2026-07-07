@@ -47,7 +47,25 @@ export function calcCotizacion(cot) {
     pctIvaSat = 0.5, pctIvaUtil = 0.5,
     ivaSelectivo = true,
     soloEquipo = false, margenEquipo = 0.30,
+    modoEquipo = 'margen', montoGanar = 0,
   } = cot;
+
+  // En modo "monto a ganar", calcular el costo total del equipo primero para repartir la ganancia
+  let _costoEqTotalSIVA = 0;
+  if (soloEquipo && modoEquipo === 'monto') {
+    partidas.filter(p => p.activo && p.cantidad > 0).forEach(p => {
+      const pi = parseInt(p.id.replace('P', '')) - 1;
+      const qty = p.cantidad || 0;
+      equipo.filter(e => e.usar).forEach(e => {
+        const cnt = (e.cnts && e.cnts[pi] != null) ? Number(e.cnts[pi]) : 0;
+        const cost = (e.costoConIVA || 0) * cnt;
+        const costSIVA = e.llevaIVA ? cost / (1 + IVA) : cost;
+        _costoEqTotalSIVA += costSIVA * qty;
+      });
+    });
+  }
+  // Factor de venta = (costo + ganancia) / costo, repartido proporcional al costo de cada pieza
+  const _factorMonto = (_costoEqTotalSIVA > 0) ? (_costoEqTotalSIVA + (montoGanar || 0)) / _costoEqTotalSIVA : 1;
 
   // ── Por partida ───────────────────────────────────────────
   let ventaSIVA = 0, ivaVenta = 0;
@@ -75,9 +93,15 @@ export function calcCotizacion(cot) {
       eqCIVA_unit += cost;
       eqSIVA_unit += costSIVA;
       ivaEq_unit  += iva;
-      // Precio de venta del equipo: margen propio de la pieza si existe, si no el general
-      const margen = (e.margenPropio != null) ? e.margenPropio : margenEquipo;
-      ventaEqSIVA_unit += costSIVA * (1 + margen);
+      // Precio de venta del equipo según el modo
+      if (modoEquipo === 'monto') {
+        // Reparte la ganancia total proporcional al costo
+        ventaEqSIVA_unit += costSIVA * _factorMonto;
+      } else {
+        // Margen propio de la pieza si existe, si no el general
+        const margen = (e.margenPropio != null) ? e.margenPropio : margenEquipo;
+        ventaEqSIVA_unit += costSIVA * (1 + margen);
+      }
     });
     const eqCIVA  = eqCIVA_unit * qty;
     const eqSIVA  = eqSIVA_unit * qty;
