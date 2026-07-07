@@ -39,19 +39,21 @@ const BASE_CSS = `
   table { width: 100%; border-collapse: collapse; margin-bottom: 20px; table-layout: fixed; }
   td { vertical-align: middle; overflow: hidden; }
   col.c-num  { width: 22px; }
-  col.c-img  { width: 68px; }
-  col.c-nom  { width: 30%; }
+  col.c-img  { width: 60px; }
+  col.c-nom  { width: 21%; }
   col.c-desc { width: 20%; }
-  col.c-cant { width: 38px; }
-  col.c-pu   { width: 68px; }
-  col.c-sub  { width: 80px; }
+  col.c-cant { width: 34px; }
+  col.c-pu   { width: 62px; }
+  col.c-sub  { width: 74px; }
   /* Evitar que una fila (con su imagen) se parta entre páginas */
   tr, td { page-break-inside: avoid; break-inside: avoid; }
   td img { page-break-inside: avoid; break-inside: avoid; display: inline-block; vertical-align: middle; }
   thead { display: table-header-group; }
-  th { background: #1a1917; color: white; padding: 7px 10px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
-  td { padding: 7px 10px; border-bottom: .5px solid #e0ddd8; vertical-align: top; }
+  th { background: #1a1917; color: white; padding: 6px 7px; text-align: left; font-size: 9.5px; text-transform: uppercase; letter-spacing: .3px; }
+  td { padding: 6px 7px; border-bottom: .5px solid #e0ddd8; vertical-align: top; }
   tr:last-child td { border-bottom: none; }
+  .mm-cell { white-space: nowrap; font-size: 9.5px; }
+  .desc-cell { font-size: 8.5px; color: #6b6862; line-height: 1.35; }
   .total-row td { font-weight: 700; background: #f6f6f4; border-top: 1.5px solid #1a1917; }
   .section { margin-bottom: 24px; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
@@ -370,7 +372,7 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
   <table>
     <colgroup>
       <col class="c-num"/><col class="c-img"/><col class="c-nom"/>
-      <col class="c-desc"/><col style="width:9%"/><col style="width:8%"/><col class="c-cant"/><col style="width:5%"/><col class="c-pu"/><col class="c-sub"/>
+      <col class="c-desc"/><col style="width:10%"/><col style="width:10%"/><col class="c-cant"/><col style="width:5%"/><col class="c-pu"/><col class="c-sub"/>
     </colgroup>
     <thead><tr>
       <th>#</th><th></th><th>Concepto</th><th>Descripción</th>
@@ -385,8 +387,8 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
         <td style="text-align:center;color:#6b6862">1</td>
         <td style="text-align:center;padding:4px">${(()=>{const foto=liveCatMap[p.vehiculoId]?.photo||p.foto||'';const r=resolveImg(foto);return r?`<img src="${r}" style="width:58px;height:58px;object-fit:contain;border-radius:3px;" />`:'';})()}</td>
         <td><strong>Vehículo base con equipamiento</strong></td>
-        <td>${p.tipo||''} ${p.marca||''} ${p.modelo||''} ${p.version||''} ${p.ano||''}</td>
-        <td>${p.modelo||''}</td><td>${p.marca||''}</td>
+        <td class="desc-cell">${p.tipo||''} ${p.marca||''} ${p.modelo||''} ${p.version||''} ${p.ano||''}</td>
+        <td class="mm-cell">${p.modelo||''}</td><td class="mm-cell">${p.marca||''}</td>
         <td style="text-align:center">${qty}</td>
         <td style="text-align:center">pz</td>
         <td style="text-align:right">${fmt(pvUnit)}</td>
@@ -404,11 +406,11 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
             return `<tr>
               <td style="text-align:center;color:#6b6862;font-size:10px">${num}</td>
               <td style="text-align:center;padding:4px">${(()=>{const r=resolveImg(img);return r?`<img src="${r}" style="width:58px;height:58px;object-fit:contain;border-radius:3px;" />`:'';})()}</td>
-              <td style="font-weight:600;font-size:11px">${comp.nom}</td>
-              <td style="font-size:10px;color:#6b6862">${comp.desc||''}</td>
-              <td style="font-size:10px">${comp.modelo||''}</td><td style="font-size:10px">${comp.marca||''}</td>
+              <td style="font-weight:600;font-size:10px">${comp.nom}</td>
+              <td class="desc-cell">${comp.desc||''}</td>
+              <td class="mm-cell">${comp.modelo||''}</td><td class="mm-cell">${comp.marca||''}</td>
               <td style="text-align:center">${(e.cnts&&e.cnts[pi])!=null?(e.cnts[pi]||0):1}</td>
-              <td style="text-align:center;font-size:10px">${e.unidad||'pz'}</td>
+              <td style="text-align:center;font-size:9.5px">${e.unidad||'pz'}</td>
               <td></td><td></td>
             </tr>`;
           }).join('');
@@ -419,11 +421,11 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
           return `<tr>
             <td style="text-align:center;color:#6b6862;font-size:10px">${num}</td>
             <td style="text-align:center;padding:4px">${(()=>{const r=resolveImg(img);return r?`<img src="${r}" style="width:58px;height:58px;object-fit:contain;border-radius:3px;" />`:'';})()}</td>
-            <td style="font-weight:600;font-size:11px">${liveProd?.nom||e.nombre}</td>
-            <td style="font-size:10px;color:#6b6862">${liveProd?.desc||e.descripcion||''}</td>
-            <td style="font-size:10px">${e.modelo||''}</td><td style="font-size:10px">${e.marca||''}</td>
+            <td style="font-weight:600;font-size:10px">${liveProd?.nom||e.nombre}</td>
+            <td class="desc-cell">${liveProd?.desc||e.descripcion||''}</td>
+            <td class="mm-cell">${e.modelo||''}</td><td class="mm-cell">${e.marca||''}</td>
             <td style="text-align:center">${(e.cnts&&e.cnts[pi])!=null?(e.cnts[pi]||0):1}</td>
-            <td style="text-align:center;font-size:10px">${e.unidad||'pz'}</td>
+            <td style="text-align:center;font-size:9.5px">${e.unidad||'pz'}</td>
             <td style="text-align:right"></td>
             <td style="text-align:right"></td>
           </tr>`;
