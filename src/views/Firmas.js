@@ -14,7 +14,7 @@ export default function FirmasView({ projects, companies, user, onUpdateProject,
   const [genPdfId, setGenPdfId] = useState(null);
   const fileRefs = useRef({});
 
-  const esJefe = user?.role === 'admin' || user?.role === 'jefe' || !user?.role;
+  const esJefe = user?.role === 'admin' || user?.role === 'jefe';
   const miEmail = (user?.email||'').toLowerCase();
   const miNombre = user?.name || user?.email || 'Usuario';
   const jefeEmail = 'santiago@brokingroup.com'; // aprobador único

@@ -124,7 +124,7 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate, user }) {
       const headerRow = h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b3)' } },
         ['PROYECTO','DEPENDENCIA','EMPRESA','MONTO','ESTADO','FALLO',''].map(hd=>h('th',{key:hd,style:{padding:'10px 8px',color:'var(--t3)',fontSize:11,fontWeight:600,letterSpacing:'.4px',textAlign:'left',whiteSpace:'nowrap',borderBottom:'1px solid var(--b1)'}},hd))
       ));
-      const esJefe = user?.role==='admin' || user?.role==='jefe' || !user?.role;
+      const esJefe = user?.role==='admin' || user?.role==='jefe';
       const cambiarEstatus = async (p, nuevoStatus) => {
         if (nuevoStatus === p.status) return;
         const stAnt = STATUSES.find(s=>s.id===p.status);
@@ -653,7 +653,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
     tab==='docs' && h('div', null,
       // Órdenes de Compra generadas
       (project.ordenesCompra||[]).length > 0 && (() => {
-        const esJefeDetalle = user?.role==='admin' || user?.role==='jefe' || !user?.role;
+        const esJefeDetalle = user?.role==='admin' || user?.role==='jefe';
         const ocAprobada = oc => (project.firmas||[]).some(f => f.ocId===oc.id && (f.estatus==='en_firma' || f.estatus==='en_visto' || f.estatus==='completado'));
         const reimprimir = oc => {
           // Los empleados solo pueden imprimir OC ya aprobadas por el jefe
@@ -1087,7 +1087,7 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
     };
     const ocs = [...(project.ordenesCompra||[]).filter(o=>o.id!==folio), nuevaOC];
     onUpdate({ ...project, ocProveedor: prov, ordenesCompra: ocs, ocCondiciones: conds });
-    const esJefe = user?.role==='admin' || user?.role==='jefe' || !user?.role;
+    const esJefe = user?.role==='admin' || user?.role==='jefe';
     if (esJefe) {
       // El jefe puede imprimir directo
       printOrdenCompra({ project: proyConProv, partidas: partidasSel, condiciones: conds, folio, companyObj: companies.find(c=>c.name===project.company) });

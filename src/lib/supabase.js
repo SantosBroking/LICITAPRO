@@ -52,6 +52,13 @@ export const authSb = {
             user.workspaceId = user.workspaceId || WORKSPACE_ID;
           }
         }
+        // SEGURIDAD: quien no esté en la lista de usuarios del código y no tenga rol,
+        // queda como 'empleado' (nunca como jefe). Evita que registros libres tengan acceso total.
+        if (!user.role) {
+          const enLista = USERS.find(u => u.email === user.email);
+          user.role = enLista ? enLista.role : 'empleado';
+          localStorage.setItem(USER_KEY, JSON.stringify(user));
+        }
         setTimeout(() => cb('INITIAL_SESSION', { user }), 50);
       } catch(e) {
         localStorage.removeItem(USER_KEY);
@@ -73,8 +80,9 @@ export async function signIn(email, password) {
 }
 
 export async function signUp(email, password, name) {
-  // Para registrar nuevos usuarios, agregar a la lista
-  const user = { id: 'user-' + Date.now(), email, name };
+  // Nuevos usuarios entran como EMPLEADO (rol más restrictivo) y comparten el workspace.
+  // Solo el admin puede elevar su rol desde Configuración → Equipo.
+  const user = { id: 'user-' + Date.now(), email, name, role: 'empleado', workspaceId: WORKSPACE_ID };
   localStorage.setItem(USER_KEY, JSON.stringify(user));
   return { user };
 }

@@ -357,7 +357,7 @@ export function Settings({ config, user, onSave }) {
       ),
       ),
       // ── Equipo (solo admin/jefe) ──
-      (user?.role==='admin' || user?.role==='jefe' || !user?.role) && h('div', { className:'card', style:{ marginBottom:16, borderLeft:'3px solid #3B6CF4' } },
+      (user?.role==='admin' || user?.role==='jefe') && h('div', { className:'card', style:{ marginBottom:16, borderLeft:'3px solid #3B6CF4' } },
         h('div', { style:{ fontSize:14, fontWeight:600, marginBottom:4 } }, '👥 Equipo'),
         h('div', { style:{ fontSize:12, color:'var(--t2)', marginBottom:16 } }, 'Da de alta a tus empleados. El rol "Jefe" puede aprobar documentos; "Empleado" solo puede crear y mandar a aprobación.'),
         // Lista actual
