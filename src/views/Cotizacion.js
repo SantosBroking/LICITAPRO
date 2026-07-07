@@ -508,6 +508,34 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
           ),
           h('button', { className:'bp', onClick:()=>addCondicion('',''), style:{ fontSize:12 } }, '+ Agregar condición'),
         ),
+        // Biblioteca de condiciones guardadas (reusables)
+        (() => {
+          const guardadas = (config && config.condicionesGuardadas) || [];
+          const guardarEnBiblioteca = async () => {
+            const lista = cot.condicionesLista||[];
+            if (lista.length===0) { alert('No hay condiciones en esta cotización para guardar.'); return; }
+            if (!onSaveConfig) return;
+            const cfg = config || {};
+            // Evitar duplicados por título+texto
+            const existentes = cfg.condicionesGuardadas || [];
+            const nuevas = lista.filter(c=>(c.titulo||c.texto)).map(c=>({titulo:c.titulo||'',texto:c.texto||''}))
+              .filter(n=>!existentes.some(e=>e.titulo===n.titulo && e.texto===n.texto));
+            if (nuevas.length===0) { alert('Estas condiciones ya están en tu biblioteca.'); return; }
+            await onSaveConfig({...cfg, condicionesGuardadas:[...existentes, ...nuevas]});
+            alert('✅ '+nuevas.length+' condición(es) guardada(s) en tu biblioteca para reusar.');
+          };
+          return h('div', { style:{ marginBottom:12, padding:'10px 12px', background:'var(--bg2)', borderRadius:8 } },
+            h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, flexWrap:'wrap' } },
+              h('div', { style:{ fontSize:11, fontWeight:600, color:'var(--t2)' } }, '📚 Biblioteca de condiciones'),
+              (cot.condicionesLista||[]).length>0 && h('button', { onClick:guardarEnBiblioteca, style:{ fontSize:11, padding:'4px 10px', color:'var(--blue)', border:'.5px solid var(--blue)44', borderRadius:8, background:'transparent', cursor:'pointer' } }, '💾 Guardar estas en biblioteca'),
+            ),
+            guardadas.length>0
+              ? h('div', { style:{ marginTop:8, display:'flex', gap:6, flexWrap:'wrap' } },
+                  guardadas.map((g,i)=>h('button', { key:i, onClick:()=>addCondicion(g.titulo,g.texto), title:g.texto, style:{ fontSize:11, padding:'4px 10px', color:'var(--t1)', border:'.5px solid var(--b2)', borderRadius:8, background:'var(--bg1)', cursor:'pointer' } }, '+ '+(g.titulo||g.texto.slice(0,20))))
+                )
+              : h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:6 } }, 'Aún no guardas condiciones. Agrégalas abajo y usa "Guardar en biblioteca" para reusarlas después.'),
+          );
+        })(),
         // Plantillas rápidas frecuentes
         h('div', { style:{ marginBottom:12, display:'flex', gap:6, flexWrap:'wrap' } },
           [
