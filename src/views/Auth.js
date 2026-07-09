@@ -1,12 +1,10 @@
-// Auth.js — Login / registro con Supabase Auth
+// Auth.js — Login con Supabase Auth real (Fase 0B). Sin registro libre.
 import { h, useState } from '../lib/core.js';
-import { signIn, signUp } from '../lib/supabase.js';
+import { signIn } from '../lib/supabase.js';
 
-export default function AuthScreen({ onLogin }) {
-  const [mode, setMode]       = useState('login');
+export default function AuthScreen({ error: externalError }) {
   const [email, setEmail]     = useState('');
   const [pwd, setPwd]         = useState('');
-  const [name, setName]       = useState('');
   const [err, setErr]         = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -14,24 +12,22 @@ export default function AuthScreen({ onLogin }) {
     if (!email || !pwd) { setErr('Email y contraseña son obligatorios'); return; }
     setLoading(true); setErr('');
     try {
-      if (mode === 'login') {
-        const { user } = await signIn(email, pwd);
-        if (onLogin) onLogin(user);
-      } else {
-        if (!name) { setErr('El nombre es obligatorio'); setLoading(false); return; }
-        if (pwd.length < 6) { setErr('Contraseña mínimo 6 caracteres'); setLoading(false); return; }
-        const { user } = await signUp(email, pwd, name);
-        if (onLogin) onLogin(user);
-      }
-    } catch (e) { setErr(e.message || 'Error de autenticación'); }
-    setLoading(false);
+      // Dispara el inicio de sesión real. App.js escucha el cambio de sesión
+      // (onAuthStateChange) y se encarga de cargar el perfil y los datos —
+      // no hace falta hacer nada más aquí tras un login exitoso.
+      await signIn(email, pwd);
+    } catch (e) {
+      setErr(e.message || 'Error de autenticación');
+      setLoading(false);
+    }
   };
 
   const onKey = e => { if (e.key === 'Enter') go(); };
 
+  const shownError = err || externalError || '';
   const errStyle = {
-    background: err.startsWith('✅') ? '#E1F5EE' : '#FCEBEB',
-    color:      err.startsWith('✅') ? '#085041' : '#791F1F',
+    background: '#FCEBEB',
+    color: '#791F1F',
     fontSize: 12, padding: '10px 14px', borderRadius: 6,
     marginBottom: 14, lineHeight: 1.5,
   };
@@ -41,13 +37,9 @@ export default function AuthScreen({ onLogin }) {
       h('div', { style: { textAlign:'center', marginBottom:24 } },
         h('div', { style: { fontSize:11, letterSpacing:2, color:'var(--t2)', textTransform:'uppercase', marginBottom:4 } }, 'MSMS CORP'),
         h('div', { style: { fontSize:22, fontWeight:500, marginBottom:4 } }, 'LicitaPro'),
-        h('div', { style: { fontSize:13, color:'var(--t2)' } }, mode === 'login' ? 'Inicia sesión para continuar' : 'Crea tu cuenta'),
+        h('div', { style: { fontSize:13, color:'var(--t2)' } }, 'Inicia sesión para continuar'),
       ),
-      err && h('div', { style: errStyle }, err),
-      mode === 'register' && h('div', { style: { marginBottom:14 } },
-        h('label', { style: { display:'block', fontSize:12, color:'var(--t2)', marginBottom:4 } }, 'Nombre completo'),
-        h('input', { value:name, onChange:e=>setName(e.target.value), placeholder:'Tu nombre' }),
-      ),
+      shownError && h('div', { style: errStyle }, shownError),
       h('div', { style: { marginBottom:14 } },
         h('label', { style: { display:'block', fontSize:12, color:'var(--t2)', marginBottom:4 } }, 'Email'),
         h('input', { type:'email', value:email, onChange:e=>setEmail(e.target.value), placeholder:'tu@email.com', onKeyDown:onKey }),
@@ -57,12 +49,7 @@ export default function AuthScreen({ onLogin }) {
         h('input', { type:'password', value:pwd, onChange:e=>setPwd(e.target.value), onKeyDown:onKey }),
       ),
       h('button', { className:'bp', onClick:go, disabled:loading, style:{ width:'100%', padding:'10px', fontSize:14 } },
-        loading ? 'Cargando...' : mode === 'login' ? 'Iniciar sesión' : 'Crear cuenta'
-      ),
-      h('div', { style: { textAlign:'center', marginTop:16, fontSize:12, color:'var(--t2)' } },
-        mode === 'login'
-          ? h('span', null, '¿Sin cuenta? ', h('span', { style:{ color:'var(--blue)', cursor:'pointer' }, onClick:()=>{ setMode('register'); setErr(''); } }, 'Crear una'))
-          : h('span', null, '¿Ya tienes cuenta? ', h('span', { style:{ color:'var(--blue)', cursor:'pointer' }, onClick:()=>{ setMode('login'); setErr(''); } }, 'Iniciar sesión'))
+        loading ? 'Iniciando sesión...' : 'Iniciar sesión'
       ),
     )
   );

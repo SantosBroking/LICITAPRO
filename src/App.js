@@ -1,7 +1,7 @@
 // App.js — Estado global, navegación y CRUD
 import { h, useState, useEffect, useRef, useCallback } from './lib/core.js';
 import { DEFAULT_CONFIG } from './lib/constants.js';
-import { sb, authSb, signOut, WORKSPACE_ID, dbLoad, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveAuditLog } from './lib/supabase.js';
+import { sb, authSb, signOut, buildAppUser, WORKSPACE_ID, dbLoad, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveAuditLog } from './lib/supabase.js';
 import { uid, NOW } from './lib/utils.js';
 import { sendMonthlyReminders, shouldSendMonthlyReminder, currentMonthKey } from './lib/email_reminders.js';
 
@@ -40,12 +40,13 @@ export default function App() {
   const _lastProjId    = useRef(null);
   const _pending       = useRef(null);
   const _timer         = useRef(null);
-  const _intentionalSignOut = useRef(false);
-  const _userId     = useRef(null);
+  const [authError, setAuthError] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const MOBILE_NAV = NAV_ITEMS.slice(0, 5);
-  // Siempre usar el workspaceId para acceder a los datos compartidos del equipo
-  const getUID = () => user?.workspaceId || user?.id || JSON.parse(localStorage.getItem("lp_user")||"null")?.workspaceId || "31daca2f-17ff-4ce1-83ca-99e2b31094b7";
+  // Compatibilidad temporal (Fase 0B): todo usuario real sigue leyendo el
+  // mismo workspace compartido. Se retira cuando exista el modelo de
+  // organización/empresa (Fase 1). Ver nota en supabase.js.
+  const getUID = () => user?.workspaceId || WORKSPACE_ID;
   window._lpGetUID = getUID;
   const isAdmin = user?.role === 'admin' || user?.role === 'jefe';
   const userName = user?.name || user?.email?.split('@')[0] || 'Usuario';
@@ -93,28 +94,34 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const { data: { subscription } } = authSb.onAuthStateChange(async (event, session) => {
-      if (event === 'INITIAL_SESSION') {
-        if (session?.user) {
-          setUser(session.user);
-          _userId.current = session.user.workspaceId || session.user.id;
-          await loadData(session.user);
-        }
-        setLoading(false);
-      } else if (event === 'SIGNED_IN') {
-        setUser(session.user);
-        _userId.current = session.user.id;
+    // Resuelve una sesión de Supabase Auth: carga el perfil (user_profiles),
+    // bloquea si está inactivo o no existe, y arma el objeto "user" que usa
+    // el resto de la app (name, role, workspaceId).
+    const resolveSession = async (session) => {
+      if (!session?.user) { setUser(null); setLoading(false); return; }
+      setAuthError('');
+      try {
+        const appUser = await buildAppUser(session.user);
+        setUser(appUser);
         setLoading(true);
-        await loadData(session.user);
+        await loadData(appUser);
+      } catch (e) {
+        console.error('Perfil inválido o inactivo:', e.message);
+        setAuthError(e.message);
+        setUser(null);
+        try { await signOut(); } catch(_e) {}
+      } finally {
         setLoading(false);
+      }
+    };
+
+    const { data: { subscription } } = authSb.onAuthStateChange((event, session) => {
+      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+        resolveSession(session);
       } else if (event === 'SIGNED_OUT') {
-        if (_intentionalSignOut.current) {
-          _intentionalSignOut.current = false;
-          setUser(null);
-          setProjects([]); setVehicles([]); setCompanies([]); setAudit([]);
-          setLoading(false);
-        }
-        // Si no fue intencional, ignorar (refresco de token, cambio de pestaña)
+        setUser(null);
+        setProjects([]); setVehicles([]); setCompanies([]); setAudit([]);
+        setLoading(false);
       }
     });
 
@@ -218,13 +225,10 @@ export default function App() {
   if (loading)
     return h('div', { style:{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--t2)', fontSize:13 } }, 'Cargando LicitaPro…');
 
-  const handleLogin = async (u) => {
-    setUser(u);
-    setLoading(true);
-    await loadData(u);
-    setLoading(false);
-  };
-  if (!user) return h(AuthScreen, { onLogin: handleLogin });
+  // El login ya no necesita un callback manual: signIn() dispara el evento
+  // real de Supabase Auth, y el efecto de arriba (resolveSession) se encarga
+  // de cargar el perfil y los datos en cuanto la sesión se confirma.
+  if (!user) return h(AuthScreen, { error: authError });
 
   const currentProject = projects.find(p=>p.id===projId);
   const projDetailView = currentProject
@@ -264,7 +268,7 @@ export default function App() {
       ),
       h('div', { className:'sidebar-footer' },
         h('div', { className:'sidebar-email' }, user.email),
-        h('button', { onClick:()=>{ _intentionalSignOut.current=true; signOut(); }, style:{ fontSize:12, padding:'6px 12px', width:'100%', color:'var(--t2)', textAlign:'left' } }, 'Cerrar sesión'),
+        h('button', { onClick:()=>signOut(), style:{ fontSize:12, padding:'6px 12px', width:'100%', color:'var(--t2)', textAlign:'left' } }, 'Cerrar sesión'),
       ),
     ),
 
@@ -293,7 +297,7 @@ export default function App() {
         }),
         h('div', { style:{ marginTop:20, paddingTop:16, borderTop:'1px solid var(--b1)' } },
           h('div', { style:{ fontSize:11, color:'var(--t3)', marginBottom:8 } }, user.email),
-          h('button', { onClick:()=>{ _intentionalSignOut.current=true; signOut(); }, style:{ fontSize:12, padding:'6px 12px', width:'100%', color:'var(--t2)', textAlign:'left' } }, 'Cerrar sesión'),
+          h('button', { onClick:()=>signOut(), style:{ fontSize:12, padding:'6px 12px', width:'100%', color:'var(--t2)', textAlign:'left' } }, 'Cerrar sesión'),
         ),
       ),
     ),

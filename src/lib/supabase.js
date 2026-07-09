@@ -1,95 +1,60 @@
-// supabase.js — Supabase para datos, auth local con localStorage
+// supabase.js — Supabase para datos y Auth real (Fase 0B)
 import { createClient } from '@supabase/supabase-js';
 
 const SUPA_URL = 'https://lzogvusabogzitwnlttb.supabase.co';
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx6b2d2dXNhYm9neml0d25sdHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAyNjY0NDEsImV4cCI6MjA5NTg0MjQ0MX0.IbX6NCBOOMdl9CAjn82GlOlIpRgolLZf_kLso35UK58';
 
-// Cliente Supabase solo para datos (sin auth)
+// Cliente Supabase — Auth real habilitado (persistencia de sesión + refresco de token).
+// persistSession/autoRefreshToken en true es indispensable para que el login
+// real de Supabase Auth mantenga la sesión entre recargas de página.
 export const sb = createClient(SUPA_URL, SUPA_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
 });
 window.__sb = sb; // diagnóstico
 
-// ── Auth local ────────────────────────────────────────────────
-const USER_KEY = 'lp_user';
-
-// Usuario hardcodeado — sin depender de Supabase Auth
-// ID del workspace compartido — todos los usuarios acceden a los mismos datos
+// ── Compatibilidad temporal con el modelo de datos actual (Fase 0B) ────
+// Todo usuario autenticado real sigue leyendo/escribiendo bajo este mismo
+// identificador de workspace, igual que en el sistema anterior. Es intencional:
+// separa "quién eres" (resuelto aquí, en Fase 0B, con Auth real) de "qué datos
+// ves" (se resolverá con el modelo de organización/empresa en Fase 1). No es
+// un descuido — se retira cuando exista ese modelo.
 export const WORKSPACE_ID = '31daca2f-17ff-4ce1-83ca-99e2b31094b7';
 
-const USERS = [
-  {
-    id:          'usr-santiago-001',
-    workspaceId: WORKSPACE_ID,
-    name:        'Santiago Mansur',
-    email:       'santiago@brokingroup.com',
-    password:    'Miscuates2804.',
-    role:        'admin',    // acceso total + configuración
-  },
-  {
-    id:          'usr-mauricio-001',
-    workspaceId: WORKSPACE_ID,
-    name:        'Mauricio Cruz',
-    email:       'mauricio@brokingroup.com',
-    password:    'LicitaPro2024!',
-    role:        'editor',   // puede crear, editar y ver, sin acceso a config
-  },
-];
-
-export const authSb = {
-  onAuthStateChange: (cb) => {
-    const stored = localStorage.getItem(USER_KEY);
-    if (stored) {
-      try {
-        let user = JSON.parse(stored);
-        // Si es sesión antigua (sin workspaceId o sin nombre), enriquecer con datos actuales
-        if (!user.workspaceId || !user.name) {
-          const found = USERS.find(u => u.email === user.email || u.id === user.id || u.workspaceId === user.id);
-          if (found) {
-            user = { id: found.id, workspaceId: found.workspaceId, name: found.name, email: found.email, role: found.role };
-            localStorage.setItem(USER_KEY, JSON.stringify(user));
-          } else {
-            user.workspaceId = user.workspaceId || WORKSPACE_ID;
-          }
-        }
-        // SEGURIDAD: quien no esté en la lista de usuarios del código y no tenga rol,
-        // queda como 'empleado' (nunca como jefe). Evita que registros libres tengan acceso total.
-        if (!user.role) {
-          const enLista = USERS.find(u => u.email === user.email);
-          user.role = enLista ? enLista.role : 'empleado';
-          localStorage.setItem(USER_KEY, JSON.stringify(user));
-        }
-        setTimeout(() => cb('INITIAL_SESSION', { user }), 50);
-      } catch(e) {
-        localStorage.removeItem(USER_KEY);
-        setTimeout(() => cb('INITIAL_SESSION', { user: null }), 50);
-      }
-    } else {
-      setTimeout(() => cb('INITIAL_SESSION', { user: null }), 50);
-    }
-    return { data: { subscription: { unsubscribe: () => {} } } };
-  }
-};
-
+// ── Auth real ────────────────────────────────────────────────
 export async function signIn(email, password) {
-  const found = USERS.find(u => u.email === email && u.password === password);
-  if (!found) throw new Error('Email o contraseña incorrectos');
-  const user = { id: found.id, workspaceId: found.workspaceId, name: found.name, email: found.email, role: found.role };
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
-  return { user };
-}
-
-export async function signUp(email, password, name) {
-  // Nuevos usuarios entran como EMPLEADO (rol más restrictivo) y comparten el workspace.
-  // Solo el admin puede elevar su rol desde Configuración → Equipo.
-  const user = { id: 'user-' + Date.now(), email, name, role: 'empleado', workspaceId: WORKSPACE_ID };
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
-  return { user };
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) throw new Error('Email o contraseña incorrectos');
+  return { user: data.user };
 }
 
 export async function signOut() {
-  localStorage.removeItem(USER_KEY);
+  await sb.auth.signOut();
 }
+
+// Construye el objeto "user" que usa el resto de la app (name, role, workspaceId)
+// a partir del usuario real de Supabase Auth + su perfil en user_profiles.
+// Lanza error si no hay perfil o si el usuario está desactivado (active=false).
+export async function buildAppUser(authUser) {
+  const { data: profile, error } = await sb
+    .from('user_profiles')
+    .select('name, email, role, active')
+    .eq('id', authUser.id)
+    .maybeSingle();
+  if (error) throw new Error('No se pudo cargar tu perfil. Intenta de nuevo.');
+  if (!profile) throw new Error('No existe un perfil para este usuario. Contacta al administrador.');
+  if (!profile.active) throw new Error('Tu cuenta está desactivada. Contacta al administrador.');
+  return {
+    id: authUser.id,
+    workspaceId: WORKSPACE_ID, // compatibilidad temporal — ver nota arriba
+    name: profile.name,
+    email: profile.email || authUser.email,
+    role: profile.role, // 'admin' | 'empleado'
+  };
+}
+
+// authSb: se usa en App.js para suscribirse a los eventos reales de sesión
+// (INITIAL_SESSION, SIGNED_IN, SIGNED_OUT) directamente desde Supabase Auth.
+export const authSb = sb.auth;
 
 // ── CRUD con Supabase ─────────────────────────────────────────
 export async function dbLoad(userId) {
