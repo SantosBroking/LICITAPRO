@@ -1,7 +1,8 @@
 // App.js — Estado global, navegación y CRUD
 import { h, useState, useEffect, useRef, useCallback } from './lib/core.js';
 import { DEFAULT_CONFIG } from './lib/constants.js';
-import { sb, authSb, signOut, buildAppUser, WORKSPACE_ID, dbLoad, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveAuditLog } from './lib/supabase.js';
+import { sb, authSb, signOut, buildAppUser, WORKSPACE_ID, dbLoad, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveAuditLog, saveProjectFinancials } from './lib/supabase.js';
+import { calcCotizacion } from './lib/calc.js'; // Fase 0C — solo se USA, calc.js no se modifica
 import { uid, NOW } from './lib/utils.js';
 import { sendMonthlyReminders, shouldSendMonthlyReminder, currentMonthKey } from './lib/email_reminders.js';
 
@@ -169,10 +170,22 @@ export default function App() {
     }
   }, []);
 
+  // Fase 0C — Opción B: si quien guarda es admin y el proyecto tiene cotización
+  // capturada, calcula el resultado financiero (calcCotizacion, sin modificar
+  // calc.js) y lo persiste en project_financials (RLS admin-only). No toca
+  // Cotizacion.js. Si falla, no debe romper el guardado normal del proyecto.
+  const maybeSaveFinancials = async (p) => {
+    if (!isAdmin || !p?.cotizacion) return;
+    try {
+      const financials = calcCotizacion(p.cotizacion);
+      await saveProjectFinancials(p.id, financials);
+    } catch (e) { console.warn('No se pudo actualizar project_financials:', e.message); }
+  };
+
   const handleSaveProject = useCallback(async (p, navigate) => {
     setProjects(prev => { const ex=prev.find(x=>x.id===p.id); return ex?prev.map(x=>x.id===p.id?p:x):[p,...prev]; });
     if (navigate) nav('project_detail', p.id);
-    try { await saveProject(p, getUID()); log(user,'guardó','proyecto',p.id,p.name); } catch(e){ console.error(e); }
+    try { await saveProject(p, getUID()); await maybeSaveFinancials(p); log(user,'guardó','proyecto',p.id,p.name); } catch(e){ console.error(e); }
   }, [user, nav, log]);
 
   const upProject = useCallback((updated) => {
@@ -182,7 +195,7 @@ export default function App() {
     _timer.current = setTimeout(async () => {
       const toSave = _pending.current;
       const uid = getUID();
-      if (toSave && uid) { try { await saveProject(toSave, uid); } catch(e){ console.error(e); } }
+      if (toSave && uid) { try { await saveProject(toSave, uid); await maybeSaveFinancials(toSave); } catch(e){ console.error(e); } }
     }, 800);
   }, [user]);
 

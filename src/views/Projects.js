@@ -438,6 +438,9 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
   const tab    = activeTab || 'info';
   const setTab = useCallback(t=>{ if(setActiveTab)setActiveTab(t); },[setActiveTab]);
   const company = companies.find(c=>c.name===project.company);
+  // Fase 0C: solo admin ve costos/utilidad/márgenes (pestaña Cotización) y
+  // puede borrar proyectos definitivamente.
+  const isAdmin = user?.role === 'admin' || user?.role === 'jefe';
   const updProject = useCallback(updated=>onUpdate(updated),[onUpdate]);
   const cotRef = useRef(project.cotizacion||{});
   cotRef.current = project.cotizacion || {};
@@ -544,7 +547,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
           };
           await onSave(copia, true);
         }}, '⧉ Duplicar'),
-        h('button', { onClick:()=>setShowDelete(true), style:{ color:'#E24B4A' } }, 'Eliminar'),
+        isAdmin && h('button', { onClick:()=>setShowDelete(true), style:{ color:'#E24B4A' } }, 'Eliminar'),
       ),
     ),
     // KPIs
@@ -555,9 +558,11 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
       h(Metric, { label:'Vehículos', value:pVehicles.length }),
       h(Metric, { label:'Responsable', value:project.responsable||'—' }),
     ),
-    // Tabs
+    // Tabs — Fase 0C: la pestaña Cotización solo se muestra a admin (Opción A,
+    // costos/utilidad/márgenes quedan fuera del alcance de empleados hasta la
+    // vista reducida de Fase 2). No se toca Cotizacion.js.
     h('div', { style:{ display:'flex', gap:0, marginBottom:20, borderBottom:'1px solid var(--b1)', overflowX:'auto', flexWrap:'nowrap', WebkitOverflowScrolling:'touch', scrollbarWidth:'none', msOverflowStyle:'none' } },
-      PROJ_TABS.map(t=>h('button',{key:t.id,className:'tab'+(tab===t.id?' active':''),onClick:()=>setTab(t.id),style:{flexShrink:0,whiteSpace:'nowrap'}},t.l))
+      PROJ_TABS.filter(t=>t.id!=='cotizacion'||isAdmin).map(t=>h('button',{key:t.id,className:'tab'+(tab===t.id?' active':''),onClick:()=>setTab(t.id),style:{flexShrink:0,whiteSpace:'nowrap'}},t.l))
     ),
     // Info
     tab==='info' && h('div', null,
@@ -632,8 +637,10 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
             )
           ),
     ),
-    // Cotización
-    tab==='cotizacion' && h('div', null,
+    // Cotización — Fase 0C: guardián extra; aunque `tab` llegara a ser
+    // 'cotizacion' por una URL vieja o estado residual, no renderiza para
+    // quien no sea admin.
+    tab==='cotizacion' && isAdmin && h('div', null,
       h('div', { style:{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap', paddingBottom:14, borderBottom:'.5px solid var(--b3)' } },
         h('div', { style:{ fontSize:11, color:'var(--t2)', alignSelf:'center', marginRight:4 } }, 'Exportar PDF:'),
         h('button', { onClick:async ()=>{ const c=cotRef.current; const cc=calcCotizacion(c); await printCotizacionCliente({project,cot:c,calc:cc,config:window._lpConfig,companyObj:company}); }, style:{ fontSize:11, padding:'5px 12px', border:'.5px solid var(--blue)44', color:'var(--blue)', background:'#3b6cf408' } }, '📄 Cotización cliente'),

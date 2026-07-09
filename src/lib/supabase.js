@@ -150,6 +150,18 @@ export async function saveAuditLog(entry, userId) {
   await sb.from('audit_log').insert({ id: entry.id, user_id: userId, data: entry }).catch(()=>{});
 }
 
+// Fase 0C — Opción B: guarda el resultado financiero calculado (calcCotizacion)
+// en project_financials, tabla separada con RLS admin-only. Si falla (ej. quien
+// llama no es admin y RLS lo rechaza), no debe romper el guardado del proyecto —
+// por eso regresa silenciosamente con un aviso en consola, nunca lanza el error.
+export async function saveProjectFinancials(projectId, financialsData) {
+  if (!projectId) return;
+  const { error } = await sb.from('project_financials').upsert({
+    project_id: projectId, data: financialsData, updated_at: new Date().toISOString(),
+  });
+  if (error) console.warn('[project_financials] no se pudo guardar:', error.message);
+}
+
 // ══ Supabase Storage ══════════════════════════════════════════
 const BUCKET = 'licitapro';
 
