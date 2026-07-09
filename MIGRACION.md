@@ -6,7 +6,7 @@
 
 ## Estado actual
 
-- **Fase en curso:** 0B (Supabase Auth real) — **completa en preview, pendiente de autorización de merge a `main`**
+- **Fase en curso:** 0C (RLS completo y permisos mínimos) — **completa en preview, pendiente de autorización de merge a `main`**
 - **Rama de trabajo:** `fase0-seguridad`
 - **`main` no ha sido tocado.** Todo el trabajo de Fase 0 se construye en esta rama hasta que esté probado y aprobado explícitamente para merge.
 - **Diseño completo de la migración:** documentado fuera del repo (tres documentos técnicos: Master Blueprint de auditoría, Plan de Migración Fase 0+1 v1 y v2, Preparación Fase 0A, Guía de Backup Manual). Este archivo resume el estado operativo; el diseño detallado vive en esos documentos.
@@ -78,12 +78,46 @@ Es una política de **solo lectura** — no otorga INSERT, UPDATE ni DELETE. Per
 
 **Estado: Fase 0B completa en preview. Pendiente de autorización explícita de Santiago para merge a `main`.**
 
-### ⬜ Fase 0C — RLS y permisos mínimos
-- [ ] Activar RLS en `projects`, `vehicles`, `companies`, `config`, `audit_log`
-- [ ] Crear tabla `project_financials` (datos sensibles: costos, márgenes, utilidad, retornos) con RLS exclusivo de `role='admin'`
-- [ ] Crear tablas `authorizations` y `ai_logs`
-- [ ] Centralizar función `esAdmin(user)` en `utils.js` (elimina duplicación existente en `Projects.js`, `Firmas.js`, `App.js`)
-- [ ] Conectar el flujo de aprobaciones (`firmas.js`) a roles reales de `user_profiles`
+### ✅ Fase 0C — RLS completo y permisos mínimos
+
+#### Hallazgo del Preflight (antes de aplicar nada)
+
+RLS ya aparecía como `true` en las 5 tablas (`projects`, `vehicles`, `companies`, `config`, `audit_log`), pero las políticas existentes eran `anon_X` (comando `ALL`, rol `anon`) y `own X` (comando `ALL`, rol `public` = cualquiera) — es decir, RLS estaba activado pero era decorativo: cualquiera con la `anon` key podía leer/escribir/borrar sin haber iniciado sesión. Confirmado con Preflight de solo lectura antes de tocar nada (columnas, conteos de filas, `user_id` único por tabla = `31daca2f-17ff-4ce1-83ca-99e2b31094b7`, y `projects.id` coincide 20/20 con `data->>'id'`).
+
+#### SQL aplicado (ejecutado manualmente por Santiago en el SQL Editor, en un solo bloque transaccional)
+
+1. **Funciones auxiliares** `public.is_admin()` y `public.is_active_user()` — `SECURITY DEFINER` con `SET search_path = public, pg_catalog` fijo (evita que alguien manipule el `search_path` de su sesión para suplantar `user_profiles`), `EXECUTE` revocado de `PUBLIC` y otorgado solo a `authenticated`.
+2. **Políticas viejas eliminadas explícitamente** en las 5 tablas: `anon_projects`, `own projects`, `anon_vehicles`, `own vehicles`, `anon_companies`, `own companies`, `anon_config`, `own config`, `anon_audit`, `own audit`.
+3. **Políticas nuevas creadas** (todas `to authenticated`, cada una con su `drop policy if exists` previo para idempotencia):
+
+| Tabla | SELECT | INSERT | UPDATE | DELETE |
+|-------|--------|--------|--------|--------|
+| `projects` | activos del workspace | activos del workspace | activos del workspace | **admin** + workspace |
+| `vehicles` | activos del workspace | activos del workspace | activos del workspace | **admin** + workspace |
+| `companies` | activos del workspace | activos del workspace | activos del workspace | *(sin política — no existe función de borrado en el código hoy)* |
+| `config` | activos del workspace | **admin** + workspace | **admin** + workspace | **admin** + workspace |
+| `audit_log` | activos del workspace | activos del workspace | *(sin política — ni admin)* | *(sin política — ni admin, bitácora inmutable a propósito)* |
+
+4. **Tabla nueva `project_financials`** (`project_id text primary key references projects(id) on delete cascade`, `data jsonb`, `updated_at`) — RLS exclusivo de `is_admin()` para SELECT/INSERT/UPDATE, sin política de DELETE (se borra solo en cascada si se borra el proyecto).
+
+**Verificado por Santiago tras aplicar:** políticas viejas ya no aparecen en `pg_policies`; RLS activo en las 7 tablas; producción siguió cargando con normalidad inmediatamente después de correr el SQL.
+
+#### Código (rama `fase0c-rls`, en preview, pendiente de merge)
+
+- **`src/views/Projects.js`:** la pestaña **Cotización** (costos, márgenes, utilidad, retornos) queda oculta para quien no sea admin — se filtra de la lista de tabs y además hay un guardián en el render de contenido, por si el estado interno llegara a apuntar ahí por otra vía. El botón **"Eliminar" de proyecto** también queda oculto para empleados (además del bloqueo real por RLS en la base).
+- **`src/App.js` + `src/lib/supabase.js`:** `project_financials` se llena de forma incremental (**Opción B**, decidida explícitamente sobre la alternativa de un script de un solo uso) — cada vez que un **admin** guarda un proyecto con cotización capturada, se calcula el resultado con `calcCotizacion()` (ya existente, sin modificar `calc.js`) y se persiste en la tabla nueva. Si falla, no rompe el guardado normal del proyecto. **No se tocó `Cotizacion.js`.**
+- **Riesgo residual documentado, aceptado a propósito:** los costos por línea (`costoMSMS`, `costoConIVA` de cada partida/equipo) siguen dentro de `projects.data.cotizacion` — la pestaña oculta evita que un empleado los vea en la interfaz, pero no están separados a nivel de base de datos como sí lo está el resultado calculado (utilidad/margen/retornos, en `project_financials`). Cerrar esto del todo requiere rediseñar `Cotizacion.js` — pospuesto a **Fase 2** a propósito, según lo acordado.
+- **No se centralizó `esAdmin()`** en este commit — hubiera requerido tocar `Admin.js` y `Firmas.js`, fuera del alcance autorizado de este turno. Queda pendiente para una autorización aparte.
+
+#### Pruebas confirmadas por Santiago en preview
+
+- [x] Login Santiago (admin) OK — Dashboard, Proyectos, Catálogo/fotos, Cotización visible y editable, guardar cotización OK, `project_financials` se creó/actualizó correctamente, PDF/exportación OK.
+- [x] Login Eduardo (empleado) OK — Proyectos visibles, Cotización oculta, botón Eliminar oculto.
+- [x] Sin errores críticos en consola.
+
+**Estado: Fase 0C completa en preview. Pendiente de autorización explícita de Santiago para merge a `main`.**
+
+**Pendiente para fases posteriores (no en 0C):** tablas `authorizations` y `ai_logs` (documentadas en el plan original de Fase 0, no requeridas para cerrar el alcance mínimo de 0C); centralizar `esAdmin()`.
 
 ### ⬜ Fase 0D — Storage privado
 - [ ] Confirmar/activar bucket `licitapro` como privado en el panel de Supabase
