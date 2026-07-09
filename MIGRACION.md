@@ -6,7 +6,7 @@
 
 ## Estado actual
 
-- **Fase en curso:** 0A (Backup, rama y variables) — **en ejecución**
+- **Fase en curso:** 0B (Supabase Auth real) — **completa en preview, pendiente de autorización de merge a `main`**
 - **Rama de trabajo:** `fase0-seguridad`
 - **`main` no ha sido tocado.** Todo el trabajo de Fase 0 se construye en esta rama hasta que esté probado y aprobado explícitamente para merge.
 - **Diseño completo de la migración:** documentado fuera del repo (tres documentos técnicos: Master Blueprint de auditoría, Plan de Migración Fase 0+1 v1 y v2, Preparación Fase 0A, Guía de Backup Manual). Este archivo resume el estado operativo; el diseño detallado vive en esos documentos.
@@ -35,13 +35,48 @@
 - [x] Rama `fase0-seguridad` creada
 - [x] Este archivo (`MIGRACION.md`) creado
 
-### ⬜ Fase 0B — Supabase Auth real
-- [ ] Crear tabla `user_profiles` (vía SQL Editor de Supabase, ejecutado por Santiago con guía exacta)
-- [ ] Endpoint `api/invite-user.js` (usa `service_role` key)
-- [ ] Reescribir `src/lib/supabase.js`: quitar `USERS[]` hardcodeado, `signIn`/`signUp` falsos; usar `sb.auth.signInWithPassword()` real
-- [ ] Reescribir `src/views/Auth.js`: quitar modo "registro"; solo login + "olvidé mi contraseña"
-- [ ] Migrar cuentas reales de Santiago y Mauricio (contraseñas nuevas, las viejas expuestas quedan invalidadas)
-- [ ] Probar login/logout en preview antes de mergear
+### ✅ Fase 0B — Supabase Auth real
+- [x] Crear tabla `user_profiles` (vía SQL Editor de Supabase, ejecutado por Santiago con guía exacta)
+- [x] Endpoint `api/invite-user.js` — **pospuesto a propósito**, no construido en 0B. Altas iniciales (Santiago, Eduardo) hechas manualmente por Dashboard
+- [x] Reescribir `src/lib/supabase.js`: quitar `USERS[]` hardcodeado, `signIn`/`signUp` falsos; usar `sb.auth.signInWithPassword()` real + `buildAppUser()` (nuevo) que carga `role`/`active` desde `user_profiles`
+- [x] Reescribir `src/views/Auth.js`: quitar modo "registro" por completo; solo login (recuperación de contraseña pospuesta, requiere configurar Redirect URLs/plantilla)
+- [x] Migrar cuentas reales: Santiago (`admin`) y **Eduardo** (`empleado`) — Mauricio no se usó como empleado inicial, decisión de Santiago
+- [x] Probar login/logout en preview — **login Santiago OK, login Eduardo OK, logout OK, refresh mantiene sesión OK**
+
+#### Hallazgo durante las pruebas de 0B: fotos del catálogo no cargaban en preview
+
+Al probar el preview con login real, las fotos personalizadas del catálogo (subidas a Storage, prefijo `catalog/` del bucket `licitapro`) no aparecían, aunque sí se veían en producción (`main`).
+
+**Diagnóstico:** el bucket `licitapro` es privado. Antes de Fase 0B, la app **nunca** usaba una sesión real de Supabase Auth (el login era falso, vivía en `localStorage`) — así que **todas** las peticiones a Supabase, incluidas las de Storage, viajaban siempre como rol `anon`. Solo existía una política de Storage para `anon` (`public_access`). Al activar Auth real en 0B, el cliente `sb` pasó a adjuntar el JWT real del usuario autenticado en cada petición — cambiando el rol efectivo de `anon` a `authenticated`. Como no había ninguna política de Storage para `authenticated`, las peticiones para generar la URL firmada de cada foto del catálogo fallaban con "Object not found" (comportamiento de Supabase Storage cuando la política no matchea, no un 403 explícito).
+
+**Corrección aplicada — manual, en Supabase, no en código:**
+```
+Política: authenticated_read_catalog_images
+Tabla: storage.objects
+Roles: authenticated
+Comando: SELECT
+USING: bucket_id = 'licitapro' and name like 'catalog/%'
+```
+Es una política de **solo lectura** — no otorga INSERT, UPDATE ni DELETE. Permite exclusivamente que un usuario autenticado *lea* imágenes bajo el prefijo `catalog/`.
+
+**Resultado:** tras agregar la política, las fotos del catálogo cargan correctamente en el preview. Confirmado por Santiago.
+
+**Pendiente para Fase 0D (storage privado):** la política antigua `public_access` (para `anon`) **sigue existiendo** en el bucket y debe revisarse/limpiarse quirúrgicamente en 0D — es probable que ya no se necesite una vez que todo el tráfico real pase autenticado, pero eliminarla es una decisión de esa fase, no de esta, para no mezclar alcance.
+
+**Checklist completo de pruebas 0B — resultado final:**
+- [x] Login Santiago (admin) OK
+- [x] Login Eduardo (empleado) OK
+- [x] Logout OK
+- [x] Refresh mantiene sesión OK
+- [x] Dashboard OK
+- [x] Proyectos existentes visibles OK
+- [x] Cotizador OK
+- [x] PDF/exportación OK
+- [x] Fotos del catálogo OK (tras la política de Storage arriba)
+- [x] Sin usuarios hardcodeados ni contraseñas en texto plano (verificado por grep)
+- [x] Sin opción de "Crear cuenta" en el frontend (verificado)
+
+**Estado: Fase 0B completa en preview. Pendiente de autorización explícita de Santiago para merge a `main`.**
 
 ### ⬜ Fase 0C — RLS y permisos mínimos
 - [ ] Activar RLS en `projects`, `vehicles`, `companies`, `config`, `audit_log`
