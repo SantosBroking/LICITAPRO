@@ -4,6 +4,7 @@ import { CATALOG_PRODUCTS } from '../lib/catalog.js';
 import { calcCotizacion } from '../lib/calc.js';
 import { fmt, pctS, daysOld, TODAY, uid } from '../lib/utils.js';
 import { NumInput, StorageImg } from '../ui/primitives.js';
+import { sb } from '../lib/supabase.js';
 
 // Construye catálogo en vivo (base + personalizados) para que editar el catálogo
 // se refleje inmediatamente en la cotización sin necesidad de re-agregar productos.
@@ -116,8 +117,17 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
   const askAgent = async () => {
     if(!aiMsg.trim())return; setAiLoading(true); setAiResp('');
     try {
-      const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,system:`Eres el asistente de cotización de MSMS CORP, especializado en patrullas y vehículos equipados para seguridad pública en México. Responde en español de forma concisa.\nProyecto: "${project.name}" — Cliente: ${project.dependencia||'sin definir'}\nPartidas: ${cot.partidas.filter(p=>p.activo&&p.cantidad>0).map(p=>`${p.id}: ${p.cantidad} ${p.tipo} ${p.marca} ${p.modelo}`).join(' | ')||'ninguna'}\nVenta: ${fmt(calc.ventaTotal)} | Margen bruto: ${pctS(calc.margen)} | Utilidad NETA: ${fmt(calc.utilNeta)}`,messages:[{role:'user',content:aiMsg}]})});
-      const d=await r.json(); setAiResp(d.content?.[0]?.text||'Sin respuesta');
+      // Fase 0E: llamada via /api/ai-proxy, ya no directo a Anthropic.
+      // Modelo unificado a claude-sonnet-4-6 (antes claude-sonnet-4-20250514).
+      // El texto del prompt/system es idéntico al original.
+      const { data: { session } } = await sb.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Sesión no válida. Vuelve a iniciar sesión.');
+      const system = `Eres el asistente de cotización de MSMS CORP, especializado en patrullas y vehículos equipados para seguridad pública en México. Responde en español de forma concisa.\nProyecto: "${project.name}" — Cliente: ${project.dependencia||'sin definir'}\nPartidas: ${cot.partidas.filter(p=>p.activo&&p.cantidad>0).map(p=>`${p.id}: ${p.cantidad} ${p.tipo} ${p.marca} ${p.modelo}`).join(' | ')||'ninguna'}\nVenta: ${fmt(calc.ventaTotal)} | Margen bruto: ${pctS(calc.margen)} | Utilidad NETA: ${fmt(calc.utilNeta)}`;
+      const r=await fetch('/api/ai-proxy',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({model:'claude-sonnet-4-6',maxTokens:800,system,messages:[{role:'user',content:aiMsg}],tipo:'chat'})});
+      const result=await r.json().catch(()=>({}));
+      if(!r.ok || !result.ok){ setAiResp('Error: '+(result.error||('HTTP '+r.status))); setAiLoading(false); return; }
+      setAiResp(result.data.content?.[0]?.text||'Sin respuesta');
     } catch(e){ setAiResp('Error: '+e.message); }
     setAiLoading(false);
   };

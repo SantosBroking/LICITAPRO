@@ -345,7 +345,7 @@ export function Settings({ config, user, onSave }) {
             catch(e) { alert('Error: '+e.message); }
           }, style:{ fontSize:12, padding:'6px 14px', border:'1px solid var(--amber-border)', borderRadius:'var(--r)', background:'white', cursor:'pointer' } }, '🗑 Limpiar fotos del catálogo'),
         ),
-        h(Inp, { label:'Anthropic API Key', value:(cfg.ia||{}).openaiKey||'', type:'password', onChange:v=>setCfg(c=>({...c,ia:{...(c.ia||{}),openaiKey:v}})) }),
+        h('div', { style:{ fontSize:12, color:'var(--t2)', padding:'8px 0' } }, 'IA configurada en servidor mediante variable de entorno.'),
       h('div', { style:{ marginTop:24, paddingTop:20, borderTop:'1px solid var(--b1)' } },
         h('div', { style:{ fontSize:13, fontWeight:600, marginBottom:8 } }, '📧 Notificaciones por correo'),
         h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:12 } }, 'API Key de Resend (resend.com) para enviar recordatorios mensuales a los contadores de cada empresa. El recordatorio se envía automáticamente el día 1 de cada mes.'),

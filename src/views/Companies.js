@@ -163,11 +163,10 @@ export function DocumentosMembretados({ company, projects, config, onUpdate, onU
 
   const redactarIA = async () => {
     if (!instrucciones.trim()) { setMsg('Escribe primero qué quieres que diga el documento.'); return; }
-    const apiKey = window._lpConfig?.ia?.openaiKey || config?.ia?.openaiKey;
     setBusy(true); setMsg('🤖 Redactando con IA...');
     try {
       const proyecto = projsEmpresa.find(p => p.id === proyectoId) || null;
-      const texto = await redactarDocumento({ instrucciones, empresa:company, proyecto, apiKey });
+      const texto = await redactarDocumento({ instrucciones, empresa:company, proyecto });
       setCuerpo(texto);
       setMsg('✅ Borrador listo. Revísalo, edítalo si quieres, y guárdalo o imprímelo.');
     } catch(e) { setMsg('Error: ' + e.message); }

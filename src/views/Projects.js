@@ -269,10 +269,8 @@ export function ProjectForm({ project, companies, config, onSave, onCancel, user
     if (!file) return;
     setCsfAnalizando(true); setCsfMsg('Analizando constancia...');
     try {
-      const apiKey = (config && config.anthropicApiKey) || window._lpConfig?.anthropicApiKey;
-      if (!apiKey) { setCsfMsg('❌ Agrega tu API Key en Configuración → 🤖 IA'); setCsfAnalizando(false); return; }
       const { analyzeDocument } = await import('../lib/ai_analyzer.js');
-      const data = await analyzeDocument(file, 'constancia', apiKey);
+      const data = await analyzeDocument(file, 'constancia');
       const emp = {
         name: data.razonSocial || '',
         rfc:  data.rfc || '',
@@ -978,11 +976,8 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
     if (!file) return;
     setAnalizando(true); setAnalMsg('Analizando constancia…');
     try {
-      const c2 = config || window._lpConfig || {};
-      const apiKey = (c2.ia||{}).openaiKey;
-      if (!apiKey) { setAnalMsg('❌ Agrega tu API Key de Anthropic en Configuración → 🤖 IA'); setAnalizando(false); return; }
       const { analyzeDocument } = await import('../lib/ai_analyzer.js');
-      const data = await analyzeDocument(file, 'constancia', apiKey);
+      const data = await analyzeDocument(file, 'constancia');
       const nuevo = {
         name: data.razonSocial || prov.name,
         rfc:  data.rfc || prov.rfc,

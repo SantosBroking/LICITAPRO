@@ -7,8 +7,6 @@ export function AIAnalyzerButton({ config, tipo, onResult, label, multiple }) {
   const [error,  setError]  = useState('');
   const [progress, setProgress] = useState('');
 
-  const apiKey = config?.ia?.openaiKey || window._lpConfig?.ia?.openaiKey;
-
   const handleClick = () => {
     if (status === 'loading') return;
     const input = document.createElement('input');
@@ -18,21 +16,16 @@ export function AIAnalyzerButton({ config, tipo, onResult, label, multiple }) {
     input.onchange = async (e) => {
       const files = Array.from(e.target.files || []);
       if (!files.length) return;
-      if (!apiKey) {
-        setError('Agrega tu API Key de Anthropic en Configuración → 🤖 Inteligencia Artificial');
-        setStatus('error');
-        return;
-      }
       setStatus('loading');
       setError('');
       try {
         let result;
         if (files.length > 1) {
           setProgress(`Analizando ${files.length} documentos...`);
-          result = await analyzeMultipleDocuments(files, tipo, apiKey);
+          result = await analyzeMultipleDocuments(files, tipo);
         } else {
           setProgress('Analizando documento...');
-          result = await analyzeDocument(files[0], tipo, apiKey);
+          result = await analyzeDocument(files[0], tipo);
         }
         setStatus('done');
         setProgress('');

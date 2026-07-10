@@ -1,8 +1,6 @@
-// ai_analyzer.js — Análisis de documentos con Claude (Anthropic)
+// ai_analyzer.js — Análisis de documentos con Claude (Anthropic), vía /api/ai-proxy
 // Claude acepta PDFs nativamente. Soporta acta, reformas y CSF.
-
-const CLAUDE_API = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-sonnet-4-6';
+import { sb } from './supabase.js';
 
 const PROMPTS = {
   bases: `Eres experto en licitaciones públicas mexicanas. Lee el documento con atención.
@@ -55,38 +53,50 @@ Responde ÚNICAMENTE con JSON válido, sin texto adicional ni backticks:
 {"razonSocial":"","nombreComercial":"","rfc":"","regimenFiscal":"","regimenCapital":"","domicilioFiscal":"","codigoPostal":"","ciudad":"","estado":"","telefono":"","correo":"","fechaInicioOperaciones":null,"estatus":""}`
 };
 
-// Llamada a Claude con reintento automático en 429
-async function callClaudeAPI(contentBlock, prompt, apiKey, retries = 2) {
-  const response = await fetch(CLAUDE_API, {
+// Fase 0E: obtiene el token de sesión real de Supabase para autenticar la
+// llamada al proxy — nunca se maneja ninguna API key de Anthropic aquí.
+async function getSessionToken() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session?.access_token) throw new Error('Sesión no válida. Vuelve a iniciar sesión.');
+  return session.access_token;
+}
+
+// Llama a /api/ai-proxy (la API key de Anthropic vive solo en el servidor).
+// Reintento automático en 429, igual que antes.
+async function llamarProxy({ messages, system, maxTokens, tipo }, retries = 2) {
+  const token = await getSessionToken();
+  const response = await fetch('/api/ai-proxy', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 1500,
-      messages: [{ role: 'user', content: [contentBlock, { type: 'text', text: prompt }] }]
-    })
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ model: 'claude-sonnet-4-6', maxTokens: maxTokens || 1500, messages, system, tipo }),
   });
+
+  const result = await response.json().catch(() => ({}));
 
   if (response.status === 429 && retries > 0) {
     await new Promise(r => setTimeout(r, 6000));
-    return callClaudeAPI(contentBlock, prompt, apiKey, retries - 1);
+    return llamarProxy({ messages, system, maxTokens, tipo }, retries - 1);
   }
 
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    const msg = err.error?.message || ('Error ' + response.status);
-    if (response.status === 401) throw new Error('API key inválida. Revisa tu key de Anthropic en Configuración → 🤖 Inteligencia Artificial.');
+  if (!response.ok || !result.ok) {
+    const msg = result.error || ('Error ' + response.status);
+    if (response.status === 401) throw new Error('Sesión inválida. Vuelve a iniciar sesión.');
+    if (response.status === 403) throw new Error('Tu cuenta no tiene permiso para usar IA. Contacta al administrador.');
     if (response.status === 429) throw new Error('Límite de solicitudes alcanzado. Espera 1 minuto e intenta de nuevo.');
     if (response.status === 413) throw new Error('El archivo es muy grande. Usa un PDF con menos páginas.');
     throw new Error('Error de Claude: ' + msg);
   }
 
-  const data = await response.json();
+  return result.data;
+}
+
+// Análisis de documento: espera respuesta en JSON
+async function callClaudeAPI(contentBlock, prompt, tipo) {
+  const data = await llamarProxy({
+    messages: [{ role: 'user', content: [contentBlock, { type: 'text', text: prompt }] }],
+    maxTokens: 1500,
+    tipo,
+  });
   const text = data.content?.[0]?.text?.trim() || '';
   try {
     return JSON.parse(text.replace(/```json\n?|```/g, '').trim());
@@ -104,9 +114,7 @@ function detectTipo(file, tipo) {
   return 'empresa';
 }
 
-export async function analyzeDocument(file, tipo, apiKey) {
-  if (!apiKey) throw new Error('Agrega tu API Key de Anthropic en Configuración → 🤖 Inteligencia Artificial.');
-
+export async function analyzeDocument(file, tipo) {
   const base64 = await fileToBase64(file);
   const dataB64 = base64.split(',')[1];
 
@@ -122,18 +130,18 @@ export async function analyzeDocument(file, tipo, apiKey) {
     ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: dataB64 } }
     : { type: 'image',    source: { type: 'base64', media_type: mediaType,          data: dataB64 } };
 
-  return await callClaudeAPI(contentBlock, prompt, apiKey);
+  return await callClaudeAPI(contentBlock, prompt, tipoFinal);
 }
 
 // Múltiples documentos (acta + reformas): analiza cada uno, combina lo más reciente
-export async function analyzeFactura(file, apiKey) {
-  return analyzeDocument(file, 'factura', apiKey);
+export async function analyzeFactura(file) {
+  return analyzeDocument(file, 'factura');
 }
 
-export async function analyzeMultipleDocuments(files, tipo, apiKey) {
+export async function analyzeMultipleDocuments(files, tipo) {
   const results = [];
   for (const file of files) {
-    results.push(await analyzeDocument(file, tipo, apiKey));
+    results.push(await analyzeDocument(file, tipo));
     if (files.length > 1) await new Promise(r => setTimeout(r, 2000));
   }
   if (results.length === 1) return results[0];
@@ -157,8 +165,7 @@ function fileToBase64(file) {
 // ── Redacción de documentos membretados ───────────────────────
 // Genera texto de un documento (carta/oficio) a partir de instrucciones del usuario.
 // Devuelve texto plano con saltos de línea (no JSON).
-export async function redactarDocumento({ instrucciones, empresa, proyecto, apiKey }) {
-  if (!apiKey) throw new Error('Agrega tu API Key de Anthropic en Configuración → 🤖 Inteligencia Artificial.');
+export async function redactarDocumento({ instrucciones, empresa, proyecto }) {
   const ctxEmpresa = empresa ? `
 Empresa que emite el documento:
 - Razón social: ${empresa.name||''}
@@ -188,26 +195,10 @@ REGLAS:
 - Si el usuario pide una carta dirigida a alguien, incluye el destinatario.
 - Cierra con el nombre del representante legal y su cargo si están disponibles.`;
 
-  const response = await fetch(CLAUDE_API, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 2000,
-      messages: [{ role: 'user', content: [{ type:'text', text: prompt }] }]
-    })
+  const data = await llamarProxy({
+    messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
+    maxTokens: 2000,
+    tipo: 'redaccion',
   });
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    if (response.status === 401) throw new Error('API key inválida. Revisa tu key de Anthropic en Configuración.');
-    if (response.status === 429) throw new Error('Límite de solicitudes alcanzado. Espera 1 minuto.');
-    throw new Error('Error de Claude: ' + (err.error?.message || response.status));
-  }
-  const data = await response.json();
   return data.content?.[0]?.text?.trim() || '';
 }

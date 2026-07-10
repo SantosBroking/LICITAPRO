@@ -193,11 +193,9 @@ export function VehicleForm({ vehicle, projectId, onSave, onSaveMany, onCancel }
   };
 
   const crearDesdePDF = async (file) => {
-    const apiKey = window._lpConfig?.ia?.openaiKey;
-    if (!apiKey) { setFactMsg('Agrega tu API Key de Anthropic en Configuración para analizar PDFs.'); return; }
     setFactBusy(true); setFactMsg('🤖 Analizando factura...');
     try {
-      const d = await analyzeFactura(file, apiKey);
+      const d = await analyzeFactura(file);
       // Rellenar el formulario con lo extraído (modo un vehículo)
       sV(p => ({ ...p,
         marca:d.marca||p.marca, modelo:d.modelo||p.modelo, ano:d.ano||p.ano, color:d.color||p.color,
@@ -324,11 +322,9 @@ export function FacturaCard({ title, subtitle, color, data, onSave }) {
 
   const handlePDF = async (file) => {
     if (!file) return;
-    const apiKey = window._lpConfig?.ia?.openaiKey;
-    if (!apiKey) { setMsg('Agrega tu API Key de Anthropic en Configuración para analizar PDFs.'); return; }
     setAnalizando(true); setMsg('🤖 Analizando PDF con Claude...');
     try {
-      const d = await analyzeFactura(file, apiKey);
+      const d = await analyzeFactura(file);
       sF(p => ({ ...p,
         folio:d.folio||p.folio, fecha:d.fecha||p.fecha,
         emisor:d.emisor||p.emisor, receptor:d.receptor||p.receptor,
@@ -514,7 +510,6 @@ export function BillingTab({ project, vehicles, onNav }) {
   // Analiza una factura (PDF o XML), extrae datos y crea/actualiza el vehículo + su factura
   const subirFactura = async (files, tipoFactura) => {
     if (!files || !files.length) return;
-    const apiKey = window._lpConfig?.ia?.openaiKey;
     setBusy(true);
     let creados = 0, errores = 0;
     // Mapa local de vehículos tocados en esta tanda (el estado de React no se actualiza entre iteraciones)
@@ -530,8 +525,7 @@ export function BillingTab({ project, vehicles, onNav }) {
           const text = await file.text();
           datos = parseCFDI(text);
         } else {
-          if (!apiKey) { setMsg('⚠️ Agrega tu API Key de Anthropic en Configuración para analizar PDFs.'); setBusy(false); return; }
-          datos = await analyzeFactura(file, apiKey);
+          datos = await analyzeFactura(file);
         }
         // Subir el archivo a almacenamiento
         const vehId = uid('VEH');
