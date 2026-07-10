@@ -15,11 +15,14 @@ export function EmpresaDocsCard({ company, onUpdate }) {
   const handleUpload = async (def, file) => {
     let fileData = null;
     if (def.storeFile) {
-      if (file.size>50*1024*1024){alert('Archivo muy grande (máx. 50MB). Comprime el PDF si es posible.');return;}
       try{
-        const sp = `empresas/${company.id}/${def.id}-${file.name}`;
-        const url = await uploadFileToStorage(sp, file);
-        fileData = url || await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file);});
+        const sp = `empresas/${company.id}/${def.id}-${Date.now()}-${file.name}`;
+        // Fase 0D: documentos de empresa permiten hasta 50MB (límite ya existente
+        // antes de 0D); la validación de tipo/tamaño ahora vive centralizada en
+        // uploadFileToStorage, no duplicada aquí.
+        const url = await uploadFileToStorage(sp, file, 50);
+        if (!url) { alert('No se pudo subir el archivo (tipo no permitido o excede 50MB).'); return; }
+        fileData = url;
       }catch(e){alert('Error: '+e.message);return;}
     }
     const newDoc={id:def.id,name:def.name,category:def.category,status:'guardado',uploadDate:TODAY(),fileName:file.name,fileSize:file.size,fileData,expirationDate:'',notes:''};

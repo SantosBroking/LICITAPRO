@@ -181,28 +181,60 @@ export function base64ToBlob(base64, mimeType = 'application/octet-stream') {
   return new Blob([bytes], { type: mime });
 }
 
-/** Sube un File/Blob a Storage. Retorna la URL pública.
+/** Sube un File/Blob a Storage. Retorna la RUTA relativa (no una URL pública) —
+ *  Fase 0D: el bucket es privado, ya no tiene sentido pedir una URL "pública".
+ *  signedUrl()/StorageImg/abrirArchivo ya saben resolver una ruta relativa tal cual.
+ *  upsert:false — con las rutas ya únicas (timestamp), no debe haber colisiones
+ *  legítimas; si alguna vez la hubiera, ahora falla con error visible en vez de
+ *  sobrescribir en silencio (requeriría permiso de UPDATE, admin-only desde 0D).
  *  Si falla (bucket no existe, permisos, etc.) retorna null — el código llamador debe manejar fallback. */
 export async function uploadToStorage(path, fileOrBlob, contentType) {
   try {
     const { data, error } = await sb.storage
       .from(BUCKET)
-      .upload(path, fileOrBlob, { contentType, upsert: true });
+      .upload(path, fileOrBlob, { contentType, upsert: false });
     if (error) { console.warn('[Storage] upload error:', error.message); return null; }
-    const { data: urlData } = sb.storage.from(BUCKET).getPublicUrl(data.path);
-    return urlData?.publicUrl || null;
+    return data.path;
   } catch(e) { console.warn('[Storage] upload exception:', e.message); return null; }
 }
 
-/** Sube una imagen en base64 a Storage. Retorna URL pública o null. */
+/** Sube una imagen en base64 a Storage. Retorna la ruta relativa o null. */
 export async function uploadImageToStorage(path, base64, mimeType = 'image/jpeg') {
   const blob = base64ToBlob(base64, mimeType);
   return uploadToStorage(path, blob, mimeType);
 }
 
-/** Sube un File directamente a Storage (XML, PDF). Retorna URL pública o null. */
-export async function uploadFileToStorage(path, file) {
-  return uploadToStorage(path, file, file.type || 'application/octet-stream');
+// Fase 0D — validación de subida: tipo MIME y tamaño máximo.
+// 25 MB por default; Companies.js pasa 50 para documentos de empresa
+// (límite ya existente ahí antes de 0D, se mantiene como excepción).
+const TIPOS_PERMITIDOS = [
+  'application/pdf',
+  'text/xml', 'application/xml',
+  'image/jpeg', 'image/jpg', 'image/png', 'image/webp',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/csv', 'text/plain',
+  'application/zip', 'application/x-zip-compressed',
+];
+
+/** Sube un File directamente a Storage (XML, PDF, etc.), validando tipo y tamaño.
+ *  Retorna la ruta relativa o null si no pasa la validación o falla la subida. */
+export async function uploadFileToStorage(path, file, maxSizeMB = 25) {
+  if (!file) return null;
+  if (file.size > maxSizeMB * 1024 * 1024) {
+    console.warn(`[Storage] archivo excede el límite de ${maxSizeMB}MB:`, file.name);
+    return null;
+  }
+  const tipo = file.type || '';
+  if (!TIPOS_PERMITIDOS.includes(tipo)) {
+    console.warn('[Storage] tipo de archivo no permitido:', tipo || '(desconocido)', file.name);
+    return null;
+  }
+  return uploadToStorage(path, file, tipo || 'application/octet-stream');
 }
 
 /** Elimina un archivo de Storage (no falla si no existe). */
@@ -243,18 +275,21 @@ function rutaDeStorage(urlOrPath) {
 }
 
 // Genera una URL firmada temporal (por defecto 1 hora) para un archivo privado.
-// Si no es de storage (base64 o URL externa), regresa el valor tal cual.
+// Si no es de storage (base64 o URL externa), regresa el valor tal cual (no es un
+// fallo, es un passthrough legítimo). Si SÍ es de storage pero no se pudo firmar
+// (Fase 0D: antes regresaba el valor original en silencio; ahora es explícito),
+// regresa `null` — el llamador debe manejar ese caso (ver StorageImg, Vehicles.js).
 export async function signedUrl(urlOrPath, expiresSec = 3600) {
   const rel = rutaDeStorage(urlOrPath);
-  if (!rel) return urlOrPath; // base64 o URL externa: devolver tal cual
+  if (!rel) return urlOrPath; // base64 o URL externa: no es un storage path, no es un fallo
   try {
     const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(decodeURIComponent(rel), expiresSec);
     if (error || !data?.signedUrl) {
       console.warn('[Storage] signedUrl error:', error?.message);
-      return urlOrPath; // fallback: intentar con la URL original (compat con archivos públicos viejos)
+      return null;
     }
     return data.signedUrl;
-  } catch(e) { console.warn('[Storage] signedUrl exception:', e.message); return urlOrPath; }
+  } catch(e) { console.warn('[Storage] signedUrl exception:', e.message); return null; }
 }
 
 // Abre un archivo (privado o no) en una pestaña nueva, resolviendo la URL firmada si aplica.

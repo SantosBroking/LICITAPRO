@@ -48,7 +48,7 @@ export function Reports({ projects, vehicles, companies, audit }) {
         if (prod.photo && isBase64(prod.photo)) {
           total++;
           try {
-            const path = `catalog/${prod.id || uid('prd')}.jpg`;
+            const path = `catalog/${prod.id || uid('prd')}-${Date.now()}.jpg`;
             const blob = base64ToBlob(prod.photo, 'image/jpeg');
             const url  = await uploadToStorage(path, blob, 'image/jpeg');
             if (url) { prod.photo = url; migrated++; log('  ✓ ' + (prod.nom||prod.id)); }
@@ -217,7 +217,7 @@ export function Settings({ config, user, onSave }) {
         if (prod.photo && isBase64(prod.photo)) {
           total++;
           try {
-            const path = `catalog/${prod.id || uid('prd')}.jpg`;
+            const path = `catalog/${prod.id || uid('prd')}-${Date.now()}.jpg`;
             const blob = base64ToBlob(prod.photo, 'image/jpeg');
             const url  = await uploadToStorage(path, blob, 'image/jpeg');
             if (url) { prod.photo = url; migrated++; log('  ✓ ' + (prod.nom||prod.id)); }
@@ -448,7 +448,7 @@ export function AuditLogView({ audit }) {
         if (prod.photo && isBase64(prod.photo)) {
           total++;
           try {
-            const path = `catalog/${prod.id || uid('prd')}.jpg`;
+            const path = `catalog/${prod.id || uid('prd')}-${Date.now()}.jpg`;
             const blob = base64ToBlob(prod.photo, 'image/jpeg');
             const url  = await uploadToStorage(path, blob, 'image/jpeg');
             if (url) { prod.photo = url; migrated++; log('  ✓ ' + (prod.nom||prod.id)); }

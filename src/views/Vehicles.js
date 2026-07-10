@@ -175,7 +175,7 @@ export function VehicleForm({ vehicle, projectId, onSave, onSaveMany, onCancel }
         const fac = parseCFDI(text);
         const veh = parseCFDIVehiculo(text);
         const vehId = uid('VEH');
-        const storagePath = `vehiculos/${vehId}/factura-agencia-${file.name}`;
+        const storagePath = `vehiculos/${vehId}/factura-agencia-${Date.now()}-${file.name}`;
         const url = await uploadFileToStorage(storagePath, file);
         const precioSinIVA = fac.subtotal || 0;
         arr.push({
@@ -356,7 +356,7 @@ export function FacturaCard({ title, subtitle, color, data, onSave }) {
       h('button', { onClick:()=>pdfRef.current?.click(), disabled:analizando, style:{ fontSize:12, padding:'7px 12px', border:'1px solid var(--b2)', borderRadius:8, background:'var(--bg1)', color:'var(--t1)', cursor:'pointer', opacity:analizando?.6:1 } }, analizando?'⏳ Analizando...':'🤖 Analizar PDF'),
       h('input', { ref:pdfRef, type:'file', accept:'.pdf', style:{ display:'none' }, onChange:e=>{ handlePDF(e.target.files[0]); e.target.value=''; } }),
       f.xmlNombre && h('span', { style:{ fontSize:11, color:'var(--green)', display:'flex', alignItems:'center', gap:4 } }, '📎 '+f.xmlNombre,
-        h('span', { onClick:async()=>{ const u = await signedUrl(f.xmlData, 3600); dlStorage(u, f.xmlNombre); }, style:{ color:'var(--blue)', cursor:'pointer', textDecoration:'underline' } }, 'descargar')),
+        h('span', { onClick:async()=>{ const u = await signedUrl(f.xmlData, 3600); if (!u) { alert('No se pudo generar el enlace de descarga.'); return; } dlStorage(u, f.xmlNombre); }, style:{ color:'var(--blue)', cursor:'pointer', textDecoration:'underline' } }, 'descargar')),
     ),
     msg && h('div', { style:{ marginTop:8, fontSize:11, color:msg.startsWith('Error')?'var(--red)':'var(--t2)', padding:'6px 10px', background:'var(--bg2)', borderRadius:6 } }, msg),
     h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12, marginTop:14 } },
@@ -436,7 +436,7 @@ export function ActaEntrega({ vehicle, project, company, onUpdate }) {
     if (!file) return;
     setSubiendo(true);
     try {
-      const path = `vehiculos/${vehicle.id}/acta-firmada-${file.name}`;
+      const path = `vehiculos/${vehicle.id}/acta-firmada-${Date.now()}-${file.name}`;
       const url = await uploadFileToStorage(path, file);
       set('archivoFirmado', { url:url||'', nombre:file.name, size:file.size, tipo:file.type||'', fecha:TODAY() });
     } catch(e) { console.error(e); alert('Error al subir el acta'); }
@@ -535,7 +535,7 @@ export function BillingTab({ project, vehicles, onNav }) {
         }
         // Subir el archivo a almacenamiento
         const vehId = uid('VEH');
-        const storagePath = `vehiculos/${vehId}/factura-${tipoFactura}-${file.name}`;
+        const storagePath = `vehiculos/${vehId}/factura-${tipoFactura}-${Date.now()}-${file.name}`;
         const url = await uploadFileToStorage(storagePath, file);
         // Nota automática tipo "Nissan Surman a Broking"
         const nota = [datos.emisor, datos.receptor].filter(Boolean).join(' a ');

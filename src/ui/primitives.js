@@ -16,8 +16,14 @@ export function StorageImg({ src, alt, style, fallback }) {
     setError(false);
     if (!src) { setResolved(''); return; }
     if (src.startsWith('data:')) { setResolved(src); return; }
-    // Resolver URL firmada (si no es de storage, signedUrl devuelve la misma)
-    signedUrl(src, 3600).then(u => { if (!cancel) setResolved(u); }).catch(() => { if (!cancel) setResolved(src); });
+    // Resolver URL firmada. Fase 0D: signedUrl() ahora regresa null explícito
+    // si no pudo firmar — se trata como error (muestra fallback), no como
+    // "sigue cargando" para siempre.
+    signedUrl(src, 3600).then(u => {
+      if (cancel) return;
+      if (!u) { setError(true); return; }
+      setResolved(u);
+    }).catch(() => { if (!cancel) setError(true); });
     return () => { cancel = true; };
   }, [src]);
   if (!src || error) return fallback || null;
