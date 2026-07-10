@@ -334,7 +334,7 @@ export function Settings({ config, user, onSave }) {
         h(Inp, { label:'Dirección fiscal', value:(cfg.empresa||{}).direccion||'', onChange:v=>set('empresa',{...(cfg.empresa||{}),direccion:v}) }),
       h('div', { style:{ marginTop:24, paddingTop:20, borderTop:'1px solid var(--b2)' } },
         h('div', { style:{ fontSize:13, fontWeight:600, marginBottom:12 } }, '🤖 Inteligencia Artificial'),
-        h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:12 } }, 'API Key de Anthropic (Claude) para análisis automático de bases de licitación y documentos. Obtén tu key en console.anthropic.com'),
+        h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:12 } }, 'Análisis automático de bases de licitación y documentos con Claude (Anthropic). La conexión con la IA está configurada del lado del servidor.'),
         h('div', { style:{ marginBottom:14, padding:'10px 14px', background:'var(--amber-bg)', border:'1px solid var(--amber-border)', borderRadius:'var(--r)', fontSize:12 } },
           h('div', { style:{ fontWeight:600, marginBottom:4 } }, '⚠ Recuperación: imágenes del catálogo'),
           h('div', { style:{ color:'var(--t2)', marginBottom:8 } }, 'Si la app tarda mucho al cargar, las imágenes del catálogo pueden ser muy pesadas. Usa este botón para limpiarlas.'),
@@ -353,7 +353,6 @@ export function Settings({ config, user, onSave }) {
         h(Inp, { label:'Correo remitente (debe estar verificado en Resend)', value:(cfg.notif||{}).fromEmail||'', onChange:v=>setCfg(c=>({...c,notif:{...(c.notif||{}),fromEmail:v}})), placeholder:'notificaciones@tudominio.com' }),
         h('div', { style:{ fontSize:10, color:'var(--t3)', marginTop:4 } }, '🔒 Tu API key se guarda encriptada. Obtén tu key en resend.com/api-keys'),
       ),
-        h('div', { style:{ fontSize:10, color:'var(--t3)', marginTop:4 } }, '🔒 Tu API key se guarda en tu cuenta. Obtén créditos en console.anthropic.com/settings/billing')
       ),
       ),
       // ── Equipo (solo admin/jefe) ──

@@ -6,7 +6,7 @@
 
 ## Estado actual
 
-- **Fase en curso:** 0E (IA vía endpoint serverless) — **completa en preview, pendiente de autorización de merge a `main`**
+- **Fase en curso:** 0F (Cierre de seguridad y limpieza final) — **microfix completo en preview, pendiente de autorización de merge a `main`**
 - **Rama de trabajo:** `fase0-seguridad`
 - **`main` no ha sido tocado.** Todo el trabajo de Fase 0 se construye en esta rama hasta que esté probado y aprobado explícitamente para merge.
 - **Diseño completo de la migración:** documentado fuera del repo (tres documentos técnicos: Master Blueprint de auditoría, Plan de Migración Fase 0+1 v1 y v2, Preparación Fase 0A, Guía de Backup Manual). Este archivo resume el estado operativo; el diseño detallado vive en esos documentos.
@@ -222,9 +222,43 @@ Durante las pruebas de esta fase, el primer intento de análisis en preview fall
 
 **Pendiente tras el merge (no antes):** limpieza de `config` (retirar `ia.openaiKey`/`anthropicApiKey` de los datos ya guardados) y revocación de la key vieja de Anthropic en console.anthropic.com.
 
-### ⬜ Fase 0F — Pruebas
-- [ ] Checklist completa de seguridad corrida en preview (login, registro cerrado, RLS de financieros, storage privado, IA sin key expuesta en Network tab)
-- [ ] Merge a `main` solo si todo pasa
+### ✅ Fase 0F — Cierre de seguridad y limpieza final
+
+Auditoría de cierre tras Fase 0E, en 4 partes: secretos en el repo, variables de Vercel, políticas de Supabase, y frontend.
+
+#### Auditoría de secretos (repo) — sin hallazgos de seguridad
+
+Confirmado con `grep` real (no supuesto): `ANTHROPIC_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY` y `api.anthropic.com` existen **únicamente** en `api/ai-proxy.js`. Cero ocurrencias de `openai`, `dangerous-direct-browser-access` en todo el repo. La única otra mención de "apiKey" en `api/` corresponde a `RESEND_API_KEY` (servicio distinto, sin relación).
+
+#### Auditoría de Supabase — confirmada por Santiago, sin hallazgos críticos
+
+- `config` limpio (sin `ia.openaiKey` ni `anthropicApiKey` residuales).
+- `ai_logs`: RLS activo, solo política `SELECT` admin-only, sin `INSERT`/`UPDATE`/`DELETE` para `authenticated`. Cero logs `started` sin cerrar (`started_antiguos=0`).
+- `user_profiles`: solo política `SELECT`, sin `INSERT`/`UPDATE`/`DELETE`.
+- `storage.objects`: exactamente 4 políticas, todas `authenticated`, ninguna `anon`. Bucket `licitapro` confirmado `public=false`, `file_size_limit=52428800` (50MB).
+- Tablas principales (`projects`, `vehicles`, `companies`, `config`, `audit_log`): sin políticas `anon` residuales.
+
+#### Auditoría de frontend — 1 hallazgo real, corregido
+
+Los 3 controles de rol de Fase 0C (pestaña Cotización oculta para empleados, su guardián de contenido, botón "Eliminar" proyecto oculto) — confirmados intactos, sin cambios desde 0C.
+
+**Hallazgo:** el reemplazo del campo de API Key hecho en Fase 0E (línea única, quirúrgico) dejó **dos líneas de texto huérfano** sin actualizar en `src/views/Admin.js` — una descripción que seguía diciendo "Obtén tu key en console.anthropic.com", y una nota al pie mal ubicada (aparecía debajo de la sección de Notificaciones/Resend) que decía "Tu API key se guarda en tu cuenta. Obtén créditos en console.anthropic.com/settings/billing". No era un riesgo de seguridad — el campo funcional ya no existía — pero sí copy engañoso.
+
+**Corrección aplicada (rama `fase0f-cierre-seguridad`):**
+- Línea de descripción actualizada: *"Análisis automático de bases de licitación y documentos con Claude (Anthropic). La conexión con la IA está configurada del lado del servidor."*
+- Línea huérfana del pie de página eliminada por completo.
+- **Cambio puramente de texto — cero cambios de lógica, estado, props o `onClick`.** Confirmado con `git diff`: una línea de string cambiada, una línea eliminada.
+
+**Archivo modificado:** `src/views/Admin.js` (único archivo de código).
+
+**Riesgos que quedan documentados, no resueltos en esta fase (por diseño, no por omisión):**
+- Keys viejas de Anthropic sin revocar — decisión consciente de Santiago, por posible uso en otros proyectos.
+- Límite de payload de Vercel (~4.5MB, límite propio en 4MB) — sigue como restricción de plataforma no probada a fondo con un documento al límite del tamaño.
+- Permisos finos de empleados por empresa — pendiente para Fase 1, frontera ya acordada desde el plan original, no un olvido de Fase 0.
+
+**Estado: Fase 0F completa en preview. Pendiente de autorización explícita de Santiago para merge a `main`.**
+
+Con este cierre, **Fase 0 completa (0A–0F) queda lista para producción** en cuanto se apruebe este último merge — quedando como trabajo consciente y documentado para el futuro: revocación de keys viejas, y todo el alcance de Fase 1 (multiempresa) descrito abajo.
 
 ### Fase 1 — Multiempresa y nuevo proyecto (después de Fase 0 completa)
 - Organización única: **Grupo Santiago**
@@ -247,4 +281,4 @@ Durante las pruebas de esta fase, el primer intento de análisis en preview fall
 
 ---
 
-*Última actualización: 8 de julio de 2026 — Fase 0A.*
+*Última actualización: 10 de julio de 2026 — Fase 0F.*
