@@ -6,7 +6,7 @@
 
 ## Estado actual
 
-- **Fase en curso:** 0C (RLS completo y permisos mínimos) — **completa en preview, pendiente de autorización de merge a `main`**
+- **Fase en curso:** 0D (Storage privado) — **completa en preview, pendiente de autorización de merge a `main`**
 - **Rama de trabajo:** `fase0-seguridad`
 - **`main` no ha sido tocado.** Todo el trabajo de Fase 0 se construye en esta rama hasta que esté probado y aprobado explícitamente para merge.
 - **Diseño completo de la migración:** documentado fuera del repo (tres documentos técnicos: Master Blueprint de auditoría, Plan de Migración Fase 0+1 v1 y v2, Preparación Fase 0A, Guía de Backup Manual). Este archivo resume el estado operativo; el diseño detallado vive en esos documentos.
@@ -119,12 +119,49 @@ RLS ya aparecía como `true` en las 5 tablas (`projects`, `vehicles`, `companies
 
 **Pendiente para fases posteriores (no en 0C):** tablas `authorizations` y `ai_logs` (documentadas en el plan original de Fase 0, no requeridas para cerrar el alcance mínimo de 0C); centralizar `esAdmin()`.
 
-### ⬜ Fase 0D — Storage privado
-- [ ] Confirmar/activar bucket `licitapro` como privado en el panel de Supabase
-- [ ] Quitar `getPublicUrl` de `uploadToStorage`
-- [ ] Quitar el fallback silencioso de `signedUrl()` a URL pública
-- [ ] Validar tipo MIME y tamaño máximo en `uploadFileToStorage`
-- [ ] (Pendiente, antes de este paso) Backup manual de archivos de Storage — guía aparte
+### ✅ Fase 0D — Storage privado
+
+#### Hallazgo del Preflight (antes de aplicar nada)
+
+El bucket `licitapro` **ya era privado** (`public: false`) — no fue necesario ningún cambio de Dashboard para eso. Pero las políticas de `storage.objects` seguían siendo `public_access` (rol `anon`, comando `ALL`) y `authenticated_read_catalog_images` (de 0B, solo lectura del prefijo `catalog/`) — es decir, **`public_access` era hoy la única vía real de acceso** para 4 de los 5 prefijos que usa la app (`vehiculos/`, `empresas/`, `firmas/`, `proyectos/`; solo `catalog/` tenía además la política de 0B). El Preflight también confirmó: `file_size_limit`/`allowed_mime_types` en `null` a nivel bucket, y los tipos MIME reales en uso (`application/pdf`: 56, `text/xml`: 44, `image/jpeg`: 14) — lo que llevó a agregar `text/xml`/`application/xml` a la lista blanca, que no estaban contemplados en el diseño inicial.
+
+#### SQL aplicado (ejecutado manualmente por Santiago en el SQL Editor, en un solo bloque transaccional)
+
+1. `alter table storage.objects enable row level security;` (idempotente — ya estaba activo, se reafirma para que el script sea autosuficiente).
+2. **Políticas viejas eliminadas:** `public_access`, `authenticated_read_catalog_images`.
+3. **Políticas nuevas creadas** (todas `to authenticated`, con `drop policy if exists` previo):
+
+| Comando | Regla |
+|---------|-------|
+| SELECT | `activos leen storage` — `bucket_id = 'licitapro' and is_active_user()` |
+| INSERT | `activos suben storage` — `bucket_id = 'licitapro' and is_active_user()` |
+| UPDATE | `solo admin actualiza storage` — `bucket_id = 'licitapro' and is_admin()` |
+| DELETE | `solo admin borra storage` — `bucket_id = 'licitapro' and is_admin()` |
+
+4. **`file_size_limit` del bucket fijado en 52428800 (50 MB)** — actúa como techo de infraestructura; el código sigue aplicando 25 MB para el caso general y 50 MB solo para documentos de empresa. `allowed_mime_types` del bucket se dejó en `null` a propósito (la validación de tipo vive en código, no duplicada a nivel bucket).
+
+**Verificado por Santiago tras aplicar:** políticas viejas ya no aparecen; RLS activo; bucket privado confirmado; `file_size_limit = 52428800`; ninguna política con rol `anon`; producción siguió cargando archivos/fotos con normalidad inmediatamente después del SQL.
+
+#### Código (rama `fase0d-storage`, en preview, pendiente de merge)
+
+- **`src/lib/supabase.js`:** `uploadToStorage` ya no pide `getPublicUrl` — regresa `data.path` (ruta relativa); `upsert:true` → `upsert:false` (con rutas ya únicas, una colisión real ahora falla con error visible en vez de sobrescribir en silencio). `uploadFileToStorage` valida tipo MIME (lista blanca, incluye `text/xml`/`application/xml`) y tamaño (`maxSizeMB`, default 25, con excepción de 50 para documentos de empresa) — **corrección propia detectada antes del commit:** la primera versión de la validación dejaba pasar sin filtro cualquier tipo "desconocido"; se corrigió para rechazar por default. `signedUrl()` regresa `null` explícito si no pudo firmar (antes regresaba el valor original en silencio).
+- **`src/ui/primitives.js` (`StorageImg`):** trata `null` de `signedUrl()` como error real (muestra `fallback`), no como "cargando" indefinido.
+- **`src/views/Vehicles.js`:** guardia en el botón de descarga de factura XML (avisa si `signedUrl()` no pudo generar el enlace); rutas únicas con timestamp en acta de entrega firmada, factura de agencia y factura por tipo.
+- **`src/views/Admin.js`:** rutas únicas con timestamp en las 3 subidas de fotos de catálogo — el archivo anterior no se borra, solo deja de estar referenciado (historial conservado).
+- **`src/views/Companies.js`:** ruta única con timestamp en documentos de empresa; se quitó el chequeo manual duplicado de 50MB (ahora centralizado en `uploadFileToStorage` vía parámetro); si la subida falla (tipo o tamaño), se avisa claro y no se guarda el documento a medias.
+- **No se tocó `pdf_export.js`** — confirmado innecesario: sus 2 usos de `signedUrl()` (`imgABase64`, `preloadImg`) ya estaban envueltos en `try/catch` que regresan `''`/cadena vacía ante cualquier falla, compatibles de forma nativa con el nuevo contrato de `signedUrl()` regresando `null`. Tampoco se tocó `calc.js` ni `Cotizacion.js`.
+
+#### Pruebas confirmadas por Santiago
+
+- [x] Preview validado en todos los flujos de subida/lectura de archivos.
+- [x] Producción sigue abriendo correctamente tras limpiar caché/sesión del navegador (relevante por el cambio de contrato de `signedUrl()`/`uploadToStorage`).
+
+**Estado: Fase 0D completa en preview. Pendiente de autorización explícita de Santiago para merge a `main`.**
+
+**Riesgos/pendientes que quedan documentados, no resueltos aún:**
+- `allowed_mime_types` a nivel bucket se dejó sin fijar (opción de defensa adicional, discutida y pospuesta a propósito — no es indispensable dado el control ya existente en código).
+- La lista blanca de tipos MIME en código se basa en lo que existe hoy (Preflight) más los tipos de Office/imagen/comprimidos previstos — si en el futuro se necesita subir un tipo de archivo nuevo no contemplado, la subida se rechazará hasta que se agregue explícitamente a `TIPOS_PERMITIDOS`.
+- No se migró ni re-subió ningún archivo existente — solo cambió el mecanismo de acceso; las rutas/URLs guardadas antes de 0D se siguen resolviendo por compatibilidad hacia atrás en `rutaDeStorage()`.
 
 ### ⬜ Fase 0E — IA vía endpoint serverless
 - [ ] Nuevo `api/ai-proxy.js` (mismo patrón que `api/send-email.js`), key desde `process.env.ANTHROPIC_API_KEY`
