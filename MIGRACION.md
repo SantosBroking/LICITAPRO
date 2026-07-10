@@ -6,7 +6,7 @@
 
 ## Estado actual
 
-- **Fase en curso:** 0D (Storage privado) — **completa en preview, pendiente de autorización de merge a `main`**
+- **Fase en curso:** 0E (IA vía endpoint serverless) — **completa en preview, pendiente de autorización de merge a `main`**
 - **Rama de trabajo:** `fase0-seguridad`
 - **`main` no ha sido tocado.** Todo el trabajo de Fase 0 se construye en esta rama hasta que esté probado y aprobado explícitamente para merge.
 - **Diseño completo de la migración:** documentado fuera del repo (tres documentos técnicos: Master Blueprint de auditoría, Plan de Migración Fase 0+1 v1 y v2, Preparación Fase 0A, Guía de Backup Manual). Este archivo resume el estado operativo; el diseño detallado vive en esos documentos.
@@ -163,11 +163,64 @@ El bucket `licitapro` **ya era privado** (`public: false`) — no fue necesario 
 - La lista blanca de tipos MIME en código se basa en lo que existe hoy (Preflight) más los tipos de Office/imagen/comprimidos previstos — si en el futuro se necesita subir un tipo de archivo nuevo no contemplado, la subida se rechazará hasta que se agregue explícitamente a `TIPOS_PERMITIDOS`.
 - No se migró ni re-subió ningún archivo existente — solo cambió el mecanismo de acceso; las rutas/URLs guardadas antes de 0D se siguen resolviendo por compatibilidad hacia atrás en `rutaDeStorage()`.
 
-### ⬜ Fase 0E — IA vía endpoint serverless
-- [ ] Nuevo `api/ai-proxy.js` (mismo patrón que `api/send-email.js`), key desde `process.env.ANTHROPIC_API_KEY`
-- [ ] Actualizar `ai_analyzer.js` y el chat de `Cotizacion.js` para llamar al proxy, no a Anthropic directo
-- [ ] Registrar cada uso en `ai_logs`
-- [ ] **Revocar la API key vieja** que estuvo expuesta en el frontend, una vez confirmado que el proxy funciona
+### ✅ Fase 0E — IA vía endpoint serverless
+
+#### 1-2. Endpoint nuevo y validación de sesión
+
+`api/ai-proxy.js` (nuevo, mismo patrón que `api/send-email.js`). Antes de llamar a Anthropic, valida en dos pasos:
+1. **Sesión real:** el cliente manda `Authorization: Bearer <token de sesión de Supabase>`; el proxy verifica ese token contra `GET /auth/v1/user` (usando la `anon` key, ya pública).
+2. **Perfil activo:** consulta `GET /rest/v1/user_profiles?id=eq.<id>` con el mismo token del usuario — la política de 0B ("usuario lee su propio perfil") ya permite esta lectura sin necesitar privilegios elevados. Si no hay perfil o `active=false`, responde `403` antes de tocar Anthropic.
+
+Validaciones adicionales del cuerpo: `messages` debe ser arreglo no vacío (máx. 20 elementos); tamaño serializado de `messages`+`system` limitado a 4 MB (ver riesgos); `tipo` con allowlist (`bases`, `factura`, `constancia`, `empresa`, `redaccion`, `chat`, `desconocido`); modelo con allowlist estricta (rechaza si no coincide, no sustituye en silencio); `maxTokens` con mínimo/máximo (no numérico, negativo o cero → 1500; > 4000 → capeado a 4000).
+
+#### 3-4. Keys — solo en servidor
+
+- `ANTHROPIC_API_KEY` — usada únicamente dentro de `api/ai-proxy.js`, leída de `process.env`. Nunca en el cliente, nunca se regresa en ninguna respuesta.
+- `SUPABASE_SERVICE_ROLE_KEY` — usada únicamente dentro de `api/ai-proxy.js`, exclusivamente para escribir en `ai_logs` (ver punto 5). Nunca se usa para nada más (la verificación de sesión/perfil usa la `anon` key + el token del propio usuario, no `service_role` — principio de mínimo privilegio).
+
+**Verificado explícitamente:** `api.anthropic.com`, `x-api-key`, `ANTHROPIC_API_KEY` y `SUPABASE_SERVICE_ROLE_KEY` no aparecen en ningún archivo de `src/` — solo en `api/ai-proxy.js`.
+
+#### 5. `ai_logs` — registro obligatorio, no opcional
+
+Corrección importante hecha durante el desarrollo (no en el diseño original): el log se crea con `status:'started'` **antes** de llamar a Anthropic. Si ese insert falla, el proxy responde `500` y **no llama a Anthropic** — el uso de IA sin registro queda estructuralmente imposible, no solo "mejor esfuerzo". Después de la llamada, se actualiza (`PATCH`) el mismo registro a `success`/`error` (esta segunda actualización sí es de mejor esfuerzo — si falla, no bloquea la respuesta ya completada al usuario).
+
+`ai_logs` tiene RLS activo, `SELECT` admin-only, **sin política de `INSERT` ni `UPDATE` para `authenticated`** — el `service_role` escribe porque ese rol bypassa RLS por diseño de Postgres, no porque exista una política a su favor. `status` restringido por `CHECK (status in ('started','success','error'))`. No se guardan prompts, documentos, respuestas ni datos financieros — solo metadatos (`actor_email`, `actor_role`, `tipo`, `model`, `status`, `error` corto).
+
+#### 6. Modelo unificado
+
+Todo el sistema usa `claude-sonnet-4-6`. Se corrigió una inconsistencia encontrada en el chat de `Cotizacion.js`, que usaba `claude-sonnet-4-20250514` (un modelo distinto al resto) — confirmado con `git diff` que el texto del `system` prompt quedó **idéntico byte a byte** al original, y que `PROMPTS` en `ai_analyzer.js` tampoco cambió.
+
+#### 7. Retiro de keys del cliente
+
+Se eliminaron las 8 lecturas de `config.ia.openaiKey`/`config.anthropicApiKey` (`Companies.js`, `Vehicles.js` ×3, `AIAnalyzerButton.js`, `Projects.js` ×2). El campo "Anthropic API Key" en Configuración se reemplazó por un texto informativo ("IA configurada en servidor mediante variable de entorno") — ya no existe forma de guardar una key nueva desde la UI.
+
+#### 8. Archivos modificados (rama `fase0e-ia-serverless`)
+
+`api/ai-proxy.js` (nuevo), `src/lib/ai_analyzer.js`, `src/ui/AIAnalyzerButton.js`, `src/views/Admin.js`, `src/views/Companies.js`, `src/views/Cotizacion.js`, `src/views/Projects.js`, `src/views/Vehicles.js`.
+
+#### 9. Riesgos/pendientes documentados
+
+- **Límite de payload de Vercel:** las funciones serverless Node.js de Vercel limitan el cuerpo de la petición a ~4.5 MB por defecto (`vercel.json` no lo redefine). El proxy fija su propio límite en 4 MB (por debajo de ese techo) para dar un mensaje claro en vez de un error genérico de la plataforma. **Esto es una restricción nueva que no existía** cuando la IA se llamaba directo desde el navegador — un documento muy grande que hoy funciona podría empezar a fallar por este motivo. Validado en pruebas con documentos reales sin encontrar el problema, pero queda documentado como límite estructural a tener presente.
+- La limpieza de `config` (retirar `ia.openaiKey`/`anthropicApiKey` de los datos ya guardados) **sigue pendiente, a propósito** — se ejecuta después de confirmar el proxy en producción.
+- La key vieja de Anthropic (la que estuvo expuesta en el frontend) **sigue sin revocar, a propósito** — se revoca después del merge a producción.
+
+#### 10. Confirmado: `calc.js` y `pdf_export.js` sin tocar
+
+Verificado con `git diff --stat` contra `main` — ningún cambio en ninguno de los dos archivos.
+
+#### 11. Nota operativa importante para el futuro
+
+Durante las pruebas de esta fase, el primer intento de análisis en preview falló con *"No se puede registrar el uso de IA"* — la causa fue que `SUPABASE_SERVICE_ROLE_KEY` no estaba marcada para el entorno **Preview** en Vercel (solo Production). Se agregó explícitamente con ese nombre exacto para Preview, y fue necesario un **redeploy** (se usó un commit vacío, `git commit --allow-empty`, ya que Vercel no relee variables de entorno de un deployment ya construido sin reconstruirlo). **Para fases futuras:** cualquier variable de entorno nueva debe marcarse para **todos** los entornos donde vaya a probarse (Preview y Production), y recordar que agregar/editar una variable requiere redeploy para que tome efecto.
+
+#### 12. Validación final confirmada por Santiago
+
+- [x] Análisis de factura: `ai_logs` muestra `status=success`, `error=null`, `model=claude-sonnet-4-6`.
+- [x] Análisis de constancia (CSF): `ai_logs` muestra `status=success`, `error=null`, `model=claude-sonnet-4-6`.
+- [x] Se investigó un reporte de posible regresión en extracción de factura — diagnóstico exhaustivo por `git diff` no encontró ninguna diferencia de código en prompt/`contentBlock`/`messages`/modelo/parsing; confirmado además que el manejo de XML (parseo local, sin IA) nunca cambió. El propio Santiago confirmó después que la extracción ya funcionaba correctamente — se trató como falsa alarma, no como regresión real.
+
+**Estado: Fase 0E completa en preview. Pendiente de autorización explícita de Santiago para merge a `main`.**
+
+**Pendiente tras el merge (no antes):** limpieza de `config` (retirar `ia.openaiKey`/`anthropicApiKey` de los datos ya guardados) y revocación de la key vieja de Anthropic en console.anthropic.com.
 
 ### ⬜ Fase 0F — Pruebas
 - [ ] Checklist completa de seguridad corrida en preview (login, registro cerrado, RLS de financieros, storage privado, IA sin key expuesta en Network tab)
