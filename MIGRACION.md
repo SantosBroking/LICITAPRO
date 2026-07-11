@@ -6,7 +6,7 @@
 
 ## Estado actual
 
-- **Fase en curso:** 1C (Usuarios y permisos reales) — **completa en preview, pendiente de autorización de merge a `main`**
+- **Fase en curso:** ninguna — última entrega cerrada: fix de Persistencia + Seguridad de Navegación, **completo en producción**
 - **Rama de trabajo:** `fase0-seguridad`
 - **`main` no ha sido tocado.** Todo el trabajo de Fase 0 se construye en esta rama hasta que esté probado y aprobado explícitamente para merge.
 - **Diseño completo de la migración:** documentado fuera del repo (tres documentos técnicos: Master Blueprint de auditoría, Plan de Migración Fase 0+1 v1 y v2, Preparación Fase 0A, Guía de Backup Manual). Este archivo resume el estado operativo; el diseño detallado vive en esos documentos.
@@ -317,6 +317,30 @@ Una sola política nueva, de solo `SELECT`. **Sin política de `UPDATE`** (decis
 - **Variantes de responsable legado no se limpiaron** — siguen existiendo como texto suelto en los proyectos viejos (por diseño, para no arriesgar mezclar personas distintas con normalización automática). Si en algún momento se quiere limpiar manualmente, es una tarea de datos separada, no de código.
 - **Cotización sigue admin-only** — la vista reducida para empleados (Opción B) sigue siendo prioridad de Fase 2, sin tocar en esta fase.
 - **Multiempresa** — sigue completamente pendiente, ver la sección re-etiquetada más abajo.
+
+### ✅ Fix — Persistencia + Seguridad de Navegación
+
+**Problema original:** al cambiar de ventana/pestaña del navegador y volver, o al refrescar la página, LicitaPro regresaba al dashboard (o a la pestaña principal de un módulo) en vez de conservar dónde estaba el usuario — perdiendo el proyecto abierto, la pestaña interna, y las sub-pestañas de Cotización (Equipo, Retornos y condiciones, Corrida financiera, Unitario, Agente Claude).
+
+**Solución implementada:**
+- Persistencia segura de navegación en `localStorage`, con llave por usuario (`licitapro_nav_<id>`).
+- Se guarda únicamente `view`, `projId`, `projTab`, `subTabs` y `ts` — nunca nada más.
+- Guard de pre-render (`sanitizeNavigation()`): la navegación se sanea de forma síncrona, en el mismo render, antes de decidir qué construir — nunca existe un frame donde se renderice una vista prohibida.
+- Protección por permisos en 3 niveles: vistas principales (`canView`), pestañas de proyecto (`canProjectTab`), y sub-pestañas internas (`canSubTab`) — los 3 con fuente única en `src/lib/permissions.js`.
+- Persistencia jerárquica para sub-pestañas (hoy, las de Cotización) — se levantó el estado que antes vivía local y desconectado dentro de `ProjectDetail` hacia `App.js`, mismo patrón ya usado para `projTab`.
+- Corrección de una condición de carrera real: `loading===false` no garantizaba que `projects` ya estuviera poblado en el mismo render — se resolvió con `projectsReady` (state, no ref) para una señal confiable.
+- Filtro real del menú (sidebar, menú móvil, barra inferior) — ya no solo se ocultan botones, hay una guardia continua que corrige cualquier vista no permitida sin importar el origen (clic, URL, `localStorage`).
+
+**Seguridad:**
+- No se guardan proyectos completos, cotizaciones, costos, márgenes, facturas, documentos, PDFs, XML, prompts ni respuestas de IA — solo nombres/IDs de pantalla y pestaña.
+- Empleados no pueden restaurar vistas ni pestañas sensibles (Configuración, Reportes, Bitácora, Cotización, Facturación, Flujo, ni las sub-pestañas de Cotización) por ningún medio — ni clic, ni URL, ni `localStorage` forzado.
+- Cambio de usuario en la misma pestaña del navegador (sin recargar) no hereda la navegación del usuario anterior.
+
+**Archivos modificados:** `src/App.js`, `src/lib/permissions.js`, `src/views/Projects.js`. No se tocó `calc.js`, `pdf_export.js`, `Cotizacion.js`, `api/ai-proxy.js`, `api/admin-users.js`, Supabase, Vercel, ni variables de entorno.
+
+**Commit final:** `621c04d6fca9be45d3fd102ac9767a0a231a45ef`
+
+**Estado: cerrado en producción.** URL: `https://licitapro-beta.vercel.app`
 
 ### Fase futura (pendiente, re-etiquetada) — Multiempresa y nuevo proyecto
 - Organización única: **Grupo Santiago**
