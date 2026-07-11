@@ -6,7 +6,7 @@
 
 ## Estado actual
 
-- **Fase en curso:** 0F (Cierre de seguridad y limpieza final) — **microfix completo en preview, pendiente de autorización de merge a `main`**
+- **Fase en curso:** 1C (Usuarios y permisos reales) — **completa en preview, pendiente de autorización de merge a `main`**
 - **Rama de trabajo:** `fase0-seguridad`
 - **`main` no ha sido tocado.** Todo el trabajo de Fase 0 se construye en esta rama hasta que esté probado y aprobado explícitamente para merge.
 - **Diseño completo de la migración:** documentado fuera del repo (tres documentos técnicos: Master Blueprint de auditoría, Plan de Migración Fase 0+1 v1 y v2, Preparación Fase 0A, Guía de Backup Manual). Este archivo resume el estado operativo; el diseño detallado vive en esos documentos.
@@ -260,7 +260,65 @@ Los 3 controles de rol de Fase 0C (pestaña Cotización oculta para empleados, s
 
 Con este cierre, **Fase 0 completa (0A–0F) queda lista para producción** en cuanto se apruebe este último merge — quedando como trabajo consciente y documentado para el futuro: revocación de keys viejas, y todo el alcance de Fase 1 (multiempresa) descrito abajo.
 
-### Fase 1 — Multiempresa y nuevo proyecto (después de Fase 0 completa)
+### ✅ Fase 1 (1A-1C) — Usuarios, permisos y operación multiusuario
+
+**Nota de alcance:** esta "Fase 1" es distinta de la sección de "multiempresa" escrita más abajo en este documento hace tiempo (antes de que Santiago redefiniera qué seguía después de Fase 0). Ese contenido de multiempresa **sigue pendiente**, sin fase asignada todavía — se re-etiquetó para no confundirse con lo que sí se ejecutó aquí.
+
+#### Hallazgos del Preflight 1A (antes de tocar nada)
+
+- **Dos listas de "empleados" desincronizadas:** `user_profiles` (la real, controla login desde 0B) y `config.equipo[]` (JSON suelto dentro de `config`, remanente del sistema de auth falso previo a 0B) — y `config.equipo` era, hasta este cambio, la única fuente del selector "Responsable" en el formulario de proyecto.
+- **El RLS de `user_profiles` (desde 0B) solo permitía que cada quien leyera su propia fila** — ni siquiera un admin podía listar a los demás usuarios desde el cliente.
+- **`'jefe'` era un valor muerto** en 6 puntos del código (`App.js`, `Admin.js`, `Firmas.js`, `Projects.js` ×4) — el `CHECK` de `user_profiles` desde 0B solo permite `'admin'`/`'empleado'`, así que esa mitad de cada condición nunca podía ser verdadera.
+- **Datos reales desordenados:** el campo `responsable` de los proyectos tenía 6 variantes de texto distintas para solo 3 personas (mayúsculas, acentos, segundo nombre de más). Se decidió **no normalizar automáticamente** (sin fuzzy matching) — cada variante se conserva tal cual como valor legado.
+- **Normalización manual de datos (hecha por Santiago, fuera de este código):** Mauricio fue dado de alta en Supabase Auth + `user_profiles`; el nombre de Eduardo en `user_profiles` se actualizó a su nombre completo ("Luis Eduardo Contreras Baez") para coincidir con la mayoría de sus proyectos.
+
+#### SQL aplicado en 1B (único cambio funcional de base de datos de esta fase)
+
+```sql
+create policy "activos ven directorio de activos"
+  on public.user_profiles for select
+  to authenticated
+  using (active = true and public.is_active_user());
+```
+Una sola política nueva, de solo `SELECT`. **Sin política de `UPDATE`** (decisión explícita — las escrituras van por el endpoint serverless con `service_role`, no por RLS directo). **Sin ampliar el `CHECK` de roles** (se mantiene únicamente `admin`/`empleado`). Verificado por Santiago: RLS activo, 2 políticas totales en `user_profiles` (la de 0B + esta), sin `INSERT`/`UPDATE`/`DELETE`.
+
+#### Código de 1C (rama `fase1c-usuarios-permisos`, en preview, pendiente de merge)
+
+1. **`src/lib/permissions.js` (nuevo):** `getPermissions(user)` centraliza los permisos por rol — diseñada para aceptar roles futuros (`ventas`, `operaciones`, `finanzas`, `solo_lectura`) editando solo esta función, sin volver a tocar 6 archivos.
+2. **Eliminación de `role==='jefe'`:** las 6 repeticiones (`App.js:52`, `Admin.js`, `Firmas.js:17`, `Projects.js` ×4) reemplazadas por `getPermissions(user).isAdmin`.
+3. **`api/admin-users.js` (nuevo):** endpoint serverless — lista usuarios (incluidos inactivos) y permite activar/desactivar/cambiar rol. Verifica sesión real de Supabase + perfil activo + `role==='admin'` antes de cualquier acción. Usa `SUPABASE_SERVICE_ROLE_KEY` exclusivamente del lado servidor (nunca expuesta, nunca regresada, nunca logueada). Valida `r.ok` antes de `r.json()` en los 4 puntos de red (listar, buscar `targetId`, contar admins activos, `PATCH`) — ante cualquier fallo de Supabase, regresa un mensaje genérico, nunca el detalle interno. `active` debe ser booleano; `role` solo `admin`/`empleado`; `targetId` debe existir (`404` si no); rechaza actualizaciones vacías; **nunca deja el sistema sin al menos un admin activo** (bloqueo absoluto); la auto-modificación de un admin sobre su propia cuenta requiere `confirmSelfAction` explícito. Acciones limitadas a `list`/`update` — cualquier otra, rechazada.
+4. **Panel "Usuarios" real (`Admin.js`):** reemplaza al panel "Equipo" viejo (que leía/escribía `config.equipo`, desconectado del auth real desde antes de 0B). El nuevo panel lee/escribe `user_profiles` de verdad, vía `api/admin-users.js`. Admin-only (`getPermissions(user).isAdmin`).
+5. **Selector "Responsable" migrado (`Projects.js`, 3 puntos: `ProjectForm` ×2, `ProjectDetail` ×1):** ya no lee `config.equipo` — ahora consulta el directorio de usuarios activos (`user_profiles`, permitido por la política de 1B) directamente con `sb.from('user_profiles').select('name,email').eq('active', true)`.
+6. **Fallback de responsable legado:** si el valor guardado en un proyecto (`project.responsable`) no coincide exactamente con ningún nombre activo, se agrega como opción adicional en el selector, tal cual, sin normalizar mayúsculas/acentos/variantes y sin intentar adivinar coincidencias ("fuzzy matching"). Los proyectos con las 3 variantes de nombre de Eduardo, las 2 de Mauricio, y el de Thiago (sin cuenta) siguen abriendo y mostrando su responsable histórico sin romperse.
+7. **`config.equipo` — confirmado que NO se borró:** solo dejó de leerse desde el código. Los datos siguen existiendo en `config.data.equipo`, disponibles por si algún día hace falta consultarlos históricamente (ej. para confirmar el correo de alguien antes de darlo de alta).
+
+#### Archivos modificados
+
+`src/lib/permissions.js` (nuevo), `api/admin-users.js` (nuevo), `src/App.js`, `src/views/Admin.js`, `src/views/Firmas.js`, `src/views/Projects.js`.
+
+**No se tocó:** `calc.js`, `pdf_export.js`, `Cotizacion.js`, `api/ai-proxy.js`, Supabase (fuera del SQL de 1B), Vercel, variables de entorno. No se construyó `api/invite-user.js` (alta de usuarios sigue siendo manual, decisión explícita).
+
+#### Pruebas confirmadas por Santiago en preview
+
+- [x] Santiago (admin) ve el panel Usuarios con los 3 usuarios reales (Santiago, Eduardo, Mauricio).
+- [x] Panel Usuarios permite activar/desactivar y restaurar correctamente.
+- [x] Eduardo/Mauricio (empleados) no ven Configuración ni el panel Usuarios.
+- [x] Eduardo/Mauricio no ven la pestaña Cotización (confirma que 1C no afectó el control de 0C).
+- [x] El selector de Responsable muestra a los usuarios activos.
+- [x] Proyectos con responsables legados (variantes de nombre, o sin cuenta como Thiago) abren bien y conservan el nombre histórico.
+- [x] Sin errores críticos en consola.
+
+**Estado: Fase 1 (1A-1C) completa en preview. Pendiente de autorización explícita de Santiago para merge a `main`.**
+
+#### Riesgos/pendientes documentados, no resueltos en esta fase
+
+- **`api/invite-user.js` sigue sin construirse** — alta de usuarios nuevos sigue siendo manual en el Supabase Dashboard + `insert` en `user_profiles`. Se pospone hasta que el ritmo de contrataciones lo justifique.
+- **Roles futuros (`ventas`, `operaciones`, `finanzas`, `solo_lectura`)** — `getPermissions()` está diseñada para aceptarlos, pero el `CHECK` de `user_profiles` **no se amplió** (decisión explícita de Santiago). Si se necesitan en el futuro, requiere un `ALTER TABLE` + ampliar `ROLES_PERMITIDOS` en `api/admin-users.js`.
+- **Variantes de responsable legado no se limpiaron** — siguen existiendo como texto suelto en los proyectos viejos (por diseño, para no arriesgar mezclar personas distintas con normalización automática). Si en algún momento se quiere limpiar manualmente, es una tarea de datos separada, no de código.
+- **Cotización sigue admin-only** — la vista reducida para empleados (Opción B) sigue siendo prioridad de Fase 2, sin tocar en esta fase.
+- **Multiempresa** — sigue completamente pendiente, ver la sección re-etiquetada más abajo.
+
+### Fase futura (pendiente, re-etiquetada) — Multiempresa y nuevo proyecto
 - Organización única: **Grupo Santiago**
 - Empresas operadoras: Broking, SATHRI/Satri (datos fiscales pendientes de confirmar), tercera empresa
 - Extender tabla `companies` existente (no crear una nueva) + `organization_id`
