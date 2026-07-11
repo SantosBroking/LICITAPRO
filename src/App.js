@@ -3,7 +3,7 @@ import { h, useState, useEffect, useRef, useCallback } from './lib/core.js';
 import { DEFAULT_CONFIG } from './lib/constants.js';
 import { sb, authSb, signOut, buildAppUser, WORKSPACE_ID, dbLoad, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveAuditLog, saveProjectFinancials } from './lib/supabase.js';
 import { calcCotizacion } from './lib/calc.js'; // Fase 0C — solo se USA, calc.js no se modifica
-import { getPermissions, canView, sanitizeView, canProjectTab, sanitizeProjectTab } from './lib/permissions.js'; // Fase 1C — permisos centralizados
+import { getPermissions, canView, sanitizeView, canProjectTab, sanitizeProjectTab, sanitizeSubTab } from './lib/permissions.js'; // Fase 1C — permisos centralizados
 import { uid, NOW } from './lib/utils.js';
 import { sendMonthlyReminders, shouldSendMonthlyReminder, currentMonthKey } from './lib/email_reminders.js';
 
@@ -29,7 +29,7 @@ const NAV_ITEMS = [
 // Fix Persistencia + Seguridad de Navegación — calcula una navegación EFECTIVA
 // (segura) de forma síncrona, en el mismo render, antes de decidir qué
 // componente construir. Usa los helpers puros de permissions.js, pero conoce
-// `projects`/`projectsReady` (viven en App.js) — por eso no está en
+// `projects`/`projectsReady`/`subTabs` (viven en App.js) — por eso no está en
 // permissions.js. Se reutiliza tanto para decidir qué renderizar como para
 // decidir qué guardar en localStorage (nunca se guarda ni se renderiza el
 // valor crudo).
@@ -39,8 +39,12 @@ const NAV_ITEMS = [
 // certeza, `pending:true` le indica al render que muestre un estado de
 // espera seguro — nunca "proyecto no encontrado" en falso, y nunca se debe
 // guardar/sincronizar esto como si fuera la navegación final.
-function sanitizeNavigation({ view, projId, projTab, projects, projectsReady, user, loading }) {
-  if (loading) return { view, projId, projTab, pending: true };
+//
+// `subTabs`: mapa { scope: subTabId } para sub-pestañas internas de módulos
+// (hoy solo 'cotizacion' tiene sub-pestañas reales). Se sanea cada entrada
+// con sanitizeSubTab — nunca se guarda ni se restaura un valor no permitido.
+function sanitizeNavigation({ view, projId, projTab, projects, projectsReady, subTabs, user, loading }) {
+  if (loading) return { view, projId, projTab, subTabs, pending: true };
 
   let safeView = sanitizeView(view, user);
 
@@ -50,7 +54,7 @@ function sanitizeNavigation({ view, projId, projTab, projects, projectsReady, us
     } else if (!projectsReady) {
       // Hay un projId real, pero todavía no sabemos con certeza si projects
       // ya está completo — no se concluye nada definitivo todavía.
-      return { view: 'project_detail', projId, projTab: sanitizeProjectTab(projTab, user), pending: true };
+      return { view: 'project_detail', projId, projTab: sanitizeProjectTab(projTab, user), subTabs, pending: true };
     } else {
       const existe = projects.some(p => p.id === projId);
       if (!existe) safeView = 'projects'; // ya se sabe con certeza: no existe
@@ -60,7 +64,16 @@ function sanitizeNavigation({ view, projId, projTab, projects, projectsReady, us
   const safeProjId  = safeView === 'project_detail' ? projId : null;
   const safeProjTab = safeView === 'project_detail' ? sanitizeProjectTab(projTab, user) : projTab;
 
-  return { view: safeView, projId: safeProjId, projTab: safeProjTab, pending: false };
+  // Sanear cada sub-pestaña guardada, scope por scope. Si un scope entero
+  // queda prohibido para el rol (sanitizeSubTab regresa null), esa entrada
+  // se omite por completo — nunca se guarda ni se restaura.
+  const safeSubTabs = {};
+  Object.keys(subTabs || {}).forEach(scope => {
+    const sanitized = sanitizeSubTab(scope, subTabs[scope], user);
+    if (sanitized) safeSubTabs[scope] = sanitized;
+  });
+
+  return { view: safeView, projId: safeProjId, projTab: safeProjTab, subTabs: safeSubTabs, pending: false };
 }
 
 export default function App() {
@@ -76,6 +89,10 @@ export default function App() {
   const [view,      setView]      = useState(_viewInicial);
   const [projId,    setProjId]    = useState(null);
   const [projTab,   setProjTab]   = useState('info');
+  // subTabs: mapa { scope: subTabId } para sub-pestañas internas de módulos
+  // (hoy solo 'cotizacion': partidas/equipo/extras/corrida/unitario/agente).
+  const [subTabs,   setSubTabsRaw] = useState({});
+  const setSubTab = useCallback((scope, val) => setSubTabsRaw(prev => ({ ...prev, [scope]: val })), []);
   // ── Fix Persistencia + Seguridad de Navegación ──
   const _lastUserKey          = useRef(null);   // último userKey visto (sync, detecta cambio de usuario de inmediato)
   const _navRestoreAttempted  = useRef(false);  // ¿ya se intentó restaurar para el usuario actual?
@@ -181,6 +198,7 @@ export default function App() {
         _lastUserKey.current = null;
         _navRestoreAttempted.current = false;
         setProjectsReady(false);
+        setSubTabsRaw({});
         setNavPersistenceReady(false);
         setNavReadyUserKey(null);
         setLoading(false);
@@ -219,6 +237,7 @@ export default function App() {
       setNavPersistenceReady(false);
       setNavReadyUserKey(null);
       setProjectsReady(false); // no heredar la señal de carga de otro usuario
+      setSubTabsRaw({}); // no heredar sub-pestañas de otro usuario
     }
 
     if (_navRestoreAttempted.current) return;
@@ -246,9 +265,18 @@ export default function App() {
               setProjId(saved.projId);
               setProjTab(sanitizeProjectTab(saved.projTab, user));
               setView('project_detail');
+              // Restaurar sub-pestañas guardadas, saneadas scope por scope.
+              // Si el scope quedó prohibido para este rol, sanitizeSubTab
+              // regresa null y esa entrada simplemente se omite.
+              if (saved.subTabs && typeof saved.subTabs === 'object') {
+                const restauradas = {};
+                Object.keys(saved.subTabs).forEach(scope => {
+                  const val = sanitizeSubTab(scope, saved.subTabs[scope], user);
+                  if (val) restauradas[scope] = val;
+                });
+                setSubTabsRaw(restauradas);
+              }
             }
-            // Si no existe, se deja el default (dashboard) — correcto,
-            // ya se confirmó con projects realmente cargado.
           } else {
             const targetView = sanitizeView(saved.view, user);
             if (targetView !== 'dashboard') setView(targetView);
@@ -294,15 +322,15 @@ export default function App() {
     if (userKey !== navReadyUserKey) return;
     if (!projectsReady) return;
 
-    const { view: safeView, projId: safeProjId, projTab: safeProjTab } =
-      sanitizeNavigation({ view, projId, projTab, projects, projectsReady, user, loading });
+    const { view: safeView, projId: safeProjId, projTab: safeProjTab, subTabs: safeSubTabs } =
+      sanitizeNavigation({ view, projId, projTab, projects, projectsReady, subTabs, user, loading });
 
     try {
       localStorage.setItem('licitapro_nav_' + userKey, JSON.stringify({
-        view: safeView, projId: safeProjId, projTab: safeProjTab, ts: Date.now()
+        view: safeView, projId: safeProjId, projTab: safeProjTab, subTabs: safeSubTabs, ts: Date.now()
       }));
     } catch(e) {}
-  }, [view, projId, projTab, user, navPersistenceReady, navReadyUserKey, projects, loading, projectsReady]);
+  }, [view, projId, projTab, subTabs, user, navPersistenceReady, navReadyUserKey, projects, loading, projectsReady]);
 
   const log = useCallback((u, action, entity, entityId, details='') => {
     const entry = { id:uid('log'), timestamp:NOW(), userId:u?.id||'local', userName:u?.email||'Usuario', action, entity, entityId, details };
@@ -415,8 +443,8 @@ export default function App() {
   // Se calcula de forma síncrona, en este mismo render, ANTES de decidir qué
   // construir — por eso nunca existe un frame donde se renderice una vista
   // prohibida: el contenido nunca llega a construirse con el valor crudo.
-  const { view: effectiveView, projId: effectiveProjId, projTab: effectiveProjTab, pending } =
-    sanitizeNavigation({ view, projId, projTab, projects, projectsReady, user, loading });
+  const { view: effectiveView, projId: effectiveProjId, projTab: effectiveProjTab, subTabs: effectiveSubTabs, pending } =
+    sanitizeNavigation({ view, projId, projTab, projects, projectsReady, subTabs, user, loading });
 
   // `pending`: hay un projId real esperando a confirmarse contra `projects`,
   // pero `projectsReady` todavía no lo garantiza. Se muestra un estado de
@@ -428,7 +456,7 @@ export default function App() {
 
   const currentProject = projects.find(p=>p.id===effectiveProjId);
   const projDetailView = currentProject
-    ? h(ProjectDetail, { project:currentProject, vehicles, companies, config, onSaveConfig:handleSaveConfig, onSaveCompany:async c=>{ const ex=companies.find(x=>x.id===c.id||x.rfc===c.rfc); setCompanies(ex?companies.map(x=>(x.id===c.id||x.rfc===c.rfc)?{...x,...c}:x):[...companies,c]); try{ await saveCompany(c, getUID()); log(user, ex?'actualizó':'creó', 'empresa', c.id, c.name); }catch(e){ console.error('Error guardando empresa:', e); } }, onUpdate:upProject, onSave:handleSaveProject, onDelete:handleDeleteProject, onNav:nav, user, logFn:log, activeTab:effectiveProjTab, setActiveTab:setProjTab })
+    ? h(ProjectDetail, { project:currentProject, vehicles, companies, config, onSaveConfig:handleSaveConfig, onSaveCompany:async c=>{ const ex=companies.find(x=>x.id===c.id||x.rfc===c.rfc); setCompanies(ex?companies.map(x=>(x.id===c.id||x.rfc===c.rfc)?{...x,...c}:x):[...companies,c]); try{ await saveCompany(c, getUID()); log(user, ex?'actualizó':'creó', 'empresa', c.id, c.name); }catch(e){ console.error('Error guardando empresa:', e); } }, onUpdate:upProject, onSave:handleSaveProject, onDelete:handleDeleteProject, onNav:nav, user, logFn:log, activeTab:effectiveProjTab, setActiveTab:setProjTab, cotSubTab:effectiveSubTabs.cotizacion, setCotSubTab:(val)=>setSubTab('cotizacion', val) })
     : h('div', { className:'empty' }, h('h3', null, 'Proyecto no encontrado'), h('button', { onClick:()=>nav('projects') }, '← Volver'));
 
   const content = ({

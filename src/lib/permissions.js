@@ -65,3 +65,34 @@ export function canProjectTab(tab, user) {
 export function sanitizeProjectTab(tab, user) {
   return canProjectTab(tab, user) ? tab : 'info';
 }
+
+// ── Sub-pestañas dentro de un módulo (ej. las 6 pestañas internas de
+// Cotización: partidas/equipo/extras/corrida/unitario/agente). "Scope" es
+// el identificador del módulo padre (hoy solo 'cotizacion' tiene sub-pestañas
+// reales — confirmado con grep en Companies.js/ProjectForm: no tienen
+// ninguna). Diseño extensible: agregar un scope nuevo es una entrada más en
+// SUBTABS_POR_SCOPE, sin tocar el resto.
+//
+// Espejo de TABS (src/views/Cotizacion.js:26) — NO se importa directo (mismo
+// riesgo de ciclo de imports que PROJ_TABS). Si TABS cambia en Cotizacion.js,
+// actualizar también esta lista.
+const SUBTABS_POR_SCOPE = {
+  cotizacion: ['partidas', 'equipo', 'extras', 'corrida', 'unitario', 'agente'],
+};
+// Scopes cuyas sub-pestañas son TODAS admin-only. 'cotizacion' ya es
+// admin-only como módulo completo (PESTANAS_ADMIN_ONLY) — esto es una
+// segunda capa de defensa, no depende solo de que el padre esté bien.
+const SCOPES_ADMIN_ONLY = ['cotizacion'];
+
+export function getAllowedSubTabs(scope, user) {
+  if (SCOPES_ADMIN_ONLY.includes(scope) && !getPermissions(user).isAdmin) return [];
+  return SUBTABS_POR_SCOPE[scope] || [];
+}
+export function canSubTab(scope, tab, user) {
+  return typeof tab === 'string' && getAllowedSubTabs(scope, user).includes(tab);
+}
+export function sanitizeSubTab(scope, tab, user) {
+  const permitidas = getAllowedSubTabs(scope, user);
+  if (permitidas.length === 0) return null; // el scope entero está prohibido para este usuario
+  return canSubTab(scope, tab, user) ? tab : permitidas[0]; // cae a la primera permitida, no a un valor fijo
+}

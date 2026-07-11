@@ -437,13 +437,15 @@ export function ProjectForm({ project, companies, config, onSave, onCancel, user
   );
 }
 
-export function ProjectDetail({ project, vehicles, companies, config, onSaveConfig, onSaveCompany, onUpdate, onDelete, onSave, onNav, user, logFn, activeTab, setActiveTab }) {
+export function ProjectDetail({ project, vehicles, companies, config, onSaveConfig, onSaveCompany, onUpdate, onDelete, onSave, onNav, user, logFn, activeTab, setActiveTab, cotSubTab, setCotSubTab }) {
   const [showEdit, setShowEdit]     = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [showOC, setShowOC]         = useState(false);
   const [note, setNote]             = useState('');
   const [pregunta, setPregunta]     = useState('');
-  const [cotTab, setCotTab]         = useState('partidas');
+  // cotTab (sub-pestaña de Cotización) ya NO es estado local — se levantó a
+  // App.js (cotSubTab/setCotSubTab) para que persista correctamente al
+  // recargar la página, igual que ya pasaba con projTab/activeTab.
   const [selVehicle, setSelVehicle] = useState(null);
   const tab    = activeTab || 'info';
   const setTab = useCallback(t=>{ if(setActiveTab)setActiveTab(t); },[setActiveTab]);
@@ -667,7 +669,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
         h('button', { onClick:()=>{ const c=project.cotizacion||{}; const cc=calcCotizacion(c); printResumenInterno({project,cot:c,calc:cc,companyObj:company}); }, style:{ fontSize:11, padding:'5px 12px', border:'.5px solid var(--t3)44', color:'var(--t2)' } }, '🔒 Resumen interno'),
         h('button', { onClick:()=>setShowOC(true), style:{ fontSize:11, padding:'5px 12px', border:'.5px solid #1D9E7544', color:'#1D9E75', background:'#1D9E7508' } }, '🛒 Orden de compra'),
       ),
-      h(CotizacionTab, { project, onUpdate:(updated)=>{ cotRef.current=updated.cotizacion||{}; updProject(updated); }, activeTab:cotTab, setActiveTab:setCotTab, config, onSaveConfig }),
+      h(CotizacionTab, { project, onUpdate:(updated)=>{ cotRef.current=updated.cotizacion||{}; updProject(updated); }, activeTab:cotSubTab, setActiveTab:setCotSubTab, config, onSaveConfig }),
     ),
     // Bases
     tab==='bases' && h(BasesPreparacion, { project, config, onUpdate:updProject, user, logFn }),
