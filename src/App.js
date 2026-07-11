@@ -64,6 +64,14 @@ export default function App() {
   // ── Fix Persistencia + Seguridad de Navegación ──
   const _lastUserKey          = useRef(null);   // último userKey visto (sync, detecta cambio de usuario de inmediato)
   const _navRestoreAttempted  = useRef(false);  // ¿ya se intentó restaurar para el usuario actual?
+  // BUGFIX: `loading===false` NO garantiza que `projects` ya refleje el
+  // arreglo fresco en el render en curso (carrera real detectada: puede
+  // haber un render intermedio donde loading ya cambió pero projects aún
+  // no). Este ref se marca de forma síncrona, en el mismo bloque de código
+  // donde se llama setProjects(...) dentro de loadData — es una señal
+  // fiable de "el fetch de datos ya corrió de verdad", sin depender de
+  // suposiciones sobre en qué commit exacto aparece cada state.
+  const _projectsEverLoaded   = useRef(false);
   const [navPersistenceReady, setNavPersistenceReady] = useState(false);
   const [navReadyUserKey,     setNavReadyUserKey]     = useState(null); // para qué usuario está "listo" el guardado
   const _lastProjId    = useRef(null);
@@ -98,6 +106,7 @@ export default function App() {
     try {
       const d = await dbLoad(u.workspaceId || u.id);
         setProjects(d.projects || []);
+        _projectsEverLoaded.current = true; // señal síncrona — el fetch ya corrió, sin importar cuándo se refleje el render
         setVehicles(d.vehicles || []);
         setCompanies(d.companies || []);
         setAudit(d.audit || []);
@@ -156,6 +165,7 @@ export default function App() {
         Object.keys(localStorage).filter(k => k.startsWith('licitapro_nav_')).forEach(k => localStorage.removeItem(k));
         _lastUserKey.current = null;
         _navRestoreAttempted.current = false;
+        _projectsEverLoaded.current = false;
         setNavPersistenceReady(false);
         setNavReadyUserKey(null);
         setLoading(false);
@@ -205,13 +215,25 @@ export default function App() {
       try {
         const saved = JSON.parse(localStorage.getItem('licitapro_nav_' + userKey) || 'null');
         if (saved && saved.ts && (Date.now() - saved.ts) < 1000*60*60*24*7) { // vigencia: 7 días
-          let targetProjId = saved.projId;
-          if (targetProjId && !projects.find(pr => pr.id === targetProjId)) targetProjId = null; // ya no existe
+          if (saved.projId) {
+            // BUGFIX: no concluir todavía que el proyecto "no existe" solo
+            // porque `projects` esté vacío en este render — podría ser que
+            // loadData() no haya alcanzado a reflejarse aquí, aunque
+            // `loading` ya diga false. Se espera a la señal síncrona real
+            // (_projectsEverLoaded) antes de decidir — y, importante, NO se
+            // marca _navRestoreAttempted aquí, así que este efecto se
+            // reintenta solo en el siguiente render cuando `projects`
+            // cambie de verdad.
+            if (!_projectsEverLoaded.current) return;
 
-          if (targetProjId) {
-            setProjId(targetProjId);
-            setProjTab(sanitizeProjectTab(saved.projTab, user));
-            setView('project_detail');
+            const existe = projects.some(pr => pr.id === saved.projId);
+            if (existe) {
+              setProjId(saved.projId);
+              setProjTab(sanitizeProjectTab(saved.projTab, user));
+              setView('project_detail');
+            }
+            // Si no existe (y projects YA está confirmado como cargado de
+            // verdad), se deja el default — correcto, ya no es una carrera.
           } else {
             const targetView = sanitizeView(saved.view, user);
             if (targetView !== 'dashboard') setView(targetView);
