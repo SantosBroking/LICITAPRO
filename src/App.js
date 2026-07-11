@@ -29,23 +29,38 @@ const NAV_ITEMS = [
 // Fix Persistencia + Seguridad de Navegación — calcula una navegación EFECTIVA
 // (segura) de forma síncrona, en el mismo render, antes de decidir qué
 // componente construir. Usa los helpers puros de permissions.js, pero conoce
-// `projects` (vive en App.js) — por eso no está en permissions.js.
-// Se reutiliza tanto para decidir qué renderizar como para decidir qué
-// guardar en localStorage (nunca se guarda ni se renderiza el valor crudo).
-function sanitizeNavigation({ view, projId, projTab, projects, user, loading }) {
-  if (loading) return { view, projId, projTab }; // defensivo — en la práctica inalcanzable, ver nota en el render
+// `projects`/`projectsReady` (viven en App.js) — por eso no está en
+// permissions.js. Se reutiliza tanto para decidir qué renderizar como para
+// decidir qué guardar en localStorage (nunca se guarda ni se renderiza el
+// valor crudo).
+//
+// `projectsReady` distingue "todavía no sabemos si projects está completo"
+// de "ya sabemos, y ese proyecto no existe". Mientras no lo sepamos con
+// certeza, `pending:true` le indica al render que muestre un estado de
+// espera seguro — nunca "proyecto no encontrado" en falso, y nunca se debe
+// guardar/sincronizar esto como si fuera la navegación final.
+function sanitizeNavigation({ view, projId, projTab, projects, projectsReady, user, loading }) {
+  if (loading) return { view, projId, projTab, pending: true };
 
   let safeView = sanitizeView(view, user);
 
   if (safeView === 'project_detail') {
-    const proyectoValido = projId && projects.some(p => p.id === projId);
-    if (!proyectoValido) safeView = 'projects'; // proyecto inexistente o sin id -> lista, no dashboard
+    if (!projId) {
+      safeView = 'projects'; // sin projId no hay nada que esperar, cae directo
+    } else if (!projectsReady) {
+      // Hay un projId real, pero todavía no sabemos con certeza si projects
+      // ya está completo — no se concluye nada definitivo todavía.
+      return { view: 'project_detail', projId, projTab: sanitizeProjectTab(projTab, user), pending: true };
+    } else {
+      const existe = projects.some(p => p.id === projId);
+      if (!existe) safeView = 'projects'; // ya se sabe con certeza: no existe
+    }
   }
 
   const safeProjId  = safeView === 'project_detail' ? projId : null;
   const safeProjTab = safeView === 'project_detail' ? sanitizeProjectTab(projTab, user) : projTab;
 
-  return { view: safeView, projId: safeProjId, projTab: safeProjTab };
+  return { view: safeView, projId: safeProjId, projTab: safeProjTab, pending: false };
 }
 
 export default function App() {
@@ -64,14 +79,13 @@ export default function App() {
   // ── Fix Persistencia + Seguridad de Navegación ──
   const _lastUserKey          = useRef(null);   // último userKey visto (sync, detecta cambio de usuario de inmediato)
   const _navRestoreAttempted  = useRef(false);  // ¿ya se intentó restaurar para el usuario actual?
-  // BUGFIX: `loading===false` NO garantiza que `projects` ya refleje el
-  // arreglo fresco en el render en curso (carrera real detectada: puede
-  // haber un render intermedio donde loading ya cambió pero projects aún
-  // no). Este ref se marca de forma síncrona, en el mismo bloque de código
-  // donde se llama setProjects(...) dentro de loadData — es una señal
-  // fiable de "el fetch de datos ya corrió de verdad", sin depender de
-  // suposiciones sobre en qué commit exacto aparece cada state.
-  const _projectsEverLoaded   = useRef(false);
+  // `projectsReady` es STATE, no ref: un ref se actualiza de inmediato y
+  // podría "adelantarse" — quedar en true mientras el render en curso
+  // todavía cierra sobre un `projects` viejo/vacío, repitiendo el mismo
+  // problema. Como state, React garantiza que cualquier render que vea
+  // `projectsReady===true` también refleja el `projects` correspondiente
+  // en ese mismo commit — ambos se actualizan juntos, nunca uno sin el otro.
+  const [projectsReady, setProjectsReady] = useState(false);
   const [navPersistenceReady, setNavPersistenceReady] = useState(false);
   const [navReadyUserKey,     setNavReadyUserKey]     = useState(null); // para qué usuario está "listo" el guardado
   const _lastProjId    = useRef(null);
@@ -103,10 +117,11 @@ export default function App() {
   window.__reloadData = reloadData;
 
   const loadData = useCallback(async (u) => {
+    setProjectsReady(false); // antes de cargar para esta sesión — mientras esto sea false, nunca se restaura ni se guarda navegación de proyecto
     try {
       const d = await dbLoad(u.workspaceId || u.id);
         setProjects(d.projects || []);
-        _projectsEverLoaded.current = true; // señal síncrona — el fetch ya corrió, sin importar cuándo se refleje el render
+        setProjectsReady(true); // se sabe con certeza: cargó (aunque venga vacío, projectsReady=true + projects=[] significa "sí cargó y no hay proyectos")
         setVehicles(d.vehicles || []);
         setCompanies(d.companies || []);
         setAudit(d.audit || []);
@@ -165,7 +180,7 @@ export default function App() {
         Object.keys(localStorage).filter(k => k.startsWith('licitapro_nav_')).forEach(k => localStorage.removeItem(k));
         _lastUserKey.current = null;
         _navRestoreAttempted.current = false;
-        _projectsEverLoaded.current = false;
+        setProjectsReady(false);
         setNavPersistenceReady(false);
         setNavReadyUserKey(null);
         setLoading(false);
@@ -203,11 +218,19 @@ export default function App() {
       _navRestoreAttempted.current = false;
       setNavPersistenceReady(false);
       setNavReadyUserKey(null);
+      setProjectsReady(false); // no heredar la señal de carga de otro usuario
     }
 
     if (_navRestoreAttempted.current) return;
     if (loading) return;
     if (!userKey) { _navRestoreAttempted.current = true; setNavPersistenceReady(true); setNavReadyUserKey(null); return; }
+    // Se espera SIEMPRE a projectsReady antes de dar la restauración por
+    // terminada — no solo cuando hay un projId guardado. Esto mantiene la
+    // regla simple y consistente con el efecto de guardado (Sección de
+    // abajo), que también exige projectsReady===true. No se marca
+    // _navRestoreAttempted mientras esto sea false — se reintenta solo en
+    // el siguiente render, cuando projectsReady pase a true de verdad.
+    if (!projectsReady) return;
 
     const huboDeepLink = !!(_urlParams.get('view') || _urlParams.get('project'));
 
@@ -216,24 +239,16 @@ export default function App() {
         const saved = JSON.parse(localStorage.getItem('licitapro_nav_' + userKey) || 'null');
         if (saved && saved.ts && (Date.now() - saved.ts) < 1000*60*60*24*7) { // vigencia: 7 días
           if (saved.projId) {
-            // BUGFIX: no concluir todavía que el proyecto "no existe" solo
-            // porque `projects` esté vacío en este render — podría ser que
-            // loadData() no haya alcanzado a reflejarse aquí, aunque
-            // `loading` ya diga false. Se espera a la señal síncrona real
-            // (_projectsEverLoaded) antes de decidir — y, importante, NO se
-            // marca _navRestoreAttempted aquí, así que este efecto se
-            // reintenta solo en el siguiente render cuando `projects`
-            // cambie de verdad.
-            if (!_projectsEverLoaded.current) return;
-
+            // projectsReady ya es true aquí (chequeado arriba) — projects
+            // es, con certeza, el arreglo definitivo de esta sesión.
             const existe = projects.some(pr => pr.id === saved.projId);
             if (existe) {
               setProjId(saved.projId);
               setProjTab(sanitizeProjectTab(saved.projTab, user));
               setView('project_detail');
             }
-            // Si no existe (y projects YA está confirmado como cargado de
-            // verdad), se deja el default — correcto, ya no es una carrera.
+            // Si no existe, se deja el default (dashboard) — correcto,
+            // ya se confirmó con projects realmente cargado.
           } else {
             const targetView = sanitizeView(saved.view, user);
             if (targetView !== 'dashboard') setView(targetView);
@@ -249,7 +264,7 @@ export default function App() {
     _navRestoreAttempted.current = true;
     setNavPersistenceReady(true);
     setNavReadyUserKey(userKey);
-  }, [loading, user, projects]);
+  }, [loading, user, projects, projectsReady]);
 
   // ── GUARDIAS — corren siempre, sin importar el origen del cambio.
   // Sincronizan el estado interno; el guard de pre-render (en el cuerpo del
@@ -268,22 +283,26 @@ export default function App() {
 
   // ── GUARDADO — solo navegación SANEADA, nunca cruda, y solo si el
   // "listo" corresponde al usuario actual (protege contra herencia entre
-  // usuarios distintos en la misma pestaña sin recargar). ──
+  // usuarios distintos en la misma pestaña sin recargar). También exige
+  // projectsReady===true — nunca se guarda mientras no se sepa con certeza
+  // el estado real de projects (evita guardar 'projects'/null como
+  // resultado de un estado temporal de carga). ──
   useEffect(() => {
     const userKey = user?.id || user?.email || null;
     if (!navPersistenceReady) return;
     if (!userKey) return;
     if (userKey !== navReadyUserKey) return;
+    if (!projectsReady) return;
 
     const { view: safeView, projId: safeProjId, projTab: safeProjTab } =
-      sanitizeNavigation({ view, projId, projTab, projects, user, loading });
+      sanitizeNavigation({ view, projId, projTab, projects, projectsReady, user, loading });
 
     try {
       localStorage.setItem('licitapro_nav_' + userKey, JSON.stringify({
         view: safeView, projId: safeProjId, projTab: safeProjTab, ts: Date.now()
       }));
     } catch(e) {}
-  }, [view, projId, projTab, user, navPersistenceReady, navReadyUserKey, projects, loading]);
+  }, [view, projId, projTab, user, navPersistenceReady, navReadyUserKey, projects, loading, projectsReady]);
 
   const log = useCallback((u, action, entity, entityId, details='') => {
     const entry = { id:uid('log'), timestamp:NOW(), userId:u?.id||'local', userName:u?.email||'Usuario', action, entity, entityId, details };
@@ -396,8 +415,16 @@ export default function App() {
   // Se calcula de forma síncrona, en este mismo render, ANTES de decidir qué
   // construir — por eso nunca existe un frame donde se renderice una vista
   // prohibida: el contenido nunca llega a construirse con el valor crudo.
-  const { view: effectiveView, projId: effectiveProjId, projTab: effectiveProjTab } =
-    sanitizeNavigation({ view, projId, projTab, projects, user, loading });
+  const { view: effectiveView, projId: effectiveProjId, projTab: effectiveProjTab, pending } =
+    sanitizeNavigation({ view, projId, projTab, projects, projectsReady, user, loading });
+
+  // `pending`: hay un projId real esperando a confirmarse contra `projects`,
+  // pero `projectsReady` todavía no lo garantiza. Se muestra un estado de
+  // espera seguro — nunca "Proyecto no encontrado" en falso, y content
+  // nunca llega a construirse con un proyecto potencialmente indefinido.
+  if (pending) {
+    return h('div', { style:{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--t2)', fontSize:13 } }, 'Cargando LicitaPro…');
+  }
 
   const currentProject = projects.find(p=>p.id===effectiveProjId);
   const projDetailView = currentProject
