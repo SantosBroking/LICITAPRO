@@ -3,6 +3,7 @@ import { h, useState, useEffect, useRef, useCallback } from './lib/core.js';
 import { DEFAULT_CONFIG } from './lib/constants.js';
 import { sb, authSb, signOut, buildAppUser, WORKSPACE_ID, dbLoad, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveAuditLog, saveProjectFinancials } from './lib/supabase.js';
 import { calcCotizacion } from './lib/calc.js'; // Fase 0C — solo se USA, calc.js no se modifica
+import { getPermissions } from './lib/permissions.js'; // Fase 1C — permisos centralizados
 import { uid, NOW } from './lib/utils.js';
 import { sendMonthlyReminders, shouldSendMonthlyReminder, currentMonthKey } from './lib/email_reminders.js';
 
@@ -49,7 +50,7 @@ export default function App() {
   // organización/empresa (Fase 1). Ver nota en supabase.js.
   const getUID = () => user?.workspaceId || WORKSPACE_ID;
   window._lpGetUID = getUID;
-  const isAdmin = user?.role === 'admin' || user?.role === 'jefe';
+  const isAdmin = getPermissions(user).isAdmin;
   const userName = user?.name || user?.email?.split('@')[0] || 'Usuario';
 
   const reloadData = async () => {

@@ -6,6 +6,8 @@ import { h, useState, useMemo, useCallback, useRef, useEffect } from '../lib/cor
 import { STATUSES, FINAL_STATUS, KANBAN_COLS, TIPOS_PROCEDIMIENTO, DEPENDENCIAS_COMUNES, TIPOS_PRODUCTO } from '../lib/constants.js';
 import { fmt, daysUntil, alertLevel, TODAY, NOW, uid } from '../lib/utils.js';
 import { Badge, AlertChip, Metric, Inp, EmptyState, ConfirmAction, NumInput, DeleteConfirmModal } from '../ui/primitives.js';
+import { getPermissions } from '../lib/permissions.js'; // Fase 1C
+import { sb } from '../lib/supabase.js'; // Fase 1C — directorio de usuarios activos
 import CotizacionTab from './Cotizacion.js';
 import BasesPreparacion from './Bases.js';
 import { VehiclesTab, VehicleDetail, BillingTab, DocsTab } from './Vehicles.js';
@@ -124,7 +126,7 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate, user }) {
       const headerRow = h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b3)' } },
         ['PROYECTO','DEPENDENCIA','EMPRESA','MONTO','ESTADO','FALLO',''].map(hd=>h('th',{key:hd,style:{padding:'10px 8px',color:'var(--t3)',fontSize:11,fontWeight:600,letterSpacing:'.4px',textAlign:'left',whiteSpace:'nowrap',borderBottom:'1px solid var(--b1)'}},hd))
       ));
-      const esJefe = user?.role==='admin' || user?.role==='jefe';
+      const esJefe = getPermissions(user).isAdmin;
       const cambiarEstatus = async (p, nuevoStatus) => {
         if (nuevoStatus === p.status) return;
         const stAnt = STATUSES.find(s=>s.id===p.status);
@@ -243,6 +245,15 @@ export function ProjectForm({ project, companies, config, onSave, onCancel, user
   const [p, sP] = useState(project || { id:uid('proj'), name:'', dependencia:'', nivelGobierno:'', municipio:'', company:'', numLicitacion:'', status:'prospecto', tipoProcedimiento:'', productType:'Patrullas y vehículos', responsable:'', montoEstimado:0, probability:50, description:'', observaciones:'', fechaPublicacion:'', fechaAclaraciones:'', fechaPropuesta:'', fechaFallo:'', fechaContrato:'', clienteEmpresaId:'', clienteRfc:'', clienteDomicilio:'', clienteCorreo:'', clienteTelefono:'', notes:[], activity:[], preguntas:[], docs:[], preparation:{}, cotizacion:{} });
   const set = (k,v) => sP(prev=>({...prev,[k]:v}));
   const [basesMsg, setBasesMsg] = useState('');
+  // ── Fase 1C: directorio de usuarios activos (user_profiles), reemplaza config.equipo ──
+  const [usuariosActivos, setUsuariosActivos] = useState([]);
+  useEffect(() => {
+    let cancel = false;
+    sb.from('user_profiles').select('name,email').eq('active', true).then(({ data }) => {
+      if (!cancel && data) setUsuariosActivos(data);
+    });
+    return () => { cancel = true; };
+  }, []);
   // ── Cliente fiscal: reusar empresas guardadas (config.proveedores, compartido con OC) ──
   const empresasGuardadas = (config && config.proveedores) || [];
   const [csfMsg, setCsfMsg] = useState('');
@@ -319,8 +330,7 @@ export function ProjectForm({ project, companies, config, onSave, onCancel, user
     const respNuevo = p.responsable || '';
     let avisar = false;
     if (respNuevo && respNuevo !== respAnterior) {
-      const equipo = (config && config.equipo) || [];
-      const emp = equipo.find(e => e.name === respNuevo);
+      const emp = usuariosActivos.find(e => e.name === respNuevo);
       if (emp && emp.email) {
         avisar = confirm('¿Enviar correo a '+respNuevo+' avisándole que es responsable de este proyecto?');
         if (avisar) {
@@ -364,10 +374,12 @@ export function ProjectForm({ project, companies, config, onSave, onCancel, user
         h(Inp, { label:'Empresa licitante', value:p.company, onChange:v=>set('company',v), options:companies.map(c=>c.name) }),
         h(Inp, { label:'Núm. de licitación', value:p.numLicitacion, onChange:v=>set('numLicitacion',v), placeholder:'LA-019GYN999-E1-2025' }),
         (() => {
-          const equipo = (config && config.equipo) || [];
-          if (equipo.length === 0) return h(Inp, { label:'Responsable', value:p.responsable, onChange:v=>set('responsable',v), placeholder:'Da de alta tu equipo en Configuración' });
-          // Desplegable con los empleados + opción "Sin asignar"
-          const opciones = equipo.map(e=>e.name);
+          if (usuariosActivos.length === 0) return h(Inp, { label:'Responsable', value:p.responsable, onChange:v=>set('responsable',v), placeholder:'Sin usuarios activos disponibles' });
+          // Desplegable con los usuarios activos + valor legado si el responsable
+          // actual no está en la lista (no se pierde, no se normaliza, no se
+          // hace fuzzy matching — se conserva tal cual, Fase 1 Revisión 4).
+          const opciones = usuariosActivos.map(u=>u.name);
+          if (p.responsable && !opciones.includes(p.responsable)) opciones.push(p.responsable);
           return h(Inp, { label:'Responsable', value:p.responsable||'', onChange:v=>set('responsable',v), options:opciones });
         })(),
         h(Inp, { label:'Descripción', value:p.description, onChange:v=>set('description',v), textarea:true }),
@@ -435,10 +447,19 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
   const [selVehicle, setSelVehicle] = useState(null);
   const tab    = activeTab || 'info';
   const setTab = useCallback(t=>{ if(setActiveTab)setActiveTab(t); },[setActiveTab]);
+  // ── Fase 1C: directorio de usuarios activos (user_profiles), reemplaza config.equipo ──
+  const [usuariosActivosDetalle, setUsuariosActivosDetalle] = useState([]);
+  useEffect(() => {
+    let cancel = false;
+    sb.from('user_profiles').select('name,email').eq('active', true).then(({ data }) => {
+      if (!cancel && data) setUsuariosActivosDetalle(data);
+    });
+    return () => { cancel = true; };
+  }, []);
   const company = companies.find(c=>c.name===project.company);
   // Fase 0C: solo admin ve costos/utilidad/márgenes (pestaña Cotización) y
   // puede borrar proyectos definitivamente.
-  const isAdmin = user?.role === 'admin' || user?.role === 'jefe';
+  const isAdmin = getPermissions(user).isAdmin;
   const updProject = useCallback(updated=>onUpdate(updated),[onUpdate]);
   const cotRef = useRef(project.cotizacion||{});
   cotRef.current = project.cotizacion || {};
@@ -658,7 +679,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
     tab==='docs' && h('div', null,
       // Órdenes de Compra generadas
       (project.ordenesCompra||[]).length > 0 && (() => {
-        const esJefeDetalle = user?.role==='admin' || user?.role==='jefe';
+        const esJefeDetalle = getPermissions(user).isAdmin;
         const ocAprobada = oc => (project.firmas||[]).some(f => f.ocId===oc.id && (f.estatus==='en_firma' || f.estatus==='en_visto' || f.estatus==='completado'));
         const reimprimir = oc => {
           // Los empleados solo pueden imprimir OC ya aprobadas por el jefe
@@ -675,7 +696,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
         };
         const eliminar = oc => { if(confirm('¿Eliminar OC '+oc.folio+'?')) updProject({...project,ordenesCompra:(project.ordenesCompra||[]).filter(o=>o.id!==oc.id)}); };
         const enFlujo = oc => (project.firmas||[]).find(f => f.ocId===oc.id && f.estatus!=='completado');
-        const equipo = (config && config.equipo) || [];
+        const equipo = usuariosActivosDetalle;
         const enviarAprobacion = async (oc) => {
           // Elegir responsable que firmará (de la lista de equipo o manual)
           let respNombre = '', respEmail = '';
@@ -1089,7 +1110,7 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
     };
     const ocs = [...(project.ordenesCompra||[]).filter(o=>o.id!==folio), nuevaOC];
     onUpdate({ ...project, ocProveedor: prov, ordenesCompra: ocs, ocCondiciones: conds });
-    const esJefe = user?.role==='admin' || user?.role==='jefe';
+    const esJefe = getPermissions(user).isAdmin;
     if (esJefe) {
       // El jefe puede imprimir directo
       printOrdenCompra({ project: proyConProv, partidas: partidasSel, condiciones: conds, folio, companyObj: companies.find(c=>c.name===project.company) });

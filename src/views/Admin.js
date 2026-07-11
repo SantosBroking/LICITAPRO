@@ -1,10 +1,11 @@
 // Admin.js — Reportes, Configuración y Bitácora
-import { h, useState, useMemo } from '../lib/core.js';
+import { h, useState, useMemo, useEffect } from '../lib/core.js';
 import { STATUSES, DEFAULT_CONFIG } from '../lib/constants.js';
 import { toExcel, shProjects, shVehicles, shFacturas, shPagos, shEntregas, shEmpresas, shAlertas, shAuditoria, shSumEjecutivo } from '../lib/excel.js';
 import { fmt, storageMB, TODAY, uid } from '../lib/utils.js';
 import { uploadToStorage, base64ToBlob, isBase64, sb } from '../lib/supabase.js';
 import { Inp, Metric } from '../ui/primitives.js';
+import { getPermissions } from '../lib/permissions.js'; // Fase 1C
 
 export function Reports({ projects, vehicles, companies, audit }) {
   const [status, setStatus]   = useState('all');
@@ -183,18 +184,58 @@ export function Settings({ config, user, onSave }) {
   const [newPType, setNewPType]   = useState('');
   const set = (k,v) => setCfg(p=>({...p,[k]:v}));
   const doSave = async () => { setSaving(true); setSaved(false); try{ await onSave(cfg); setSaved(true); setTimeout(()=>setSaved(false),2000); }catch(e){alert('Error: '+e.message);} setSaving(false); };
-  // ── Gestión de equipo ──
-  const equipo = cfg.equipo || [];
-  const [nuevoEmp, setNuevoEmp] = useState({ name:'', email:'', role:'empleado' });
-  const addEmpleado = () => {
-    const email = (nuevoEmp.email||'').trim().toLowerCase();
-    if (!nuevoEmp.name.trim() || !email) { alert('Pon nombre y correo del empleado.'); return; }
-    if (equipo.some(e => (e.email||'').toLowerCase() === email)) { alert('Ya existe un empleado con ese correo.'); return; }
-    set('equipo', [...equipo, { id:'emp-'+Date.now(), name:nuevoEmp.name.trim(), email, role:nuevoEmp.role, creado:new Date().toISOString().slice(0,10) }]);
-    setNuevoEmp({ name:'', email:'', role:'empleado' });
+  // ── Fase 1C: Gestión real de usuarios (user_profiles vía api/admin-users.js) ──
+  // config.equipo YA NO se usa aquí — queda inerte en los datos, sin borrarse,
+  // por si hace falta consultarlo históricamente. El panel de abajo lee/escribe
+  // user_profiles de verdad, no ese JSON suelto.
+  const [usuarios, setUsuarios] = useState(null); // null = aún no cargado
+  const [usuariosLoading, setUsuariosLoading] = useState(false);
+  const [usuariosError, setUsuariosError] = useState('');
+
+  const llamarAdminUsers = async (payload) => {
+    const { data: { session } } = await sb.auth.getSession();
+    const token = session?.access_token;
+    if (!token) throw new Error('Sesión no válida. Vuelve a iniciar sesión.');
+    const r = await fetch('/api/admin-users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    });
+    const result = await r.json().catch(() => ({}));
+    return { httpOk: r.ok, status: r.status, ...result };
   };
-  const rmEmpleado = (id) => { if(confirm('¿Quitar a este empleado del equipo? Ya no podrá entrar.')) set('equipo', equipo.filter(e=>e.id!==id)); };
-  const cambiarRol = (id, role) => set('equipo', equipo.map(e=>e.id===id?{...e,role}:e));
+
+  const cargarUsuarios = async () => {
+    setUsuariosLoading(true); setUsuariosError('');
+    try {
+      const result = await llamarAdminUsers({ action: 'list' });
+      if (!result.httpOk || !result.ok) throw new Error(result.error || 'No se pudo cargar la lista de usuarios.');
+      setUsuarios(result.data);
+    } catch(e) { setUsuariosError(e.message); }
+    setUsuariosLoading(false);
+  };
+
+  useEffect(() => { if (getPermissions(user).isAdmin) cargarUsuarios(); }, []);
+
+  const actualizarUsuario = async (targetId, cambios, confirmSelfAction) => {
+    try {
+      const result = await llamarAdminUsers({ action: 'update', targetId, ...cambios, confirmSelfAction });
+      if (!result.httpOk || !result.ok) {
+        if (result.status === 409 && !confirmSelfAction && (result.error || '').includes('Confirma explícitamente')) {
+          if (confirm(result.error + '\n\n¿Deseas continuar de todos modos?')) {
+            return actualizarUsuario(targetId, cambios, true);
+          }
+          return;
+        }
+        throw new Error(result.error || 'No se pudo actualizar el usuario.');
+      }
+      await cargarUsuarios();
+    } catch(e) { alert('Error: ' + e.message); }
+  };
+
+  const toggleActivoUsuario = (u) => actualizarUsuario(u.id, { active: !u.active });
+  const cambiarRolUsuario   = (u, nuevoRol) => actualizarUsuario(u.id, { role: nuevoRol });
+
   const addStatus = () => { if(newStatus.trim()){set('customStatuses',[...(cfg.customStatuses||[]),newStatus.trim()]);setNewStatus('');} };
   const rmStatus  = i  => set('customStatuses',(cfg.customStatuses||[]).filter((_,j)=>j!==i));
   const addPType  = () => { if(newPType.trim()){set('customProductTypes',[...(cfg.customProductTypes||[]),newPType.trim()]);setNewPType('');} };
@@ -355,34 +396,28 @@ export function Settings({ config, user, onSave }) {
       ),
       ),
       ),
-      // ── Equipo (solo admin/jefe) ──
-      (user?.role==='admin' || user?.role==='jefe') && h('div', { className:'card', style:{ marginBottom:16, borderLeft:'3px solid #3B6CF4' } },
-        h('div', { style:{ fontSize:14, fontWeight:600, marginBottom:4 } }, '👥 Equipo'),
-        h('div', { style:{ fontSize:12, color:'var(--t2)', marginBottom:16 } }, 'Da de alta a tus empleados. El rol "Jefe" puede aprobar documentos; "Empleado" solo puede crear y mandar a aprobación.'),
-        // Lista actual
-        equipo.length>0 && h('div', { style:{ marginBottom:16 } },
-          equipo.map(emp => h('div', { key:emp.id, style:{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, padding:'10px 0', borderBottom:'.5px solid var(--b3)' } },
+      // ── Usuarios (Fase 1C — solo admin, vía api/admin-users.js) ──
+      getPermissions(user).isAdmin && h('div', { className:'card', style:{ marginBottom:16, borderLeft:'3px solid #3B6CF4' } },
+        h('div', { style:{ fontSize:14, fontWeight:600, marginBottom:4 } }, '👥 Usuarios'),
+        h('div', { style:{ fontSize:12, color:'var(--t2)', marginBottom:16 } }, 'Activa, desactiva o cambia el rol de las cuentas reales. El alta de una cuenta nueva se hace por ahora directo en Supabase (contacta a soporte técnico).'),
+        usuariosError && h('div', { style:{ marginBottom:12, padding:'10px 14px', background:'#FCEBEB', color:'#791F1F', borderRadius:'var(--r)', fontSize:12 } }, usuariosError),
+        usuariosLoading && h('div', { style:{ fontSize:12, color:'var(--t2)' } }, 'Cargando usuarios...'),
+        !usuariosLoading && usuarios && usuarios.length>0 && h('div', { style:{ marginBottom:8 } },
+          usuarios.map(u => h('div', { key:u.id, style:{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, padding:'10px 0', borderBottom:'.5px solid var(--b3)' } },
             h('div', { style:{ minWidth:0 } },
-              h('div', { style:{ fontSize:13, fontWeight:500 } }, emp.name),
-              h('div', { style:{ fontSize:11, color:'var(--t3)' } }, emp.email),
+              h('div', { style:{ fontSize:13, fontWeight:500 } }, u.name, !u.active && h('span', { style:{ fontSize:10, color:'var(--red)', marginLeft:8, fontWeight:400 } }, '· inactivo')),
+              h('div', { style:{ fontSize:11, color:'var(--t3)' } }, u.email),
             ),
             h('div', { style:{ display:'flex', gap:8, alignItems:'center', flexShrink:0 } },
-              h('select', { value:emp.role, onChange:e=>cambiarRol(emp.id, e.target.value), style:{ fontSize:12, padding:'4px 8px', borderRadius:6, border:'1px solid var(--b2)', background:'var(--bg1)' } },
+              h('select', { value:u.role, onChange:e=>cambiarRolUsuario(u, e.target.value), style:{ fontSize:12, padding:'4px 8px', borderRadius:6, border:'1px solid var(--b2)', background:'var(--bg1)' } },
                 h('option', { value:'empleado' }, 'Empleado'),
-                h('option', { value:'jefe' }, 'Jefe (aprueba)'),
+                h('option', { value:'admin' }, 'Admin'),
               ),
-              h('button', { onClick:()=>rmEmpleado(emp.id), style:{ fontSize:11, color:'var(--red)', background:'transparent', border:'none', cursor:'pointer' } }, 'Quitar'),
+              h('button', { onClick:()=>toggleActivoUsuario(u), style:{ fontSize:11, color:u.active?'var(--red)':'#085041', background:'transparent', border:'none', cursor:'pointer' } }, u.active?'Desactivar':'Activar'),
             ),
           )),
         ),
-        // Alta de empleado
-        h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr auto auto', gap:8, alignItems:'flex-end' } },
-          h(Inp, { label:'Nombre', value:nuevoEmp.name, onChange:v=>setNuevoEmp(p=>({...p,name:v})), placeholder:'Eduardo Pérez' }),
-          h(Inp, { label:'Correo', value:nuevoEmp.email, onChange:v=>setNuevoEmp(p=>({...p,email:v})), placeholder:'eduardo@brokingroup.com' }),
-          h(Inp, { label:'Rol', value:nuevoEmp.role, onChange:v=>setNuevoEmp(p=>({...p,role:v})), options:['empleado','jefe'] }),
-          h('button', { onClick:addEmpleado, style:{ fontSize:13, padding:'9px 14px', background:'var(--t1)', color:'#fff', border:'none', borderRadius:'var(--r)', cursor:'pointer', whiteSpace:'nowrap' } }, '+ Agregar'),
-        ),
-        h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:10, padding:'8px 10px', background:'var(--bg2)', borderRadius:8 } }, 'Nota: por ahora, el empleado entra con el correo que registres aquí. La contraseña se la defines tú aparte. Después haremos que reciban invitación por correo.'),
+        !usuariosLoading && usuarios && usuarios.length===0 && h('div', { style:{ fontSize:12, color:'var(--t2)' } }, 'Sin usuarios.'),
       ),
       h('div', { className:'card' },
         h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:10 } }, 'Dependencias personalizadas'),

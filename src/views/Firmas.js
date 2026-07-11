@@ -2,6 +2,7 @@
 import { h, useState, useRef } from '../lib/core.js';
 import { EmptyState } from '../ui/primitives.js';
 import { TODAY } from '../lib/utils.js';
+import { getPermissions } from '../lib/permissions.js'; // Fase 1C
 import { uploadFileToStorage, abrirArchivo } from '../lib/supabase.js';
 import { ESTADO_INFO, aprobar, rechazar, reenviar, subirFirmadoDoc, vistoFinal, devolver,
          avisarFirma, avisarRechazo, avisarVistoFinal, avisarAprobacion } from '../lib/firmas.js';
@@ -14,7 +15,7 @@ export default function FirmasView({ projects, companies, user, onUpdateProject,
   const [genPdfId, setGenPdfId] = useState(null);
   const fileRefs = useRef({});
 
-  const esJefe = user?.role === 'admin' || user?.role === 'jefe';
+  const esJefe = getPermissions(user).isAdmin;
   const miEmail = (user?.email||'').toLowerCase();
   const miNombre = user?.name || user?.email || 'Usuario';
   const jefeEmail = 'santiago@brokingroup.com'; // aprobador único
