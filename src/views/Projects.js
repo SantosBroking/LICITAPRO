@@ -6,7 +6,7 @@ import { h, useState, useMemo, useCallback, useRef, useEffect } from '../lib/cor
 import { STATUSES, FINAL_STATUS, KANBAN_COLS, TIPOS_PROCEDIMIENTO, DEPENDENCIAS_COMUNES, TIPOS_PRODUCTO } from '../lib/constants.js';
 import { fmt, daysUntil, alertLevel, TODAY, NOW, uid } from '../lib/utils.js';
 import { Badge, AlertChip, Metric, Inp, EmptyState, ConfirmAction, NumInput, DeleteConfirmModal } from '../ui/primitives.js';
-import { getPermissions } from '../lib/permissions.js'; // Fase 1C
+import { getPermissions, canProjectTab } from '../lib/permissions.js'; // Fase 1C + fix navegación
 import { sb } from '../lib/supabase.js'; // Fase 1C — directorio de usuarios activos
 import CotizacionTab from './Cotizacion.js';
 import BasesPreparacion from './Bases.js';
@@ -577,11 +577,11 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
       h(Metric, { label:'Vehículos', value:pVehicles.length }),
       h(Metric, { label:'Responsable', value:project.responsable||'—' }),
     ),
-    // Tabs — Fase 0C: la pestaña Cotización solo se muestra a admin (Opción A,
-    // costos/utilidad/márgenes quedan fuera del alcance de empleados hasta la
-    // vista reducida de Fase 2). No se toca Cotizacion.js.
+    // Tabs — filtradas con canProjectTab(t.id, user) desde permissions.js.
+    // La lista de pestañas admin-only (cotizacion, facturacion, flujo) vive
+    // ahí, no aquí — evita duplicar esa lista en dos archivos.
     h('div', { style:{ display:'flex', gap:0, marginBottom:20, borderBottom:'1px solid var(--b1)', overflowX:'auto', flexWrap:'nowrap', WebkitOverflowScrolling:'touch', scrollbarWidth:'none', msOverflowStyle:'none' } },
-      PROJ_TABS.filter(t=>t.id!=='cotizacion'||isAdmin).map(t=>h('button',{key:t.id,className:'tab'+(tab===t.id?' active':''),onClick:()=>setTab(t.id),style:{flexShrink:0,whiteSpace:'nowrap'}},t.l))
+      PROJ_TABS.filter(t=>canProjectTab(t.id, user)).map(t=>h('button',{key:t.id,className:'tab'+(tab===t.id?' active':''),onClick:()=>setTab(t.id),style:{flexShrink:0,whiteSpace:'nowrap'}},t.l))
     ),
     // Info
     tab==='info' && h('div', null,

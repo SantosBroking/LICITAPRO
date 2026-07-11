@@ -3,7 +3,7 @@ import { h, useState, useEffect, useRef, useCallback } from './lib/core.js';
 import { DEFAULT_CONFIG } from './lib/constants.js';
 import { sb, authSb, signOut, buildAppUser, WORKSPACE_ID, dbLoad, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveAuditLog, saveProjectFinancials } from './lib/supabase.js';
 import { calcCotizacion } from './lib/calc.js'; // Fase 0C — solo se USA, calc.js no se modifica
-import { getPermissions } from './lib/permissions.js'; // Fase 1C — permisos centralizados
+import { getPermissions, canView, sanitizeView, canProjectTab, sanitizeProjectTab } from './lib/permissions.js'; // Fase 1C — permisos centralizados
 import { uid, NOW } from './lib/utils.js';
 import { sendMonthlyReminders, shouldSendMonthlyReminder, currentMonthKey } from './lib/email_reminders.js';
 
@@ -26,6 +26,28 @@ const NAV_ITEMS = [
   { id:'audit',     label:'Bitácora',  icon:'◷' },
 ];
 
+// Fix Persistencia + Seguridad de Navegación — calcula una navegación EFECTIVA
+// (segura) de forma síncrona, en el mismo render, antes de decidir qué
+// componente construir. Usa los helpers puros de permissions.js, pero conoce
+// `projects` (vive en App.js) — por eso no está en permissions.js.
+// Se reutiliza tanto para decidir qué renderizar como para decidir qué
+// guardar en localStorage (nunca se guarda ni se renderiza el valor crudo).
+function sanitizeNavigation({ view, projId, projTab, projects, user, loading }) {
+  if (loading) return { view, projId, projTab }; // defensivo — en la práctica inalcanzable, ver nota en el render
+
+  let safeView = sanitizeView(view, user);
+
+  if (safeView === 'project_detail') {
+    const proyectoValido = projId && projects.some(p => p.id === projId);
+    if (!proyectoValido) safeView = 'projects'; // proyecto inexistente o sin id -> lista, no dashboard
+  }
+
+  const safeProjId  = safeView === 'project_detail' ? projId : null;
+  const safeProjTab = safeView === 'project_detail' ? sanitizeProjectTab(projTab, user) : projTab;
+
+  return { view: safeView, projId: safeProjId, projTab: safeProjTab };
+}
+
 export default function App() {
   const [user,      setUser]      = useState(null); // null hasta que onAuthStateChange confirme la sesión
   const [loading,   setLoading]   = useState(true);
@@ -39,12 +61,18 @@ export default function App() {
   const [view,      setView]      = useState(_viewInicial);
   const [projId,    setProjId]    = useState(null);
   const [projTab,   setProjTab]   = useState('info');
+  // ── Fix Persistencia + Seguridad de Navegación ──
+  const _lastUserKey          = useRef(null);   // último userKey visto (sync, detecta cambio de usuario de inmediato)
+  const _navRestoreAttempted  = useRef(false);  // ¿ya se intentó restaurar para el usuario actual?
+  const [navPersistenceReady, setNavPersistenceReady] = useState(false);
+  const [navReadyUserKey,     setNavReadyUserKey]     = useState(null); // para qué usuario está "listo" el guardado
   const _lastProjId    = useRef(null);
   const _pending       = useRef(null);
   const _timer         = useRef(null);
   const [authError, setAuthError] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const MOBILE_NAV = NAV_ITEMS.slice(0, 5);
+  const navItemsPermitidos = NAV_ITEMS.filter(item => canView(item.id, user));
+  const MOBILE_NAV = navItemsPermitidos.slice(0, 5); // de la lista YA filtrada, no de NAV_ITEMS crudo
   // Compatibilidad temporal (Fase 0B): todo usuario real sigue leyendo el
   // mismo workspace compartido. Se retira cuando exista el modelo de
   // organización/empresa (Fase 1). Ver nota en supabase.js.
@@ -123,6 +151,13 @@ export default function App() {
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setProjects([]); setVehicles([]); setCompanies([]); setAudit([]);
+        // Fix Persistencia + Seguridad de Navegación — limpiar toda la
+        // navegación guardada y reiniciar el control de persistencia.
+        Object.keys(localStorage).filter(k => k.startsWith('licitapro_nav_')).forEach(k => localStorage.removeItem(k));
+        _lastUserKey.current = null;
+        _navRestoreAttempted.current = false;
+        setNavPersistenceReady(false);
+        setNavReadyUserKey(null);
         setLoading(false);
       }
     });
@@ -147,6 +182,87 @@ export default function App() {
     }
   }, [loading, projects]);
 
+  // ═══ Fix Persistencia + Seguridad de Navegación ═══
+
+  // ── RESTAURACIÓN — una sola vez por usuario ──
+  useEffect(() => {
+    const userKey = user?.id || user?.email || null; // user.id siempre existe (buildAppUser); email es respaldo defensivo, no se usa en la práctica
+
+    if (userKey !== _lastUserKey.current) {
+      _lastUserKey.current = userKey;
+      _navRestoreAttempted.current = false;
+      setNavPersistenceReady(false);
+      setNavReadyUserKey(null);
+    }
+
+    if (_navRestoreAttempted.current) return;
+    if (loading) return;
+    if (!userKey) { _navRestoreAttempted.current = true; setNavPersistenceReady(true); setNavReadyUserKey(null); return; }
+
+    const huboDeepLink = !!(_urlParams.get('view') || _urlParams.get('project'));
+
+    if (!huboDeepLink) {
+      try {
+        const saved = JSON.parse(localStorage.getItem('licitapro_nav_' + userKey) || 'null');
+        if (saved && saved.ts && (Date.now() - saved.ts) < 1000*60*60*24*7) { // vigencia: 7 días
+          let targetProjId = saved.projId;
+          if (targetProjId && !projects.find(pr => pr.id === targetProjId)) targetProjId = null; // ya no existe
+
+          if (targetProjId) {
+            setProjId(targetProjId);
+            setProjTab(sanitizeProjectTab(saved.projTab, user));
+            setView('project_detail');
+          } else {
+            const targetView = sanitizeView(saved.view, user);
+            if (targetView !== 'dashboard') setView(targetView);
+          }
+        }
+      } catch(e) {}
+    }
+    // Si hubo deep-link, no se toca nada aquí — el efecto de deep-link de
+    // arriba ya hizo su trabajo; las guardias de abajo (y el guard de
+    // pre-render en el cuerpo del componente) validan el resultado contra
+    // el rol, sin duplicar esa lógica aquí.
+
+    _navRestoreAttempted.current = true;
+    setNavPersistenceReady(true);
+    setNavReadyUserKey(userKey);
+  }, [loading, user, projects]);
+
+  // ── GUARDIAS — corren siempre, sin importar el origen del cambio.
+  // Sincronizan el estado interno; el guard de pre-render (en el cuerpo del
+  // componente) es la barrera real que evita renderizar algo prohibido. ──
+  useEffect(() => {
+    if (loading) return;
+    const safe = sanitizeView(view, user);
+    if (safe !== view) setView(safe);
+  }, [view, user, loading]);
+
+  useEffect(() => {
+    if (loading) return;
+    const safe = sanitizeProjectTab(projTab, user);
+    if (safe !== projTab) setProjTab(safe);
+  }, [projTab, user, loading]);
+
+  // ── GUARDADO — solo navegación SANEADA, nunca cruda, y solo si el
+  // "listo" corresponde al usuario actual (protege contra herencia entre
+  // usuarios distintos en la misma pestaña sin recargar). ──
+  useEffect(() => {
+    const userKey = user?.id || user?.email || null;
+    if (!navPersistenceReady) return;
+    if (!userKey) return;
+    if (userKey !== navReadyUserKey) return;
+
+    const { view: safeView, projId: safeProjId, projTab: safeProjTab } =
+      sanitizeNavigation({ view, projId, projTab, projects, user, loading });
+
+    try {
+      localStorage.setItem('licitapro_nav_' + userKey, JSON.stringify({
+        view: safeView, projId: safeProjId, projTab: safeProjTab, ts: Date.now()
+      }));
+    } catch(e) {}
+  }, [view, projId, projTab, user, navPersistenceReady, navReadyUserKey, projects, loading]);
+
   const log = useCallback((u, action, entity, entityId, details='') => {
     const entry = { id:uid('log'), timestamp:NOW(), userId:u?.id||'local', userName:u?.email||'Usuario', action, entity, entityId, details };
     setAudit(prev => [entry,...prev].slice(0,500));
@@ -156,7 +272,7 @@ export default function App() {
   const nav = useCallback((dest, id) => {
     if (dest === 'project_detail') {
       if (id !== _lastProjId.current) { setProjTab('info'); _lastProjId.current = id; }
-      setProjId(id); setView('project_detail');
+      setProjId(id); setView('project_detail'); // 'project_detail' permitido para ambos roles; el guard de pre-render valida projId
     } else if (dest === 'project_new') {
       _lastProjId.current = null; setView('project_new');
     } else if (dest === 'save_vehicle') {
@@ -166,10 +282,20 @@ export default function App() {
     } else if (dest === 'update_vehicle') {
       handleSaveVehicle(id);
     } else {
-      setView(dest);
+      setView(canView(dest, user) ? dest : 'dashboard'); // NUEVO: valida antes de setear
       if (dest !== 'project_detail') setProjId(null);
     }
-  }, []);
+    // NOTA (hallazgo, no corregido aquí): handleSaveVehicle/handleDeleteVehicle
+    // están declarados MÁS ABAJO en este archivo (líneas ~340/345) y ellos
+    // mismos son useCallback(..., [user]) — cambian de identidad cuando
+    // cambia el usuario. No se agregan a las dependencias de este nav()
+    // porque, al estar declarados después, haría que useCallback lance
+    // "Cannot access before initialization" (temporal dead zone). Esto ya
+    // era así ANTES de este fix (nav() ya tenía deps:[] y ya cerraba sobre
+    // las instancias originales de esas dos funciones) — no se agrava ni se
+    // corrige en este cambio; queda señalado para una revisión aparte,
+    // fuera del alcance de persistencia/seguridad de navegación.
+  }, [user]);
 
   // Fase 0C — Opción B: si quien guarda es admin y el proyecto tiene cotización
   // capturada, calcula el resultado financiero (calcCotizacion, sin modificar
@@ -244,9 +370,16 @@ export default function App() {
   // de cargar el perfil y los datos en cuanto la sesión se confirma.
   if (!user) return h(AuthScreen, { error: authError });
 
-  const currentProject = projects.find(p=>p.id===projId);
+  // ── Guard de pre-render (Fix Persistencia + Seguridad de Navegación) ──
+  // Se calcula de forma síncrona, en este mismo render, ANTES de decidir qué
+  // construir — por eso nunca existe un frame donde se renderice una vista
+  // prohibida: el contenido nunca llega a construirse con el valor crudo.
+  const { view: effectiveView, projId: effectiveProjId, projTab: effectiveProjTab } =
+    sanitizeNavigation({ view, projId, projTab, projects, user, loading });
+
+  const currentProject = projects.find(p=>p.id===effectiveProjId);
   const projDetailView = currentProject
-    ? h(ProjectDetail, { project:currentProject, vehicles, companies, config, onSaveConfig:handleSaveConfig, onSaveCompany:async c=>{ const ex=companies.find(x=>x.id===c.id||x.rfc===c.rfc); setCompanies(ex?companies.map(x=>(x.id===c.id||x.rfc===c.rfc)?{...x,...c}:x):[...companies,c]); try{ await saveCompany(c, getUID()); log(user, ex?'actualizó':'creó', 'empresa', c.id, c.name); }catch(e){ console.error('Error guardando empresa:', e); } }, onUpdate:upProject, onSave:handleSaveProject, onDelete:handleDeleteProject, onNav:nav, user, logFn:log, activeTab:projTab, setActiveTab:setProjTab })
+    ? h(ProjectDetail, { project:currentProject, vehicles, companies, config, onSaveConfig:handleSaveConfig, onSaveCompany:async c=>{ const ex=companies.find(x=>x.id===c.id||x.rfc===c.rfc); setCompanies(ex?companies.map(x=>(x.id===c.id||x.rfc===c.rfc)?{...x,...c}:x):[...companies,c]); try{ await saveCompany(c, getUID()); log(user, ex?'actualizó':'creó', 'empresa', c.id, c.name); }catch(e){ console.error('Error guardando empresa:', e); } }, onUpdate:upProject, onSave:handleSaveProject, onDelete:handleDeleteProject, onNav:nav, user, logFn:log, activeTab:effectiveProjTab, setActiveTab:setProjTab })
     : h('div', { className:'empty' }, h('h3', null, 'Proyecto no encontrado'), h('button', { onClick:()=>nav('projects') }, '← Volver'));
 
   const content = ({
@@ -260,7 +393,8 @@ export default function App() {
     reports:        h(Reports,       { projects, vehicles, companies, audit }),
     settings:       h(Settings,      { config, user, onSave:handleSaveConfig }),
     audit:          h(AuditLogView,  { audit }),
-  })[view] || h(Dashboard, { projects, vehicles, companies, onNav:nav, onUpdate:upProject });
+  })[effectiveView] || h(Dashboard, { projects, vehicles, companies, onNav:nav, onUpdate:upProject });
+
 
   return h('div', { style:{ display:'flex', minHeight:'100vh', background:'var(--bg3)' } },
 
@@ -272,8 +406,8 @@ export default function App() {
         h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:4, textTransform:'capitalize' } }, new Date().toLocaleDateString('es-MX', { weekday:'long', day:'numeric', month:'long', year:'numeric' })),
       ),
       h('nav', { style:{ flex:1, padding:'10px 8px', overflowY:'auto' } },
-        NAV_ITEMS.map(item => {
-          const active = view===item.id || (item.id==='projects' && view.startsWith('project'));
+        navItemsPermitidos.map(item => {
+          const active = effectiveView===item.id || (item.id==='projects' && effectiveView.startsWith('project'));
           return h('button', { key:item.id, onClick:()=>nav(item.id), className:'nav-item' + (active?' active':'') },
             h('span', { className:'nav-icon' }, item.icon),
             item.label,
@@ -302,8 +436,8 @@ export default function App() {
           h('div', { className:'sidebar-name' }, 'LicitaPro'),
           h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:4, textTransform:'capitalize' } }, new Date().toLocaleDateString('es-MX', { weekday:'long', day:'numeric', month:'long', year:'numeric' })),
         ),
-        NAV_ITEMS.map(item => {
-          const active = view===item.id || (item.id==='projects' && view.startsWith('project'));
+        navItemsPermitidos.map(item => {
+          const active = effectiveView===item.id || (item.id==='projects' && effectiveView.startsWith('project'));
           return h('button', { key:item.id, onClick:()=>{ nav(item.id); setMobileMenuOpen(false); }, className:'nav-item' + (active?' active':''), style:{ marginBottom:2 } },
             h('span', { className:'nav-icon' }, item.icon),
             item.label,
@@ -320,7 +454,7 @@ export default function App() {
     h('div', { className:'mobile-nav' },
       h('div', { className:'mobile-nav-inner' },
         MOBILE_NAV.map(item => {
-          const active = view===item.id || (item.id==='projects' && view.startsWith('project'));
+          const active = effectiveView===item.id || (item.id==='projects' && effectiveView.startsWith('project'));
           return h('button', { key:item.id, onClick:()=>nav(item.id), className:'mobile-nav-btn' + (active?' active':'') },
             h('span', { className:'nav-dot' }, item.icon),
             item.label,
