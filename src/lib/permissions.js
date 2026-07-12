@@ -21,6 +21,15 @@ export function getPermissions(user) {
     operarProyectos: !!role,
     subirDocumentos: !!role,
     usarIA: !!role,
+
+    // ── Fase 2A0: contención visible inmediata (Vehículos + PDF) ──
+    verVehiculosFinancieros: isAdmin,   // columna PRECIO/FACTURAS, Metric, tab Facturación del vehículo
+    verFacturasVehiculo: isAdmin,       // documentos de factura en DocsTab (no listar ni generar referencia)
+    exportVehiculosCompleto: isAdmin,   // Excel con columnas financieras
+    exportVehiculosOperativo: !!role,   // Excel sin columnas financieras — ambos roles
+    generarPDFCliente: isAdmin,         // temporal: se mantiene admin-only hasta validar en producción que
+                                        // printCotizacionCliente ya no revela datos internos (Fase 2B)
+    generarPDFCompleto: isAdmin,        // printResumenInterno
   };
 }
 

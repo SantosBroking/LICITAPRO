@@ -196,6 +196,11 @@ const fmtDate = d => {
 // ══════════════════════════════════════════════════════════════
 // 1. COTIZACIÓN CLIENTE
 // ══════════════════════════════════════════════════════════════
+// Fase 2A0 — IMPORTANTE: este PDF va al cliente externo (gobierno). NUNCA
+// debe incluir margen, utilidad, costos internos, retornos ni fianzas — esos
+// datos viven exclusivamente en printResumenInterno (admin-only por uso).
+// Si en el futuro se agrega una sección nueva aquí, verificar primero que no
+// filtre ninguna cifra de costo/utilidad/margen de MSMS/Surman/Broking.
 export async function printCotizacionCliente({ project, cot, calc, config, companyObj }) {
   // Datos del encabezado: priorizar la empresa del proyecto (si tiene datos), si no usar la config general
   const cfgEmp = config?.empresa || {};
@@ -700,21 +705,15 @@ export function printResumenInterno({ project, cot, calc, companyObj }) {
     <div class="kpi blue"><div class="k-label">Venta total c/IVA</div><div class="k-value" style="color:#3b6cf4">${fmt(calc.ventaTotal)}</div></div>
     <div class="kpi"><div class="k-label">Venta total s/IVA</div><div class="k-value">${fmt(calc.ventaSIVA)}</div></div>
     <div class="kpi"><div class="k-label">Total unidades</div><div class="k-value">${calc.unidades}</div></div>
-    <div class="kpi"><div class="k-label">Costo total c/IVA</div><div class="k-value">${fmt(calc.costoTotalCIVA)}</div></div>
-    <div class="kpi"><div class="k-label">Costo total s/IVA</div><div class="k-value">${fmt(calc.costoTotalSIVA)}</div></div>
   </div>
 </div>
 
-<div class="section">
-  <h2>Utilidad y margen</h2>
-  <div class="kpi-grid">
-    <div class="kpi ${calc.utilBruta>0?'green':'red'}"><div class="k-label">Utilidad bruta s/IVA</div><div class="k-value" style="color:${calc.utilBruta>0?'#1D9E75':'#e24b4a'}">${fmt(calc.utilBruta)}</div></div>
-    <div class="kpi"><div class="k-label">IVA a utilidad</div><div class="k-value">${fmt(calc.ivaAUtilidad)}</div></div>
-    <div class="kpi ${calc.utilNeta>0?'green':'red'}"><div class="k-label">UTILIDAD NETA</div><div class="k-value" style="color:${calc.utilNeta>0?'#1D9E75':'#e24b4a'};font-size:20px">${fmt(calc.utilNeta)}</div></div>
-    <div class="kpi"><div class="k-label">Margen sobre costo (bruto)</div><div class="k-value" style="color:${calc.margen>=.2?'#1D9E75':calc.margen>=.1?'#d97706':'#e24b4a'}">${pctS(calc.margen)}</div></div>
-    <div class="kpi"><div class="k-label">Margen sobre costo (neto)</div><div class="k-value" style="color:${calc.margenNeto>=.2?'#1D9E75':calc.margenNeto>=.1?'#d97706':'#e24b4a'}">${pctS(calc.margenNeto)}</div></div>
-  </div>
-</div>
+<!-- Fase 2A0: la sección "Utilidad y margen" (utilidad bruta/neta, margen
+     bruto/neto sobre costo, costo total c/IVA y s/IVA) se elimina por
+     completo de este PDF a propósito. Este documento está pensado para
+     el cliente externo (gobierno) — nunca debe revelar costos internos,
+     utilidad ni margen de MSMS/Surman/Broking. Esos datos SÍ deben vivir
+     únicamente en printResumenInterno (admin-only por uso), no aquí. -->
 
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
   <div class="section">

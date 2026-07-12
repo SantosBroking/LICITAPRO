@@ -2,6 +2,7 @@
 import { h, useState, useRef } from '../lib/core.js';
 import { analyzeFactura } from '../lib/ai_analyzer.js';
 import { uploadFileToStorage as _uploadFile, uploadImageToStorage, isBase64, downloadFile as dlStorage, abrirArchivo, signedUrl } from '../lib/supabase.js';
+import { getPermissions } from '../lib/permissions.js'; // Fase 2A0 — contención visible
 // Guard: si Storage no está disponible, devuelve null y el código cae a base64
 const uploadFileToStorage = async (path, file) => {
   try { return await _uploadFile(path, file); } catch(e) { console.warn('Storage no disponible:', e); return null; }
@@ -56,12 +57,16 @@ function parseCFDI(xmlText) {
 
 // ── VehiclesTab ────────────────────────────────────────────────
 // Exporta la lista de vehículos a CSV (Excel) con toda su información
-function exportarExcel(vehicles, project) {
+function exportarExcel(vehicles, project, user) {
   const esc = (val) => {
     const s = (val==null?'':String(val));
-    return /[",\n;]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+    return /["\n;]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
   };
-  const cols = [
+  // Fase 2A0 -- el CSV se construye desde columnas permitidas por rol, nunca
+  // desde el objeto completo del vehiculo. Empleado exporta version operativa
+  // (exportVehiculosOperativo); admin exporta con columnas financieras ademas
+  // (exportVehiculosCompleto).
+  const colsOperativas = [
     ['VIN', v=>v.vin],
     ['Marca', v=>v.marca],
     ['Modelo', v=>v.modelo],
@@ -70,13 +75,17 @@ function exportarExcel(vehicles, project) {
     ['Color', v=>v.color],
     ['Núm. motor', v=>v.numMotor],
     ['Núm. inventario', v=>v.numInventario],
-    ['Precio unitario', v=>v.precioUnitario],
-    ['IVA', v=>v.iva],
-    ['Precio total', v=>v.precioTotal],
     ['Estatus entrega', v=>v.statusEntrega],
     ['Estatus documentación', v=>v.statusDocs],
     ['Ubicación', v=>v.ubicacion],
     ['Equipamiento', v=>v.equipamiento],
+    ['Acta firmada', v=>v.actaEntrega?.archivoFirmado?.url?'Sí':'No'],
+    ['Observaciones', v=>v.observaciones],
+  ];
+  const colsFinancieras = [
+    ['Precio unitario', v=>v.precioUnitario],
+    ['IVA', v=>v.iva],
+    ['Precio total', v=>v.precioTotal],
     ['Factura compra (folio)', v=>v.facturaAgencia?.folio],
     ['Factura compra (total)', v=>v.facturaAgencia?.total],
     ['Factura compra (estatus)', v=>v.facturaAgencia?.statusPago],
@@ -86,9 +95,8 @@ function exportarExcel(vehicles, project) {
     ['Factura cliente (folio)', v=>v.facturaGobierno?.folio],
     ['Factura cliente (total)', v=>v.facturaGobierno?.total],
     ['Factura cliente (estatus)', v=>v.facturaGobierno?.statusPago],
-    ['Acta firmada', v=>v.actaEntrega?.archivoFirmado?.url?'Sí':'No'],
-    ['Observaciones', v=>v.observaciones],
   ];
+  const cols = getPermissions(user).verVehiculosFinancieros ? [...colsOperativas, ...colsFinancieras] : colsOperativas;
   const filas = [cols.map(c=>esc(c[0])).join(',')];
   vehicles.forEach(v => filas.push(cols.map(c=>esc(c[1](v))).join(',')));
   const csv = '\uFEFF' + filas.join('\r\n'); // BOM para acentos en Excel
@@ -100,7 +108,7 @@ export function VehiclesTab({ project, vehicles, onSave, onDelete, onNav, user, 
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing]   = useState(null);
   if (showForm || editing)
-    return h(VehicleForm, { vehicle:editing, projectId:project.id,
+    return h(VehicleForm, { vehicle:editing, projectId:project.id, user,
       onSave: v => { onSave(v); if(logFn)logFn(user,editing?'actualizó':'agregó','vehículo',v.id,v.vin||v.marca+' '+v.modelo); setShowForm(false); setEditing(null); },
       onSaveMany: arr => { arr.forEach(v => { onSave(v); if(logFn)logFn(user,'agregó','vehículo',v.id,v.vin||v.marca+' '+v.modelo); }); setShowForm(false); setEditing(null); },
       onCancel: () => { setShowForm(false); setEditing(null); },
@@ -109,7 +117,7 @@ export function VehiclesTab({ project, vehicles, onSave, onDelete, onNav, user, 
     h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14, gap:8, flexWrap:'wrap' } },
       h('div', { style:{ fontSize:14, fontWeight:500 } }, 'Vehículos del proyecto'),
       h('div', { style:{ display:'flex', gap:8 } },
-        vehicles.length>0 && h('button', { onClick:()=>exportarExcel(vehicles, project), style:{ fontSize:13, padding:'8px 14px', background:'var(--bg2)', border:'1px solid var(--b2)', borderRadius:'var(--r)', cursor:'pointer' } }, '⬇ Exportar Excel'),
+        vehicles.length>0 && h('button', { onClick:()=>exportarExcel(vehicles, project, user), style:{ fontSize:13, padding:'8px 14px', background:'var(--bg2)', border:'1px solid var(--b2)', borderRadius:'var(--r)', cursor:'pointer' } }, '⬇ Exportar Excel'),
         h('button', { className:'bp', onClick:()=>setShowForm(true) }, '+ Agregar vehículo'),
       ),
     ),
@@ -119,15 +127,19 @@ export function VehiclesTab({ project, vehicles, onSave, onDelete, onNav, user, 
           h('div', { className:'tbl-scroll', style:{ overflowX:'auto', WebkitOverflowScrolling:'touch' } },
             h('table', { style:{ fontSize:13 } },
               h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b3)' } },
-                ['VIN','MARCA/MODELO','AÑO','PRECIO','ENTREGA','FACTURAS',''].map(hd => h('td', { key:hd, style:{ padding:'8px 6px', color:'var(--t2)', fontSize:11 } }, hd))
+                (getPermissions(user).verVehiculosFinancieros
+                  ? ['VIN','MARCA/MODELO','AÑO','PRECIO','ENTREGA','FACTURAS','']
+                  : ['VIN','MARCA/MODELO','AÑO','ENTREGA','']
+                ).map(hd => h('td', { key:hd, style:{ padding:'8px 6px', color:'var(--t2)', fontSize:11 } }, hd))
               )),
               h('tbody', null, vehicles.map(v => {
                 const fc = (v.facturaAgencia?.folio?1:0)+(v.facturaGobierno?.folio?1:0);
+                const puedeFinanciero = getPermissions(user).verVehiculosFinancieros;
                 return h('tr', { key:v.id, style:{ borderBottom:'.5px solid var(--b3)', cursor:'pointer' }, onClick:()=>onNav('vehicle_detail',v.id) },
                   h('td', { style:{ padding:'10px 6px', fontFamily:'monospace', fontSize:11 } }, v.vin||'—'),
                   h('td', { style:{ padding:'10px 6px', fontWeight:500 } }, v.marca,' ',v.modelo, v.version?' · '+v.version:''),
                   h('td', { style:{ padding:'10px 6px' } }, v.ano||'—'),
-                  h('td', { style:{ padding:'10px 6px', fontWeight:500 } }, fmt(v.precioTotal)),
+                  puedeFinanciero && h('td', { style:{ padding:'10px 6px', fontWeight:500 } }, fmt(v.precioTotal)),
                   h('td', { style:{ padding:'10px 6px' }, onClick:e=>e.stopPropagation() },
                     (() => {
                       const st = v.statusEntrega || 'En agencia/planta';
@@ -141,7 +153,7 @@ export function VehiclesTab({ project, vehicles, onSave, onDelete, onNav, user, 
                       );
                     })()
                   ),
-                  h('td', { style:{ padding:'10px 6px', fontSize:11, color:fc===2?'var(--green)':'var(--amber)' } }, fc+'/2'),
+                  puedeFinanciero && h('td', { style:{ padding:'10px 6px', fontSize:11, color:fc===2?'var(--green)':'var(--amber)' } }, fc+'/2'),
                   h('td', { style:{ padding:'10px 6px' } },
                     h('div', { style:{ display:'flex', gap:6 } },
                       h('button', { onClick:e=>{ e.stopPropagation(); setEditing(v); }, style:{ fontSize:11, padding:'3px 8px' } }, 'Editar'),
@@ -157,7 +169,7 @@ export function VehiclesTab({ project, vehicles, onSave, onDelete, onNav, user, 
 }
 
 // ── VehicleForm ───────────────────────────────────────────────
-export function VehicleForm({ vehicle, projectId, onSave, onSaveMany, onCancel }) {
+export function VehicleForm({ vehicle, projectId, onSave, onSaveMany, onCancel, user }) {
   const [v, sV] = useState(vehicle || { id:uid('VEH'), projectId, marca:'', modelo:'', version:'', ano:'', color:'', vin:'', numMotor:'', numInventario:'', precioUnitario:0, iva:0, precioTotal:0, equipamiento:'', statusDocs:'Pendiente', statusEntrega:'Pendiente', ubicacion:'', observaciones:'', facturaAgencia:{}, facturaIntermedia:{}, facturaEquipo:{}, facturaGobierno:{}, actaEntrega:{} });
   const [lote, setLote] = useState(false);       // modo varios VINs
   const [vinsText, setVinsText] = useState('');   // VINs uno por línea
@@ -280,7 +292,7 @@ export function VehicleForm({ vehicle, projectId, onSave, onSaveMany, onCancel }
         h(Inp, { label:'Ubicación', value:v.ubicacion, onChange:val=>set('ubicacion',val) }),
       ),
       h('div', null,
-        h('div', { className:'card', style:{ marginBottom:16 } },
+        getPermissions(user).verVehiculosFinancieros && h('div', { className:'card', style:{ marginBottom:16 } },
           h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:14 } }, 'Datos económicos'),
           h(Inp, { label:'Precio unitario (sin IVA)', value:v.precioUnitario, onChange:val=>set('precioUnitario',val), type:'number', hint:'El IVA (16%) se calcula automáticamente' }),
           h(Inp, { label:'IVA', value:v.iva, onChange:val=>set('iva',val), type:'number' }),
@@ -376,8 +388,9 @@ export function FacturaCard({ title, subtitle, color, data, onSave }) {
 export function VehicleDetail({ vehicle, project, company, onNav, onUpdate, onDelete, user, logFn }) {
   const [tab, setTab] = useState('info');
   if (!vehicle) return h('div', { className:'empty' }, h('h3', null, 'Vehículo no encontrado'));
+  const puedeFinanciero = getPermissions(user).verVehiculosFinancieros;
   const updFact = (key, fac) => { onUpdate({...vehicle,[key]:fac}); if(logFn)logFn(user,'actualizó factura '+key,'vehículo',vehicle.id,fac.folio||''); };
-  const tabs = [{id:'info',l:'Información'},{id:'facturas',l:'Facturación (2)'},{id:'entrega',l:'Acta entrega'}];
+  const tabs = [{id:'info',l:'Información'}, ...(puedeFinanciero?[{id:'facturas',l:'Facturación (2)'}]:[]), {id:'entrega',l:'Acta entrega'}];
   return h('div', null,
     h('div', { style:{ display:'flex', alignItems:'center', gap:8, marginBottom:6 } },
       h('span', { onClick:()=>onNav('projects'), style:{ fontSize:12, color:'var(--blue)', cursor:'pointer' } }, 'Proyectos'),
@@ -394,7 +407,7 @@ export function VehicleDetail({ vehicle, project, company, onNav, onUpdate, onDe
       h(ConfirmAction, { label:'Eliminar', dangerous:true, onConfirm:()=>{ onDelete(vehicle.id); if(logFn)logFn(user,'eliminó','vehículo',vehicle.id,vehicle.vin||''); onNav('project_detail',project.id); } }),
     ),
     h('div', { className:'grid-4', style:{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:20 } },
-      h(Metric, { label:'Precio total', value:fmt(vehicle.precioTotal), sub:'Unit: '+fmt(vehicle.precioUnitario)+' + IVA '+fmt(vehicle.iva) }),
+      puedeFinanciero && h(Metric, { label:'Precio total', value:fmt(vehicle.precioTotal), sub:'Unit: '+fmt(vehicle.precioUnitario)+' + IVA '+fmt(vehicle.iva) }),
       h(Metric, { label:'Estatus docs', value:vehicle.statusDocs||'—' }),
       h(Metric, { label:'Estatus entrega', value:vehicle.statusEntrega||'—', sc:['Entregada','Cobrada'].includes(vehicle.statusEntrega)?'var(--green)':undefined }),
       h(Metric, { label:'Ubicación', value:vehicle.ubicacion||'—' }),
@@ -646,13 +659,18 @@ export function DocsTab({ project, vehicles, companies, config, onSaveCompany, o
   const vehs = vehicles || [];
 
   // Documentos automáticos del sistema (facturas de vehículos + órdenes de compra)
+  // Fase 2A0: si el usuario no puede ver facturas de vehículo, estas entradas
+  // ni siquiera se construyen — no se genera fileUrl/referencia alguna para
+  // empleado, no solo se oculta el link. No debe aparecer ni la fila.
   const autoDocs = [];
-  vehs.forEach(v => {
-    [['facturaAgencia','Factura de compra'],['facturaIntermedia','Factura de reventa'],['facturaEquipo','Factura de equipo'],['facturaGobierno','Factura a cliente']].forEach(([campo,etiq]) => {
-      const f = v[campo];
+  if (getPermissions(user).verFacturasVehiculo) {
+    vehs.forEach(v => {
+      [['facturaAgencia','Factura de compra'],['facturaIntermedia','Factura de reventa'],['facturaEquipo','Factura de equipo'],['facturaGobierno','Factura a cliente']].forEach(([campo,etiq]) => {
+        const f = v[campo];
       if (f && f.folio) autoDocs.push({ id:'auto-'+v.id+'-'+campo, name:etiq+' '+f.folio+' ('+(v.vin||v.marca||'')+')', category:'Facturas', date:f.fecha||'', fileUrl:f.xmlData||'', notes:f.nota||'', auto:true });
+      });
     });
-  });
+  }
   (project.ordenesCompra||[]).forEach(oc => {
     autoDocs.push({ id:'auto-oc-'+oc.id, name:'Orden de compra '+oc.folio+' · '+(oc.proveedor||''), category:'Órdenes de compra', date:oc.fecha||'', fileUrl:'', notes:'Generada en el sistema', auto:true });
   });
