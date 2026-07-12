@@ -6,7 +6,7 @@
 
 ## Estado actual
 
-- **Fase en curso:** ninguna — última entrega cerrada: fix de Persistencia + Seguridad de Navegación, **completo en producción**
+- **Fase en curso:** 2A0 (Contención visible inmediata) — **completa en producción**; próxima sub-fase de Fase 2 (2A1 en adelante) pendiente de autorización
 - **Rama de trabajo:** `fase0-seguridad`
 - **`main` no ha sido tocado.** Todo el trabajo de Fase 0 se construye en esta rama hasta que esté probado y aprobado explícitamente para merge.
 - **Diseño completo de la migración:** documentado fuera del repo (tres documentos técnicos: Master Blueprint de auditoría, Plan de Migración Fase 0+1 v1 y v2, Preparación Fase 0A, Guía de Backup Manual). Este archivo resume el estado operativo; el diseño detallado vive en esos documentos.
@@ -341,6 +341,37 @@ Una sola política nueva, de solo `SELECT`. **Sin política de `UPDATE`** (decis
 **Commit final:** `621c04d6fca9be45d3fd102ac9767a0a231a45ef`
 
 **Estado: cerrado en producción.** URL: `https://licitapro-beta.vercel.app`
+
+### ✅ Fase 2A0 — Contención visible inmediata (parte de Fase 2)
+
+**Contexto:** primer paso de Fase 2 (Cotización reducida para empleados). Antes de abrir cualquier vista nueva a empleados, se hizo un diagnóstico exhaustivo (2 rondas de revisión) que encontró que ocultar la pestaña de Cotización no bastaba — había fugas reales de datos financieros en otros puntos ya accesibles para empleado, sin relación directa con Cotización en sí.
+
+**Objetivo:** cerrar esas fugas visibles/exportables de inmediato. **Cotización reducida NO se abre en esta sub-fase** — sigue admin-only, sin cambios.
+
+#### Cambios realizados
+
+1. **PDF cliente (`printCotizacionCliente`) ya no incluye utilidad, margen ni costos internos.** Antes exponía "Costo total c/IVA/s/IVA" y una sección completa de "Utilidad y margen" (utilidad bruta/neta, margen bruto/neto) — datos internos de MSMS/Surman/Broking en un documento pensado para el cliente externo (gobierno). Se conserva venta total, unidades, partidas y datos del proyecto.
+2. **Vehículos oculta precios y facturas para empleado** en los 3 puntos donde antes se exponían: la columna PRECIO/FACTURAS de la tabla general, el Metric "Precio total" y el tab interno "Facturación" del detalle de vehículo, y la tarjeta completa "Datos económicos" del formulario de alta/edición.
+3. **Excel exportado por empleado es una versión operativa sanitizada**, no el botón oculto — sigue pudiendo exportar VIN, marca, modelo, estatus, ubicación, equipamiento, etc., pero sin ninguna columna de precio o factura. El CSV se construye desde columnas explícitas por rol, nunca serializando el objeto completo.
+4. **`DocsTab` ya no genera ni siquiera la referencia de los documentos de factura para empleado** — las 4 categorías (compra, reventa, equipo, cliente) no se construyen en absoluto si el usuario no tiene el permiso, no solo se ocultan del listado.
+5. **Admin conserva exactamente lo mismo que tenía antes** — cero cambios en su experiencia.
+
+#### Archivos modificados
+
+`src/lib/pdf_export.js`, `src/lib/permissions.js`, `src/views/Vehicles.js`. No se tocó `Cotizacion.js`, `Projects.js`, `calc.js`, `api/ai-proxy.js`, `api/admin-users.js`, `project_financials`, Supabase, RLS, SQL, ni Vercel/variables de entorno.
+
+#### Commits
+
+`26a2f69` (contención visible inmediata) y `8e5aeec6641b5e0df65c943584a23840eea58c50` (ajuste: `generarPDFCliente` habilitado para ambos roles, ya que el PDF quedó corregido en el mismo commit — sin efecto observable todavía, porque el botón sigue detrás del gate admin-only del tab Cotización).
+
+**Estado: cerrado en producción.** URL: `https://licitapro-beta.vercel.app`
+
+#### Límites pendientes, documentados a propósito (no resueltos en esta sub-fase)
+
+- **Network/DevTools crudo** — la respuesta de red de `projects`/`vehicles` sigue trayendo todos los campos financieros para cualquier usuario activo; RLS no distingue rol. Requiere Fase 2E.
+- **RLS `UPDATE` amplio** — cualquier usuario activo del workspace puede escribir en `projects`/`vehicles`, sin distinguir rol; confirmado que esta misma vía es la que usan acciones legítimas cotidianas (ej. cambiar estatus de vehículo), lo que hace que cerrarlo de verdad sea del tamaño de Fase 2E, no una sub-fase corta.
+- **Sanitización React profunda** de `project`/`vehicles` antes de pasarlos como props a componentes de empleado — diseñada (`sanitizeProjectForRole`, `sanitizeVehicleForRole`, etc.) pero no implementada — es Fase 2A2.
+- **Cotización operativa para empleado** — sigue sin existir; Cotización completa sigue admin-only — es Fase 2A4.
 
 ### Fase futura (pendiente, re-etiquetada) — Multiempresa y nuevo proyecto
 - Organización única: **Grupo Santiago**
