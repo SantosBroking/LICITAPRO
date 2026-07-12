@@ -27,8 +27,8 @@ export function getPermissions(user) {
     verFacturasVehiculo: isAdmin,       // documentos de factura en DocsTab (no listar ni generar referencia)
     exportVehiculosCompleto: isAdmin,   // Excel con columnas financieras
     exportVehiculosOperativo: !!role,   // Excel sin columnas financieras — ambos roles
-    generarPDFCliente: isAdmin,         // temporal: se mantiene admin-only hasta validar en producción que
-                                        // printCotizacionCliente ya no revela datos internos (Fase 2B)
+    generarPDFCliente: !!role,         // ambos roles — el PDF ya se corrigió en esta misma Fase 2A0
+                                        // (printCotizacionCliente ya no incluye margen/utilidad/costos internos)
     generarPDFCompleto: isAdmin,        // printResumenInterno
   };
 }
