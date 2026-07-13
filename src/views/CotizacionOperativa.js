@@ -1,21 +1,23 @@
-// CotizacionOperativa.js — Fase 2A4: vista de Cotización para empleado.
+// CotizacionOperativa.js — Fase 2A4: vista operativa de Cotización para
+// empleados. No incluir datos internos ni cálculos reservados.
 //
 // Deliberadamente separada de Cotizacion.js (CotizacionTab, admin-only) —
-// ver diagnóstico de Fase 2A4: CotizacionTab llama calcCotizacion en cada
-// edición para recalcular montoEstimado, y sus campos operativos/
-// financieros viven entrelazados en el mismo bloque JSX. Reutilizarla con
-// datos saneados produciría cifras incorrectas, no solo un riesgo de
-// confidencialidad. Este archivo nunca debe:
-// - importar calcCotizacion, pdf_export.js, firmas.js, ai_analyzer.js, ni
-//   AIAnalyzerButton;
-// - usar costoMSMS, costoConIVA, precioLista, utilidadDeseada, utilidadPct,
-//   modoPrecio, techo, montoGanar, retornos, fianzas, DPP,
-//   condicionesComerciales, ni condicionesLista;
-// - mostrar botones de PDF, IA financiera, ni Orden de Compra.
+// ver diagnóstico de Fase 2A4: CotizacionTab recalcula cifras internas en
+// cada edición, y sus campos operativos/reservados viven entrelazados en
+// el mismo bloque de render. Reutilizarla con datos reducidos produciría
+// resultados incorrectos, no solo un riesgo de confidencialidad.
+//
+// Este archivo nunca debe:
+// - importar el motor de cálculo de cotización, la generación de PDF, el
+//   flujo de firmas, ni el analizador/agente de IA;
+// - leer, mostrar ni editar ningún dato reservado, ni condiciones internas
+//   de venta;
+// - mostrar botones de exportación reservada, IA con acceso reservado, ni flujo de
+//   aprobación de compra.
 //
 // project que recibe ya viene saneado por App.js (sanitizeProjectForRole)
 // antes de llegar aquí — este componente no necesita sanear nada por su
-// cuenta, pero tampoco debe asumir que puede leer campos financieros si
+// cuenta, pero tampoco debe asumir que puede leer datos reservados si
 // alguna vez cambiara ese contrato.
 
 import { h, useState } from '../lib/core.js';
@@ -24,8 +26,8 @@ import { Metric, StorageImg, NumInput } from '../ui/primitives.js';
 const SUBTABS = ['resumen', 'partidas', 'equipo'];
 const SUBTAB_LABELS = { resumen: 'Resumen', partidas: 'Partidas', equipo: 'Equipo' };
 
-// Partida nueva — SOLO campos operativos, ninguno financiero (comparar con
-// makeP() en Cotizacion.js, que sí incluye precioLista/costoMSMS/etc).
+// Partida nueva — SOLO campos operativos, ninguno reservado (comparar con
+// el equivalente en Cotizacion.js, que sí incluye datos internos).
 const makePartidaOperativa = (id) => ({ id, activo:false, tipo:'', marca:'', modelo:'', ano:new Date().getFullYear(), version:'', color:'', cantidad:0, vehiculoId:null, foto:'' });
 
 export default function CotizacionOperativa({ project, onUpdate, activeTab, setActiveTab }) {
@@ -37,14 +39,14 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
   const partidas = cot.partidas || [];
   const equipo = cot.equipo || [];
 
-  // Nunca se llama calcCotizacion aquí -- App.js decide si hace falta
-  // recalcular montoEstimado tras el merge seguro (Fase 2A4, Commit 4).
+  // No se ejecuta ningún cálculo reservado aquí -- App.js decide si hace
+  // falta recalcular el monto estimado tras el merge seguro (Fase 2A4, Commit 4).
   const updCot = (newCot) => { onUpdate({ ...project, cotizacion: newCot }); };
 
   const updPartida = (id, k, v) => updCot({ ...cot, partidas: partidas.map(p => p.id===id ? {...p,[k]:v} : p) });
 
   // Agregar SÍ es seguro (confirmado en Fase 2A2: una partida nueva se
-  // guarda sin ningún campo financiero, nunca inventado). Quitar NO se
+  // guarda sin ningún dato reservado, nunca inventado). Quitar NO se
   // implementa en este commit -- sanitizeProjectUpdateForRole preserva
   // conservadoramente cualquier partida del original ausente del incoming
   // (decisión documentada desde 2A2), así que un "quitar" aquí se
@@ -61,8 +63,8 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
   };
 
   // Selector de vehículo del catálogo — mismo selector visual que admin
-  // (Cotizacion.js:216-227, confirmado sin precio en la tarjeta), pero
-  // copiando SOLO campos operativos -- nunca precioLista.
+  // (confirmado sin datos reservados en la tarjeta), pero copiando SOLO
+  // campos operativos.
   const catalogVehiculos = [...(window._lpConfig?.customProducts||[])].filter(x=>x.esVehiculo);
   const selectVehiculo = (pid, veh) => updCot({ ...cot, partidas: partidas.map(p => p.id!==pid ? p : {
     ...p,
@@ -152,7 +154,7 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
     // desde catálogo queda pendiente para un commit posterior: requiere
     // replicar con cuidado el selector de catálogo dentro de este flujo
     // (distinto del selector general de Catalog.js ya corregido en el
-    // Commit 1) para confirmar que tampoco expone precio ahí. No se
+    // Commit 1) para confirmar que tampoco expone datos reservados ahí. No se
     // implementa a medias. ══
     tab==='equipo' && h('div', null,
       equipo.length===0 && h('div', { className:'empty' }, h('p', null, 'Sin equipo capturado todavía.')),
