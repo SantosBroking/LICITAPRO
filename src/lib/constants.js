@@ -69,7 +69,7 @@ export const CHECKLIST_TEMPLATE_DEFAULT = [
 ];
 
 export const DEFAULT_CONFIG = {
-  groupName:'MSMS CORP',
+  groupName:'LICITAPRO',
   currency:'MXN',
   checklistTemplate: CHECKLIST_TEMPLATE_DEFAULT,
   customStatuses: [],

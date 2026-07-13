@@ -14,7 +14,7 @@ import { VehiclesTab, VehicleDetail, BillingTab, DocsTab } from './Vehicles.js';
 import Flujo from './Flujo.js';
 import { AIAnalyzerButton } from '../ui/AIAnalyzerButton.js';
 
-const PROJ_TABS = [{id:'info',l:'Información'},{id:'cotizacion',l:'Cotización MSMS'},{id:'flujo',l:'Flujo de Pagos'},{id:'bases',l:'Bases'},{id:'vehiculos',l:'Vehículos'},{id:'facturacion',l:'Facturación'},{id:'docs',l:'Documentos'},{id:'preguntas',l:'Preguntas'},{id:'borrador',l:'Borrador'},{id:'activity',l:'Actividad'}];
+const PROJ_TABS = [{id:'info',l:'Información'},{id:'cotizacion',l:'Cotización'},{id:'flujo',l:'Flujo de Pagos'},{id:'bases',l:'Bases'},{id:'vehiculos',l:'Vehículos'},{id:'facturacion',l:'Facturación'},{id:'docs',l:'Documentos'},{id:'preguntas',l:'Preguntas'},{id:'borrador',l:'Borrador'},{id:'activity',l:'Actividad'}];
 
 const GRUPOS = {
   proyecciones: ['prospecto','analisis','preparacion','aclaraciones','presentada','evaluacion'],
@@ -911,7 +911,7 @@ function BorradorTab(props){
     if(!dest.length){ setMsg('⚠ Pon al menos un correo válido del equipo'); return; }
     setSending(true); setMsg('');
     try{
-      var r=await fetch('/api/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:'MSMS CORP <santiago@brokingroup.com>',to:dest,subject:'Borrador de proyecto — '+(project.name||''),html:html})});
+      var r=await fetch('/api/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:'LICITAPRO <santiago@brokingroup.com>',to:dest,subject:'Borrador de proyecto — '+(project.name||''),html:html})});
       var d=await r.json().catch(function(){return {};});
       if(!r.ok||!d.ok) throw new Error((d&&d.resend&&d.resend.message)||(d&&d.error)||('HTTP '+r.status));
       setMsg('✅ Borrador enviado a: '+dest.join(', '));

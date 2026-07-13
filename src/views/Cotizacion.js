@@ -123,7 +123,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
       const { data: { session } } = await sb.auth.getSession();
       const token = session?.access_token;
       if (!token) throw new Error('Sesión no válida. Vuelve a iniciar sesión.');
-      const system = `Eres el asistente de cotización de MSMS CORP, especializado en patrullas y vehículos equipados para seguridad pública en México. Responde en español de forma concisa.\nProyecto: "${project.name}" — Cliente: ${project.dependencia||'sin definir'}\nPartidas: ${cot.partidas.filter(p=>p.activo&&p.cantidad>0).map(p=>`${p.id}: ${p.cantidad} ${p.tipo} ${p.marca} ${p.modelo}`).join(' | ')||'ninguna'}\nVenta: ${fmt(calc.ventaTotal)} | Margen bruto: ${pctS(calc.margen)} | Utilidad NETA: ${fmt(calc.utilNeta)}`;
+      const system = `Eres el asistente de cotización de la empresa, especializado en patrullas y vehículos equipados para seguridad pública en México. Responde en español de forma concisa.\nProyecto: "${project.name}" — Cliente: ${project.dependencia||'sin definir'}\nPartidas: ${cot.partidas.filter(p=>p.activo&&p.cantidad>0).map(p=>`${p.id}: ${p.cantidad} ${p.tipo} ${p.marca} ${p.modelo}`).join(' | ')||'ninguna'}\nVenta: ${fmt(calc.ventaTotal)} | Margen bruto: ${pctS(calc.margen)} | Utilidad NETA: ${fmt(calc.utilNeta)}`;
       const r=await fetch('/api/ai-proxy',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({model:'claude-sonnet-4-6',maxTokens:800,system,messages:[{role:'user',content:aiMsg}],tipo:'chat'})});
       const result=await r.json().catch(()=>({}));
       if(!r.ok || !result.ok){ setAiResp('Error: '+(result.error||('HTTP '+r.status))); setAiLoading(false); return; }
@@ -249,7 +249,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
           h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(120px, 1fr))', gap:8 } },
             h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Cantidad'), h(NumInput, { value:p.cantidad, onChange:v=>updPartida(p.id,'cantidad',v), style:{ fontSize:13, padding:'6px 8px', fontWeight:500 } })),
             h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Precio lista c/IVA ($)'), h(NumInput, { value:p.precioLista||0, onChange:v=>updPartida(p.id,'precioLista',v), style:{ fontSize:13, padding:'6px 8px' } })),
-            h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Costo MSMS / flotilla c/IVA ($)'),
+            h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Costo interno / flotilla c/IVA ($)'),
               h(NumInput, { value:p.costoMSMS, onChange:v=>updPartida(p.id,'costoMSMS',v), style:{ fontSize:13, padding:'6px 8px' } }),
               (p.precioLista>0 && p.costoMSMS>0 && p.precioLista>p.costoMSMS) && h('div', { style:{ fontSize:10, color:'#1D9E75', marginTop:2 } }, 'Ahorro vs lista: ',fmt(p.precioLista-p.costoMSMS),' (',Math.round((1-p.costoMSMS/p.precioLista)*100),'%)'),
             ),
@@ -828,7 +828,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
     // ══ 6. AGENTE ══
     tab==='agente' && h('div', null,
       h('div', { className:'card' },
-        h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:4 } }, 'Agente cotizador MSMS · Claude'),
+        h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:4 } }, 'Agente cotizador · Claude'),
         h('div', { style:{ fontSize:12, color:'var(--t2)', marginBottom:12 } },
           project.name,' · ',calc.unidades,' vehículos · ',fmt(calc.ventaTotal),' · margen bruto ',pctS(calc.margen),' · NETA ',fmt(calc.utilNeta),
           cot.equipo.filter(e=>e.usar&&(e.est==='Estimado'||e.est==='Pendiente MSM')).length>0 && h('span', { style:{ color:'var(--amber)' } }, ' · ⚠ ',cot.equipo.filter(e=>e.usar&&(e.est==='Estimado'||e.est==='Pendiente MSM')).length,' costos sin confirmar'),

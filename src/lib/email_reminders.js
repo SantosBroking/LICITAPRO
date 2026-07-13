@@ -16,7 +16,7 @@ function buildEmailHTML(company, mesAnio) {
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f7f7f5;margin:0;padding:24px">
   <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;border:1px solid #e8e4de;overflow:hidden">
     <div style="background:#18181b;padding:20px 24px">
-      <div style="color:#fff;font-size:11px;letter-spacing:2px;opacity:.6;text-transform:uppercase;margin-bottom:4px">MSMS CORP</div>
+      <div style="color:#fff;font-size:11px;letter-spacing:2px;opacity:.6;text-transform:uppercase;margin-bottom:4px">LICITAPRO</div>
       <div style="color:#fff;font-size:18px;font-weight:600">Actualizar información de ${company.name || 'la empresa'}</div>
     </div>
     <div style="padding:24px">
@@ -36,12 +36,12 @@ function buildEmailHTML(company, mesAnio) {
         </div>`).join('')}
       </div>
       <p style="font-size:13px;color:#71717a;margin:0;line-height:1.6">
-        Por favor envía los documentos actualizados a tu contacto en MSMS CORP a la brevedad.<br>
+        Por favor envía los documentos actualizados a tu contacto a la brevedad.<br>
         Si tienes alguna duda, no dudes en comunicarte con nosotros.
       </p>
     </div>
     <div style="padding:14px 24px;border-top:1px solid #e8e4de;background:#f7f7f5">
-      <p style="font-size:11px;color:#a1a1aa;margin:0">Correo enviado automáticamente por LicitaPro · MSMS CORP · ${mesAnio}</p>
+      <p style="font-size:11px;color:#a1a1aa;margin:0">Correo enviado automáticamente por LicitaPro · ${mesAnio}</p>
     </div>
   </div>
 </body>
@@ -69,7 +69,7 @@ export async function sendReminderEmail(company, config) {
     method: 'POST',
     headers: { 'Content-Type':'application/json' },
     body: JSON.stringify({
-      from: 'MSMS CORP <santiago@brokingroup.com>',
+      from: 'LICITAPRO <santiago@brokingroup.com>',
       to,
       subject,
       html: buildEmailHTML(company, mesAnio),

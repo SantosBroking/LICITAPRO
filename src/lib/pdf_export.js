@@ -341,7 +341,7 @@ export async function printCotizacionCliente({ project, cot, calc, config, compa
   <div class="empresa-info" style="display:flex;align-items:flex-start;gap:14px;flex:1;min-width:0;padding-right:20px">
     ${logoResuelto ? `<img src="${logoResuelto}" style="height:60px;width:auto;max-width:120px;flex-shrink:0;object-fit:contain;background:#ffffff;padding:3px;border-radius:4px" />` : ''}
     <div style="min-width:0">
-      <div style="font-size:12px;font-weight:700;color:#1a1917;margin-bottom:3px;line-height:1.3">${emp.nombreComercial||emp.razonSocial||'MSMS CORP'}</div>
+      <div style="font-size:12px;font-weight:700;color:#1a1917;margin-bottom:3px;line-height:1.3">${emp.nombreComercial||emp.razonSocial||'LICITAPRO'}</div>
       <div style="font-size:9.5px;line-height:1.45">${emp.razonSocial||''}</div>
       <div style="font-size:9.5px;line-height:1.45">${emp.rfc||''}</div>
       <div style="font-size:9.5px;line-height:1.45">${emp.direccion||''}</div>
@@ -468,14 +468,14 @@ ${(cot.condicionesLista||[]).length > 0 ? `<div style="background:#f6f6f4;paddin
 </div>` : ''}
 
 <div class="firma">
-  <div class="firma-line">${emp.responsable||'_______________________'}<br>${emp.cargo||'Responsable comercial'}<br>${emp.nombreComercial||'MSMS CORP'}</div>
+  <div class="firma-line">${emp.responsable||'_______________________'}<br>${emp.cargo||'Responsable comercial'}<br>${emp.nombreComercial||'LICITAPRO'}</div>
   <div class="firma-line">_______________________<br>Representante autorizado<br>${project.dependencia||'Cliente'}</div>
 </div>
 
 <div class="footer" style="flex-direction:column;gap:6px;align-items:stretch">
   <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;border-top:1px solid #e0ddd8;padding-top:10px">
     <div style="font-size:9px;color:#6b6862;line-height:1.5">
-      <strong style="color:#1a1917">${emp.razonSocial||'MSMS CORP'}</strong>${emp.rfc?` &nbsp;·&nbsp; RFC: ${emp.rfc}`:''}<br>
+      <strong style="color:#1a1917">${emp.razonSocial||'LICITAPRO'}</strong>${emp.rfc?` &nbsp;·&nbsp; RFC: ${emp.rfc}`:''}<br>
       ${emp.direccion||''}${emp.telefono?`<br>Tel: ${emp.telefono}`:''}${emp.correo?` &nbsp;·&nbsp; ${emp.correo}`:''}
     </div>
     <div style="font-size:9px;color:#a0998f;text-align:right">Generado: ${new Date().toLocaleDateString('es-MX')}</div>
@@ -499,7 +499,7 @@ export function printResumenRetornos({ project, cot, calc, companyObj }) {
     contacto: [companyObj.telefono, companyObj.correo].filter(Boolean).join(' · '),
     representante: companyObj.representanteLegal || '',
     cargo: companyObj.cargoRepresentante || '',
-  } : { nombre:'MSMS CORP', razonSocial:'', rfc:'', direccion:'', contacto:'', representante:'', cargo:'' };
+  } : { nombre:'LICITAPRO', razonSocial:'', rfc:'', direccion:'', contacto:'', representante:'', cargo:'' };
   const logoRet = getCompanyLogo(project.company, companyObj);
   const activeParts = (cot.partidas||[]).filter(p => p.activo && p.cantidad > 0);
   const retActivos  = (cot.retornos||[]).filter(r => r.activo);
@@ -676,7 +676,7 @@ export function printResumenInterno({ project, cot, calc, companyObj }) {
 </div>
 <div class="sheet">
 
-<div class="confidential">⚠ USO INTERNO MSMS CORP — NO COMPARTIR CON CLIENTE</div>
+<div class="confidential">⚠ USO INTERNO — NO COMPARTIR CON CLIENTE</div>
 
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid #1a1917">
   <div>
@@ -751,7 +751,7 @@ export function printResumenInterno({ project, cot, calc, companyObj }) {
 </div>
 
 <div class="footer">
-  <span>MSMS CORP — Documento confidencial — No compartir con cliente</span>
+  <span>Documento confidencial — No compartir con cliente</span>
   <span>Generado: ${new Date().toLocaleDateString('es-MX')}</span>
 </div>
 </div></body></html>`;

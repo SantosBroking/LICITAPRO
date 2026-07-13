@@ -68,10 +68,10 @@ function wrapEmail(titulo, cuerpoHtml) {
     + '<div style="max-width:560px;margin:0 auto;padding:24px">'
     + '<div style="background:#fff;border-radius:14px;overflow:hidden;border:1px solid #e6e1d8">'
     + '<div style="background:#1a1917;color:#fff;padding:20px 24px">'
-    + '<div style="font-size:12px;letter-spacing:.5px;opacity:.7">MSMS CORP · LICITAPRO</div>'
+    + '<div style="font-size:12px;letter-spacing:.5px;opacity:.7">LICITAPRO</div>'
     + '<div style="font-size:18px;font-weight:700;margin-top:4px">' + esc(titulo) + '</div></div>'
     + '<div style="padding:24px">' + cuerpoHtml + '</div>'
-    + '<div style="padding:16px 24px;border-top:1px solid #eee;font-size:11px;color:#999;text-align:center">Mensaje automático de LicitaPro · MSMS CORP</div>'
+    + '<div style="padding:16px 24px;border-top:1px solid #eee;font-size:11px;color:#999;text-align:center">Mensaje automático de LicitaPro</div>'
     + '</div></div></body></html>';
 }
 
@@ -92,7 +92,7 @@ async function enviar(to, subject, html, attachments) {
   if (!to) throw new Error('Falta destinatario');
   const res = await fetch('/api/send-email', {
     method:'POST', headers:{ 'Content-Type':'application/json' },
-    body: JSON.stringify({ from:'MSMS CORP <santiago@brokingroup.com>', to, subject, html, attachments }),
+    body: JSON.stringify({ from:'LICITAPRO <santiago@brokingroup.com>', to, subject, html, attachments }),
   });
   const data = await res.json().catch(function(){return {};});
   if (!res.ok || !data.ok) throw new Error((data && data.resend && data.resend.message) || (data && data.error) || ('HTTP '+res.status));

@@ -35,7 +35,7 @@ export default function AuthScreen({ error: externalError }) {
   return h('div', { style: { minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:20, background:'var(--bg3)' } },
     h('div', { style: { width:400, background:'var(--bg1)', borderRadius:12, padding:'2.5rem', border:'.5px solid var(--b3)' } },
       h('div', { style: { textAlign:'center', marginBottom:24 } },
-        h('div', { style: { fontSize:11, letterSpacing:2, color:'var(--t2)', textTransform:'uppercase', marginBottom:4 } }, 'MSMS CORP'),
+        h('div', { style: { fontSize:11, letterSpacing:2, color:'var(--t2)', textTransform:'uppercase', marginBottom:4 } }, 'LICITAPRO'),
         h('div', { style: { fontSize:22, fontWeight:500, marginBottom:4 } }, 'LicitaPro'),
         h('div', { style: { fontSize:13, color:'var(--t2)' } }, 'Inicia sesión para continuar'),
       ),

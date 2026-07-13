@@ -15,7 +15,7 @@ module.exports = async function handler(req, res) {
   if (!subject || !html)     return res.status(400).json({ ok: false, error: 'Falta asunto o contenido' });
 
   const payload = {
-    from: from || 'MSMS CORP <santiago@brokingroup.com>',
+    from: from || 'LICITAPRO <santiago@brokingroup.com>',
     to: dest,
     subject,
     html,

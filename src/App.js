@@ -494,7 +494,7 @@ export default function App() {
     // Sidebar desktop
     h('aside', { className:'sidebar' },
       h('div', { className:'sidebar-logo' },
-        h('div', { className:'sidebar-brand' }, 'MSMS CORP'),
+        h('div', { className:'sidebar-brand' }, 'LICITAPRO'),
         h('div', { className:'sidebar-name' }, 'LicitaPro'),
         h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:4, textTransform:'capitalize' } }, new Date().toLocaleDateString('es-MX', { weekday:'long', day:'numeric', month:'long', year:'numeric' })),
       ),
@@ -525,7 +525,7 @@ export default function App() {
       h('div', { className:'mobile-drawer-overlay', onClick:()=>setMobileMenuOpen(false) }),
       h('div', { className:'mobile-drawer-panel' },
         h('div', { style:{ marginBottom:20 } },
-          h('div', { className:'sidebar-brand' }, 'MSMS CORP'),
+          h('div', { className:'sidebar-brand' }, 'LICITAPRO'),
           h('div', { className:'sidebar-name' }, 'LicitaPro'),
           h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:4, textTransform:'capitalize' } }, new Date().toLocaleDateString('es-MX', { weekday:'long', day:'numeric', month:'long', year:'numeric' })),
         ),

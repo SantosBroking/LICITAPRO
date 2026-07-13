@@ -26,7 +26,7 @@ async function compressImage(dataURL, maxPx=300, quality=0.5) {
 import { Inp } from '../ui/primitives.js';
 
 const CATS_BASE = ['00 Vehículos', ...new Set(CATALOG_PRODUCTS.map(p => p.cat))];
-const EMPTY_PROD = () => ({ id:'', cat:'', catNew:'', sub:'', nom:'', desc:'', prov:'MSMS CORP', vis:true, price:0, photo:'' });
+const EMPTY_PROD = () => ({ id:'', cat:'', catNew:'', sub:'', nom:'', desc:'', prov:'', vis:true, price:0, photo:'' });
 
 function ProductForm({ prod, onSave, onCancel, existingCats, allProducts }) {
   const [p, sP] = useState({ ...EMPTY_PROD(), ...prod });
@@ -98,7 +98,7 @@ function ProductForm({ prod, onSave, onCancel, existingCats, allProducts }) {
     h(Inp, { label:'Subcategoría', value:p.sub, onChange:v=>set('sub',v), placeholder:'Iluminación, Radio, etc.' }),
     h(Inp, { label:'Descripción', value:p.desc, onChange:v=>set('desc',v), textarea:true, placeholder:'Características técnicas del producto...' }),
     h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 } },
-      h(Inp, { label:'Proveedor', value:p.prov, onChange:v=>set('prov',v), placeholder:'MSMS CORP' }),
+      h(Inp, { label:'Proveedor', value:p.prov, onChange:v=>set('prov',v), placeholder:'Nombre del proveedor' }),
       h('div', { style:{ marginBottom:14 } },
         h('label', { style:{ display:'block', fontSize:12, color:'var(--t2)', marginBottom:5, fontWeight:500 } }, 'Precio base (con IVA)'),
         h(NumInput, { value:p.price||0, onChange:v=>set('price',v) }),
@@ -383,7 +383,7 @@ export default function CatalogView({ config, onSaveConfig }) {
 
   return h('div', null,
     h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 } },
-      h('div', { className:'page-title' }, 'Catálogo de equipo MSMS'),
+      h('div', { className:'page-title' }, 'Catálogo de equipo'),
       h('div', { style:{ display:'flex', gap:8 } },
         h('button', { onClick:()=>{ setKitView(k=>!k); setForm(null); }, style:{ fontSize:13, padding:'7px 14px', borderRadius:'var(--r)', border:'1px solid var(--b2)', background:kitView?'var(--t1)':'var(--bg1)', color:kitView?'var(--bg1)':'var(--t1)', cursor:'pointer', fontWeight:500 } }, '🧩 Kits'),
         !kitView && h('button', { className:'bp', onClick:()=>setForm('new') }, '+ Agregar producto'),

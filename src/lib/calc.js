@@ -233,7 +233,7 @@ export function newCotizacion(folio) {
   });
   return {
     version:'V1',
-    folio: folio || `MSMS-${yr}-${num}`,
+    folio: folio || `COT-${yr}-${num}`,
     fechaCotizacion: TODAY(),
     vigenciaDias: 20,
     condicionesComerciales: 'Cotización válida por 20 días naturales.',

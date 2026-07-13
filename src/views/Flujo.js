@@ -275,7 +275,7 @@ export default function Flujo({ project, onUpdate }) {
     ),
 
     !hayCotizacion && h('div', { style:{ marginBottom:16, padding:'10px 14px', background:'var(--amber-bg)', border:'1px solid var(--amber-border)', borderRadius:'var(--r)', fontSize:12 } },
-      '⚠ Sin cotización cargada. Ingresa los costos manualmente en la tabla, o créala en la pestaña Cotización MSMS.'
+      '⚠ Sin cotización cargada. Ingresa los costos manualmente en la tabla, o créala en la pestaña Cotización.'
     ),
 
     // ── A. Parámetros ──
