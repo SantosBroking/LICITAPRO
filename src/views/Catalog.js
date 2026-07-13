@@ -3,6 +3,7 @@ import { h, useState, useRef } from '../lib/core.js';
 import { NumInput, StorageImg } from '../ui/primitives.js';
 import { CATALOG_PRODUCTS } from '../lib/catalog.js';
 import { CATALOG_IMAGES } from '../lib/catalog_images.js';
+import { getPermissions } from '../lib/permissions.js'; // Fase 2A4 — cerrar fuga de costo interno en Catálogo
 import { uid } from '../lib/utils.js';
 import { uploadImageToStorage, isBase64 } from '../lib/supabase.js';
 
@@ -28,7 +29,7 @@ import { Inp } from '../ui/primitives.js';
 const CATS_BASE = ['00 Vehículos', ...new Set(CATALOG_PRODUCTS.map(p => p.cat))];
 const EMPTY_PROD = () => ({ id:'', cat:'', catNew:'', sub:'', nom:'', desc:'', prov:'', vis:true, price:0, photo:'' });
 
-function ProductForm({ prod, onSave, onCancel, existingCats, allProducts }) {
+function ProductForm({ prod, onSave, onCancel, existingCats, allProducts, user }) {
   const [p, sP] = useState({ ...EMPTY_PROD(), ...prod });
   const [preview, setPreview] = useState(prod.photo || '');
   const imgRef = useRef(null);
@@ -99,7 +100,7 @@ function ProductForm({ prod, onSave, onCancel, existingCats, allProducts }) {
     h(Inp, { label:'Descripción', value:p.desc, onChange:v=>set('desc',v), textarea:true, placeholder:'Características técnicas del producto...' }),
     h('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 } },
       h(Inp, { label:'Proveedor', value:p.prov, onChange:v=>set('prov',v), placeholder:'Nombre del proveedor' }),
-      h('div', { style:{ marginBottom:14 } },
+      getPermissions(user).verCostosInternos && h('div', { style:{ marginBottom:14 } },
         h('label', { style:{ display:'block', fontSize:12, color:'var(--t2)', marginBottom:5, fontWeight:500 } }, 'Precio base (con IVA)'),
         h(NumInput, { value:p.price||0, onChange:v=>set('price',v) }),
       ),
@@ -284,7 +285,7 @@ function KitManager({ allProducts, customProds, existingCats, onSaveKit, onDelet
   );
 }
 
-export default function CatalogView({ config, onSaveConfig }) {
+export default function CatalogView({ config, onSaveConfig, user }) {
   const customProds   = config?.customProducts || [];
   const hiddenProds   = config?.hiddenProducts  || [];
   // Productos editados (mismos IDs que estáticos) sobreescriben el original
@@ -309,6 +310,16 @@ export default function CatalogView({ config, onSaveConfig }) {
 
   const saveProduct = async (prod) => {
     let safeProd = { ...prod };
+    // Fase 2A4: el precio del catálogo se convierte literalmente en
+    // costoConIVA al agregarse a una cotización (Cotizacion.js) -- es costo
+    // interno. Para empleado, se preserva SIEMPRE del original (o 0 para un
+    // producto nuevo, nunca inventado) -- no se acepta lo que traiga el
+    // formulario, sin importar que el input esté oculto (segunda capa,
+    // protege incluso si se manipula el payload).
+    if (!getPermissions(user).verCostosInternos) {
+      const original = allProds.find(x => x.id === safeProd.id);
+      safeProd.price = original ? original.price : 0;
+    }
     // Fotos del catálogo: guardar como base64 comprimido (no Storage)
     // Son ~15KB comprimidas — OK en BD; Storage es para PDFs/XMLs grandes
     if (safeProd.photo && isBase64(safeProd.photo)) {
@@ -378,6 +389,7 @@ export default function CatalogView({ config, onSaveConfig }) {
       existingCats: [...new Set(allProds.map(p => p.cat))],
       onSave: saveProduct,
       onCancel: () => setForm(null),
+      user,
     });
   }
 
@@ -423,7 +435,7 @@ export default function CatalogView({ config, onSaveConfig }) {
             h('span', { style:{ fontSize:10, padding:'2px 8px', borderRadius:10, background:prod.vis?'#E1F5EE':'#F1EFE8', color:prod.vis?'#085041':'#444441' } },
               prod.vis ? 'visible cliente' : 'uso interno'
             ),
-            prod.price>0 && h('span', { style:{ fontSize:12, fontWeight:500, color:'var(--t1)' } }, '$'+prod.price.toLocaleString('es-MX')),
+            getPermissions(user).verCostosInternos && prod.price>0 && h('span', { style:{ fontSize:12, fontWeight:500, color:'var(--t1)' } }, '$'+prod.price.toLocaleString('es-MX')),
             isCustom && !CATALOG_PRODUCTS.find(x=>x.id===prod.id) && h('span', { style:{ fontSize:10, padding:'2px 8px', borderRadius:10, background:'var(--purple-bg)', color:'var(--purple)' } }, '★ Personalizado'),
             isCustom && CATALOG_PRODUCTS.find(x=>x.id===prod.id) && h('span', { style:{ fontSize:10, padding:'2px 8px', borderRadius:10, background:'var(--amber-bg)', color:'var(--amber)' } }, '✏ Editado'),
           ),
