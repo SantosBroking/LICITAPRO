@@ -6,7 +6,7 @@
 
 ## Estado actual
 
-- **Fase en curso:** ninguna — última entrega cerrada: Fase 2A5 (Resumen Interno v2 / Corrida Financiera Desglosada), **completa en producción**; siguiente paso sugerido: probar visualmente el nuevo PDF con proyectos reales y ajustar presentación/umbrales si hace falta, continuar con el siguiente incremento pendiente de Cotización Operativa (agregar equipo desde catálogo, quitar partida/equipo), o Fase 2E (separación real Network/RLS), según decisión
+- **Fase en curso:** ninguna — última entrega cerrada: Corrida Financiera Interna v3 — por partida, **completa en producción**; siguiente paso sugerido: probar visualmente el nuevo PDF con proyectos reales y ajustar layout si hace falta, o continuar con otro incremento pendiente (agregar equipo desde catálogo en Cotización Operativa, quitar partida/equipo, Fase 2E), según decisión
 - **Rama de trabajo:** `fase0-seguridad`
 - **`main` no ha sido tocado.** Todo el trabajo de Fase 0 se construye en esta rama hasta que esté probado y aprobado explícitamente para merge.
 - **Diseño completo de la migración:** documentado fuera del repo (tres documentos técnicos: Master Blueprint de auditoría, Plan de Migración Fase 0+1 v1 y v2, Preparación Fase 0A, Guía de Backup Manual). Este archivo resume el estado operativo; el diseño detallado vive en esos documentos.
@@ -558,6 +558,71 @@ Exactamente 5 commits, sin ninguno extra. Exactamente 3 archivos modificados. Gr
 - DPP como campo real — **no existe** en el código actual; no se inventó ningún campo. Si algún día se desea capturarlo, requiere su propia fase con su propio diseño de dato.
 - Campos nuevos de proveedor de equipo, moneda, responsable de costo, o un campo explícito de riesgo capturado por el usuario — todos documentados como ausentes, ninguno se programó.
 - Cambios de base de datos — ninguno; toda esta fase es cálculo y presentación sobre datos ya existentes.
+- Renombrar el campo técnico `costoMSMS` — sigue como campo heredado, sin cambios.
+
+### ✅ Corrida Financiera Interna v3 — por partida
+
+**Contexto:** tras probar la Corrida Financiera Interna v2 (Fase 2A5), se detectó que el reporte seguía sin cumplir la lógica operativa esperada. La v2 construía una corrida unitaria consolidada/promedio, mezclando vehículos y equipos distintos en una sola cifra — con un caso real de Ford Explorer (10 unidades) y Toyota Hilux (30 unidades), una corrida promedio mezclada no representa correctamente ni a la Explorer ni a la Hilux.
+
+**Decisión:** la corrida financiera debe hacerse por partida. Cada partida activa tiene su propia corrida completa; el consolidado general del proyecto pasa a ser solo un resumen, nunca el centro del reporte.
+
+#### A. Corrida por partida
+
+Cada partida activa genera su propia corrida independiente: vehículo/producto propio, cantidad, venta unitaria, costo unitario, utilidad unitaria, utilidad total, margen, sus propios conceptos de costo, y su propio equipo — sin mezclarse con ninguna otra partida. Confirmado con el ejemplo real (Ford Explorer 10u + Toyota Hilux 30u): cada una con su vehículo base, su equipo y sus retornos/fianzas propios.
+
+#### B. Equipo por partida
+
+El equipo ya no se presenta como tabla global mezclada — se muestra dentro de cada partida. `cnts[pi]` se interpreta como cantidad por unidad; la cantidad total de equipo es `cnts[pi] × cantidad de la partida`. Si un equipo aplica a dos partidas, aparece en ambas con sus cantidades respectivas; si aplica solo a una, aparece solo ahí.
+
+#### C. Retornos y fianzas por partida
+
+Tres reglas de asignación, según cómo esté capturado el retorno/fianza:
+1. **Monto fijo por unidad** → unitario × cantidad de esa partida.
+2. **Porcentaje sobre venta** → porcentaje aplicado sobre la venta de esa partida específica, no la venta global.
+3. **Monto total del proyecto** → prorrateado por participación de venta (venta de la partida / venta total del proyecto).
+
+Esta lógica replica la convención ya existente en el panel admin de Cotización (`costoTratoPart` en `Cotizacion.js`) — no se inventó una regla paralela. Verificado: la suma por partida coincide exacto con `calc.totalRetornos`/`calc.totalFianzas` como fuente objetiva, no solo aproximado.
+
+#### D. IVA a utilidad
+
+Condicionado al interruptor real `cot.ivaSelectivo`, no al valor resultante. Si está encendido, se muestra la fila "IVA a utilidad"; si está apagado, la fila desaparece por completo — no se muestra en $0, no aparece ninguna nota relacionada, visualmente no existe.
+
+#### E. Secciones eliminadas
+
+Se eliminó por completo: la corrida promedio consolidada como centro del reporte, la página de riesgos, advertencias, alertas, pendientes, semáforos, decisión sugerida, la nota de "DPP no disponible", el texto "costo capturado hace X días", y cualquier otro texto interpretativo. Objetivo: un reporte que muestre números claros por partida, sin que el reporte "opine" o califique la operación.
+
+#### F. Nueva estructura del PDF
+
+Página/sección 1: resumen general del proyecto (identificación, KPIs consolidados, tabla resumen por partida). Secciones siguientes: una corrida completa por cada partida activa, con su equipo propio justo debajo. Anexo final: IVA, condiciones comerciales — retornos y fianzas ya no se repiten ahí, porque ya están desglosados por item real dentro de la corrida de cada partida.
+
+#### Commits
+
+| # | Commit | Contenido | Archivo |
+|---|---|---|---|
+| 1 | `8ed48ae9a592006a1dba4285f7e75b8892901505` | Helper reestructurado — corrida por partida | `src/lib/resumen_interno.js` |
+| 2 | `da90ea689633e28707fe042fcee81e77ed7d2c18` | PDF completo v3 por partida | `src/lib/pdf_export.js` |
+| 3 | `04d88096ae0e4c2c994dee76e198ab8c2752ecf3` | Limpieza de comentarios obsoletos | `src/lib/resumen_interno.js` |
+
+**Archivos modificados (2, únicamente):** `src/lib/resumen_interno.js`, `src/lib/pdf_export.js`. No se tocó Supabase, RLS, SQL, variables, `api/`, `data_sanitize.js`, `calc.js`, `Cotizacion.js`, `CotizacionOperativa.js`, `Catalog.js`, `Firmas.js`, `Projects.js`, ni `package.json`.
+
+**Commit final en `main`:** `04d88096ae0e4c2c994dee76e198ab8c2752ecf3`
+
+**Estado: cerrado en producción.** URL: `https://licitapro-beta.vercel.app`
+
+#### Validaciones finales
+
+Exactamente 3 commits, sin ninguno extra. Exactamente 2 archivos modificados. Búsqueda de secciones eliminadas: 0 líneas. Búsqueda de corrida promedio: 0 líneas. Grep de "MSMS" en `src/`/`api/`: 17 líneas, todas `costoMSMS` como propiedad técnica interna, cero texto visible, cero comentarios, cero strings descriptivos. Pruebas: una sola partida, dos partidas con vehículos distintos (Explorer/Hilux), equipos diferentes, equipo compartido con cantidades distintas por partida, retorno fijo por unidad, retorno/fianza porcentual, monto total prorrateado, IVA a utilidad encendido/apagado, partida sin equipo, partida inactiva/cantidad 0 — todas verificadas: cada partida cuadra individualmente, venta unitaria − costo unitario = utilidad unitaria, utilidad unitaria × cantidad = utilidad total, suma de partidas = consolidado, equipo multiplicado correctamente, sin `NaN`/`Infinity`/`undefined`, sin ningún texto de riesgo/advertencia/pendiente/DPP no disponible/costo capturado impreso. Deploy de producción confirmado exitoso.
+
+#### Límites pendientes, documentados a propósito (no resueltos en esta versión)
+
+- Network/DevTools crudo — sigue pendiente (Fase 2E).
+- RLS `UPDATE` amplio — sigue pendiente.
+- PDF cliente para empleado — sigue diferido.
+- IA operativa — sigue diferida.
+- Agregar/quitar equipo operativo en Cotización Operativa — pendiente.
+- DPP como campo real — no existe, no se inventó.
+- Asignación manual de retornos/fianzas por partida — hoy se usan las 3 reglas automáticas ya confirmadas según cómo esté capturado cada retorno/fianza; una asignación manual explícita por partida podría ser una mejora futura, no implementada en esta versión.
+- Cambios de base de datos — ninguno.
 - Renombrar el campo técnico `costoMSMS` — sigue como campo heredado, sin cambios.
 
 ### Fase futura (pendiente, re-etiquetada) — Multiempresa y nuevo proyecto
