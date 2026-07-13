@@ -6,7 +6,7 @@
 
 ## Estado actual
 
-- **Fase en curso:** 2A1 + 2A2 (Permisos granulares + Sanitización React profunda) — **completas en producción**; próxima sub-fase de Fase 2 (2A3/2A4 en adelante) pendiente de autorización
+- **Fase en curso:** ninguna — última entrega cerrada: mini-fase Firmas/OC (seguridad) + Limpieza de texto visible "MSMS", **completa en producción**; siguiente fase sugerida: diseño de Cotización Operativa (2A4) o Fase 2E (separación real Network/RLS), según decisión
 - **Rama de trabajo:** `fase0-seguridad`
 - **`main` no ha sido tocado.** Todo el trabajo de Fase 0 se construye en esta rama hasta que esté probado y aprobado explícitamente para merge.
 - **Diseño completo de la migración:** documentado fuera del repo (tres documentos técnicos: Master Blueprint de auditoría, Plan de Migración Fase 0+1 v1 y v2, Preparación Fase 0A, Guía de Backup Manual). Este archivo resume el estado operativo; el diseño detallado vive en esos documentos.
@@ -410,6 +410,41 @@ Una sola política nueva, de solo `SELECT`. **Sin política de `UPDATE`** (decis
 - **RLS `UPDATE` amplio** — cualquier usuario activo del workspace puede escribir en `projects`/`vehicles` vía API directa, sin distinguir rol. Confirmado que cerrarlo de verdad (sin romper acciones operativas legítimas de empleado) requiere un rediseño de mayor alcance, no una sub-fase corta.
 - **Cotización operativa para empleado** — sigue sin existir; Cotización completa sigue admin-only.
 - **Vector de correo de Orden de Compra con costos** — si un empleado es designado firmante de una OC, recibe por correo el PDF con `costoMSMS` cuando admin aprueba. Es una decisión de proceso de negocio pendiente, fuera del alcance de sanitización React.
+
+### ✅ Mini-fase Firmas/OC (seguridad) + Limpieza de texto visible "MSMS"
+
+**Contexto:** al revisar el vector de correo detectado durante el diseño de Cotización Operativa, se confirmó un riesgo real, distinto de props/React: admin podía crear y aprobar una Orden de Compra que genera un PDF con costos internos, y el responsable/firmante de esa OC podía ser **cualquier usuario activo, incluido un empleado** — al aprobar, el PDF con costos se enviaba por correo a ese responsable. En paralelo, se decidió una regla de marca: "MSMS" no debe aparecer como texto visible en ningún lugar del sistema (UI, PDFs, correos, labels, etc.) — solo se conserva `costoMSMS` como campo técnico interno heredado, ya que renombrarlo implicaría migración y riesgo estructural, fuera del alcance de esta mini-fase.
+
+#### A. Seguridad Firmas/OC
+
+- **`Projects.js`**: la consulta de usuarios activos ahora incluye `role`. Al enviar una OC a aprobación, los firmantes posibles se filtran a solo admins con `getPermissions({ role: u.role }).verCostosInternos` — ya no existe captura manual libre de nombre/correo para esta acción. Si no hay ningún admin activo disponible, el flujo se bloquea con una alerta clara en vez de caer a captura libre.
+- **`Firmas.js`**: carga el conjunto de correos de admins activos (`adminEmails`); el botón "Aprobar" se deshabilita mientras esa lista carga (evita bloquear una aprobación legítima solo por timing). Antes de generar el PDF y antes de llamar a la función de aviso por correo, valida que el responsable del documento sea admin — si no lo es, no genera el PDF, no envía el correo, no cambia el estatus del documento, y muestra un mensaje claro pidiendo reasignar a un admin. Esto cubre tanto el flujo normal como documentos ya existentes (o manipulados) con un responsable empleado.
+- **Resultado:** una OC con responsable empleado queda bloqueada antes de generar PDF o enviar correo; una OC con responsable admin funciona exactamente igual que antes.
+
+#### B. Limpieza de texto visible "MSMS"
+
+Búsqueda global en `src/` y `api/`, en 3 rondas sucesivas. Se eliminó "MSMS" de: login, sidebar, catálogo, tab y label de Cotización, chat de IA (título y `system` prompt), PDFs (cliente, interno, Orden de Compra, y sus fallbacks de nombre de empresa), correos (encabezado, cuerpo, pie y remitente, tanto de Firmas como de recordatorios mensuales), mensaje de ayuda en Flujo, y comentarios de código (incluidos varios que el propio proceso de esta fase había introducido). Los folios nuevos de cotización ahora usan el prefijo `COT-` en vez de `MSMS-` — **los folios ya existentes no se migran**.
+
+**Grep final:** `grep -rniE "msms|m\.s\.m\.s\.|Costo MSMS|costo msms" src/ api/` → **17 líneas**, las 17 confirmadas como usos técnicos de `costoMSMS` (propiedad de código) — cero texto visible, cero comentarios, cero strings de UI/PDF/correo/remitente/fallback.
+
+#### Archivos modificados, por commit
+
+- **Commit 1** (`4a905b2b2a7e3e675d417bbf29b2adeb8f71e26a`) — Seguridad Firmas/OC: `src/views/Firmas.js`, `src/views/Projects.js`.
+- **Commit 2** (`967112a9518d2681387280e50c30f97b8b8cbc46`) — Limpieza de texto visible MSMS: `api/send-email.js`, `src/App.js`, `src/lib/calc.js`, `src/lib/constants.js`, `src/lib/email_reminders.js`, `src/lib/firmas.js`, `src/lib/pdf_export.js`, `src/views/Auth.js`, `src/views/Catalog.js`, `src/views/Cotizacion.js`, `src/views/Flujo.js`, `src/views/Projects.js`.
+- **Commit 3** (`916473243ba9b15459854745d02f330c5d7a934d`) — Limpieza de MSMS en comentarios/textos no visibles: `src/lib/calc.js`, `src/lib/catalog.js`, `src/lib/catalog_images.js`, `src/lib/pdf_export.js`, `src/lib/permissions.js`, `src/views/Catalog.js`, `src/views/Cotizacion.js`, `src/views/Projects.js`.
+
+**Commit final en `main`:** `916473243ba9b15459854745d02f330c5d7a934d`
+
+**Estado: cerrado en producción.** URL: `https://licitapro-beta.vercel.app`
+
+#### Límites pendientes, documentados a propósito (no resueltos en esta mini-fase)
+
+- Network/DevTools crudo — sigue pendiente (Fase 2E).
+- RLS `UPDATE` amplio — sigue pendiente.
+- Cotización Operativa — sigue sin abrirse.
+- Correos ya enviados **antes** de este cambio a un responsable empleado — no se revocan retroactivamente.
+- El campo técnico `costoMSMS` se conserva tal cual, como campo heredado — no debe renderizarse ni mostrarse como label en ningún punto nuevo del código. Si algún día se decide renombrarlo, debe ser una fase separada con su propio control de migración de datos — no se tocó ni se migró nada aquí.
+- Folios de cotización creados **antes** de este cambio conservan su prefijo original — no se migran.
 
 ### Fase futura (pendiente, re-etiquetada) — Multiempresa y nuevo proyecto
 - Organización única: **Grupo Santiago**
