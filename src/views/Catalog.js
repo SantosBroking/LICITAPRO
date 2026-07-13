@@ -310,15 +310,25 @@ export default function CatalogView({ config, onSaveConfig, user }) {
 
   const saveProduct = async (prod) => {
     let safeProd = { ...prod };
-    // Fase 2A4: el precio del catálogo se convierte literalmente en
-    // costoConIVA al agregarse a una cotización (Cotizacion.js) -- es costo
-    // interno. Para empleado, se preserva SIEMPRE del original (o 0 para un
-    // producto nuevo, nunca inventado) -- no se acepta lo que traiga el
-    // formulario, sin importar que el input esté oculto (segunda capa,
-    // protege incluso si se manipula el payload).
-    if (!getPermissions(user).verCostosInternos) {
+    // Fase 2A4/Commit 6: el precio del catálogo se convierte literalmente en
+    // costoConIVA al agregarse a una cotización -- es un dato reservado.
+    // Empleado NUNCA puede crear un producto nuevo (ni "Agregar producto" ni
+    // "Duplicar", que también genera un id nuevo) -- no existe forma segura
+    // de capturar ese dato sin verlo. Se bloquea por completo, no se guarda
+    // con un valor forzado en cero (eso contaminaría el catálogo).
+    const puedeVerCostos = getPermissions(user).verCostosInternos;
+    const esProductoNuevo = !allProds.find(x => x.id === safeProd.id);
+    if (!puedeVerCostos && esProductoNuevo) {
+      alert('Solo admin puede crear productos de catálogo porque requieren costo interno.');
+      return;
+    }
+    if (!puedeVerCostos) {
+      // Edición de un producto YA existente -- se preserva el precio
+      // original exacto, nunca se acepta lo que traiga el formulario, sin
+      // importar que el input esté oculto (segunda capa, protege incluso
+      // si se manipula el payload).
       const original = allProds.find(x => x.id === safeProd.id);
-      safeProd.price = original ? original.price : 0;
+      safeProd.price = original.price;
     }
     // Fotos del catálogo: guardar como base64 comprimido (no Storage)
     // Son ~15KB comprimidas — OK en BD; Storage es para PDFs/XMLs grandes
@@ -398,7 +408,7 @@ export default function CatalogView({ config, onSaveConfig, user }) {
       h('div', { className:'page-title' }, 'Catálogo de equipo'),
       h('div', { style:{ display:'flex', gap:8 } },
         h('button', { onClick:()=>{ setKitView(k=>!k); setForm(null); }, style:{ fontSize:13, padding:'7px 14px', borderRadius:'var(--r)', border:'1px solid var(--b2)', background:kitView?'var(--t1)':'var(--bg1)', color:kitView?'var(--bg1)':'var(--t1)', cursor:'pointer', fontWeight:500 } }, '🧩 Kits'),
-        !kitView && h('button', { className:'bp', onClick:()=>setForm('new') }, '+ Agregar producto'),
+        !kitView && getPermissions(user).verCostosInternos && h('button', { className:'bp', onClick:()=>setForm('new') }, '+ Agregar producto'),
       ),
     ),
     kitView && h(KitManager, { allProducts:allProds, customProds, existingCats:[...new Set(allProds.map(p=>p.cat))], onSaveKit:saveKit, onDeleteKit:deleteKit, onRestoreKit:restoreKit }),
@@ -419,7 +429,7 @@ export default function CatalogView({ config, onSaveConfig, user }) {
           h('div', { style:{ display:'flex', justifyContent:'flex-end', gap:4, marginBottom:8, flexWrap:'wrap' } },
             h('button', { onClick:()=>setForm({...prod, photo: prod.photo || CATALOG_IMAGES[prod.id] || ''}),
               style:{ fontSize:11, padding:'4px 10px', color:'var(--blue)', background:'var(--bg1)', border:'1px solid var(--blue-border)', borderRadius:'var(--r)', cursor:'pointer' } }, '✏ Editar'),
-            h('button', { onClick:()=>duplicateProduct(prod),
+            getPermissions(user).verCostosInternos && h('button', { onClick:()=>duplicateProduct(prod),
               style:{ fontSize:11, padding:'4px 10px', color:'var(--t1)', background:'var(--bg1)', border:'1px solid var(--b2)', borderRadius:'var(--r)', cursor:'pointer' } }, '⧉ Duplicar'),
             isCustom && CATALOG_PRODUCTS.find(x=>x.id===prod.id)
               ? h('button', { onClick:()=>restoreProduct(prod.id),
