@@ -32,6 +32,15 @@ import { TODAY } from './utils.js';
 
 const IVA = 0.16;
 
+// Etiqueta de IVA para mostrar en la corrida -- nunca se inventa: si el
+// dato no existe o no aplica (ej. vehículo base, que no tiene un campo
+// llevaIVA real capturado por partida), se muestra "—".
+function ivaLabel(llevaIVA) {
+  if (llevaIVA === true) return 'Sí';
+  if (llevaIVA === false) return 'No';
+  return '—';
+}
+
 // Calcula el monto (c/IVA, antes de convertir a s/IVA con llevaIVA) que
 // un item de retorno/fianza aporta AL PROYECTO COMPLETO -- necesario para
 // el caso 'Monto fijo total', que se prorratea después.
@@ -104,6 +113,7 @@ export function buildPartidasDetalle(cot, calc) {
         costoUnitario: costoUnitCIVA,
         costoTotal: costoTotalCIVA,
         costoTotalSIVA: e.llevaIVA ? costoTotalCIVA / (1 + IVA) : costoTotalCIVA,
+        llevaIVA: e.llevaIVA,
         fechaCosto: e.fechaCosto || null,
         notas: e.notas || '',
       });
@@ -130,17 +140,22 @@ export function buildPartidasDetalle(cot, calc) {
       conceptosCosto.push({
         key: 'vehiculo_base', label: 'Vehículo base', tipo: 'vehiculo',
         unitario: vehUnitSIVA, total: vehSIVA, nota: '',
+        // Sin campo llevaIVA real capturado por partida para el vehículo
+        // -- no se inventa, se muestra "—" (a diferencia de equipo/
+        // retornos/fianzas, que sí tienen ese campo real en el dato).
+        iva: ivaLabel(undefined),
       });
     }
-    // Equipo, agrupado por categoría real DENTRO de esta partida
-    const categorias = [...new Set(equipoPartida.map(e => e.categoria))];
-    categorias.forEach(catNombre => {
-      const items = equipoPartida.filter(e => e.categoria === catNombre);
-      const totalSIVA = items.reduce((s, e) => s + e.costoTotalSIVA, 0);
+    // Equipo: UNA LÍNEA POR ITEM REAL seleccionado (no agrupado por
+    // categoría) -- se quiere ver exactamente qué equipo se eligió, no
+    // solo la categoría. La categoría y la cantidad por unidad van en la
+    // columna Nota, compactas.
+    equipoPartida.forEach(e => {
+      const notaCantidad = e.cantidadPorUnidad === 1 ? e.categoria : `${e.categoria} · ${e.cantidadPorUnidad} x unidad`;
       conceptosCosto.push({
-        key: 'equipo_' + catNombre, label: 'Equipo: ' + catNombre, tipo: 'equipo',
-        unitario: qty > 0 ? totalSIVA / qty : 0, total: totalSIVA,
-        nota: items.length + ' item(s)',
+        key: 'equipo_' + e.nombre, label: e.nombre, tipo: 'equipo',
+        unitario: qty > 0 ? e.costoTotalSIVA / qty : 0, total: e.costoTotalSIVA,
+        nota: notaCantidad, iva: ivaLabel(e.llevaIVA),
       });
     });
     // Retornos, un renglón por item real activo, asignado a esta partida
@@ -151,6 +166,7 @@ export function buildPartidasDetalle(cot, calc) {
       conceptosCosto.push({
         key: 'retorno_' + r.id, label: 'Retorno: ' + (r.nombre || 'Sin nombre'), tipo: 'retorno',
         unitario: qty > 0 ? montoSIVA / qty : 0, total: montoSIVA, nota: r.base || '',
+        iva: ivaLabel(r.llevaIVA),
       });
     });
     // Fianzas / ISR / costos financieros, mismo principio -- un renglón
@@ -162,6 +178,7 @@ export function buildPartidasDetalle(cot, calc) {
       conceptosCosto.push({
         key: 'fianza_' + f.id, label: (f.nombre || 'Fianza'), tipo: 'fianza',
         unitario: qty > 0 ? montoSIVA / qty : 0, total: montoSIVA, nota: f.base || '',
+        iva: ivaLabel(f.llevaIVA),
       });
     });
 
