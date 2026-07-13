@@ -15,7 +15,11 @@ import { VehiclesTab, VehicleDetail, BillingTab, DocsTab } from './Vehicles.js';
 import Flujo from './Flujo.js';
 import { AIAnalyzerButton } from '../ui/AIAnalyzerButton.js';
 
-const PROJ_TABS = [{id:'info',l:'Información'},{id:'cotizacion',l:'Cotización'},{id:'flujo',l:'Flujo de Pagos'},{id:'bases',l:'Bases'},{id:'vehiculos',l:'Vehículos'},{id:'facturacion',l:'Facturación'},{id:'docs',l:'Documentos'},{id:'preguntas',l:'Preguntas'},{id:'borrador',l:'Borrador'},{id:'activity',l:'Actividad'}];
+// Fase 2A6 -- Navegación Esencial v1: de 10 a 4 tabs principales. El
+// contenido de 'operacion' se agrega en un commit posterior de esta misma
+// rama (Vehículos/Facturación/Flujo) -- hasta entonces, el tab existe en
+// el menú pero su contenido se completa en el siguiente commit.
+const PROJ_TABS = [{id:'resumen',l:'Resumen'},{id:'cotizacion',l:'Cotización'},{id:'operacion',l:'Operación'},{id:'docs',l:'Documentos'}];
 
 const GRUPOS = {
   proyecciones: ['prospecto','analisis','preparacion','aclaraciones','presentada','evaluacion'],
@@ -587,7 +591,10 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
       PROJ_TABS.filter(t=>canProjectTab(t.id, user)).map(t=>h('button',{key:t.id,className:'tab'+(tab===t.id?' active':''),onClick:()=>setTab(t.id),style:{flexShrink:0,whiteSpace:'nowrap'}},t.l))
     ),
     // Info
-    tab==='info' && h('div', null,
+    // Fase 2A6: Resumen fusiona lo que antes eran 3 tabs separados
+    // (Información + Borrador + Actividad) -- mismo contenido, sin
+    // reinventar nada, solo reubicado bajo un solo tab principal.
+    tab==='resumen' && h('div', null,
       h('div', { style:{ marginBottom:16, padding:'14px 16px', background:'var(--blue-bg)', border:'1px solid var(--blue-border)', borderRadius:'var(--rl)', display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' } },
         h('span', { style:{ fontSize:22 } }, '🤖'),
         h('div', { style:{ flex:1, minWidth:180 } },
@@ -636,29 +643,37 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
           );
         })
       ),
-    )),
-    // Actividad
-    tab==='flujo' && h(Flujo, { project, onUpdate:updProject }),
-    tab==='activity' && h('div', null,
-      h('div', { className:'card', style:{ marginBottom:16 } },
-        h('div', { style:{ display:'flex', gap:8 } },
-          h('input', { value:note, onChange:e=>setNote(e.target.value), placeholder:'Agregar nota de seguimiento…', style:{ flex:1 }, onKeyDown:e=>e.key==='Enter'&&!e.shiftKey&&(e.preventDefault(),addNote()) }),
-          h('button', { className:'bp', onClick:addNote }, '+ Nota'),
-        ),
+      // Borrador -- mismo componente BorradorTab de siempre, sin cambios
+      // de lógica, ahora como sección dentro de Resumen en vez de tab propio.
+      h('div', { style:{ marginTop:24, paddingTop:20, borderTop:'1px solid var(--b2)' } },
+        h('div', { style:{ fontSize:13, fontWeight:600, marginBottom:12, color:'var(--t2)', textTransform:'uppercase', letterSpacing:'.4px' } }, 'Notas internas / Borrador'),
+        h(BorradorTab, { project, config, onUpdate:updProject, logFn }),
       ),
-      (project.notes||[]).length===0
-        ? h(EmptyState, { title:'Sin actividad', description:'Registra notas de seguimiento del proyecto.' })
-        : h('div', { className:'card' },
-            [...(project.notes||[])].reverse().map(n=>
-              h('div', { key:n.id, style:{ padding:'12px 0', borderBottom:'.5px solid var(--b3)' } },
-                h('div', { style:{ display:'flex', justifyContent:'space-between', fontSize:11, color:'var(--t2)', marginBottom:4 } },
-                  h('span', null, n.author), h('span', null, new Date(n.date).toLocaleString('es-MX')),
-                ),
-                h('div', { style:{ fontSize:13, lineHeight:1.6, whiteSpace:'pre-wrap' } }, n.text),
-              )
-            )
+      // Actividad -- mismo contenido de siempre (notas de seguimiento),
+      // ahora como bloque compacto dentro de Resumen en vez de tab propio.
+      h('div', { style:{ marginTop:24, paddingTop:20, borderTop:'1px solid var(--b2)' } },
+        h('div', { style:{ fontSize:13, fontWeight:600, marginBottom:12, color:'var(--t2)', textTransform:'uppercase', letterSpacing:'.4px' } }, 'Actividad reciente'),
+        h('div', { className:'card', style:{ marginBottom:16 } },
+          h('div', { style:{ display:'flex', gap:8 } },
+            h('input', { value:note, onChange:e=>setNote(e.target.value), placeholder:'Agregar nota de seguimiento…', style:{ flex:1 }, onKeyDown:e=>e.key==='Enter'&&!e.shiftKey&&(e.preventDefault(),addNote()) }),
+            h('button', { className:'bp', onClick:addNote }, '+ Nota'),
           ),
-    ),
+        ),
+        (project.notes||[]).length===0
+          ? h(EmptyState, { title:'Sin actividad', description:'Registra notas de seguimiento del proyecto.' })
+          : h('div', { className:'card' },
+              [...(project.notes||[])].reverse().map(n=>
+                h('div', { key:n.id, style:{ padding:'12px 0', borderBottom:'.5px solid var(--b3)' } },
+                  h('div', { style:{ display:'flex', justifyContent:'space-between', fontSize:11, color:'var(--t2)', marginBottom:4 } },
+                    h('span', null, n.author), h('span', null, new Date(n.date).toLocaleString('es-MX')),
+                  ),
+                  h('div', { style:{ fontSize:13, lineHeight:1.6, whiteSpace:'pre-wrap' } }, n.text),
+                )
+              )
+            ),
+      ),
+    )),
+    tab==='flujo' && h(Flujo, { project, onUpdate:updProject }),
     // Cotización — Fase 2A4: admin ve CotizacionTab completa (costos,
     // márgenes, PDF interno/cliente, OC); empleado ve CotizacionOperativa,
     // un componente completamente distinto, sin ningún dato/cálculo
@@ -810,8 +825,6 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
             )
           ),
     ),
-    // Borrador
-    tab==='borrador' && h(BorradorTab, { project, config, onUpdate:updProject, logFn }),
     // Modal Orden de Compra
     showOC && h(OCModal, { project, companies, config, onSaveConfig, onSaveCompany, onUpdate:updProject, onClose:()=>setShowOC(false), user }),
     // Modal eliminar
