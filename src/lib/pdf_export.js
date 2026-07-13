@@ -200,7 +200,7 @@ const fmtDate = d => {
 // debe incluir margen, utilidad, costos internos, retornos ni fianzas — esos
 // datos viven exclusivamente en printResumenInterno (admin-only por uso).
 // Si en el futuro se agrega una sección nueva aquí, verificar primero que no
-// filtre ninguna cifra de costo/utilidad/margen de MSMS/Surman/Broking.
+// filtre ninguna cifra de costo/utilidad/margen internos.
 export async function printCotizacionCliente({ project, cot, calc, config, companyObj }) {
   // Datos del encabezado: priorizar la empresa del proyecto (si tiene datos), si no usar la config general
   const cfgEmp = config?.empresa || {};
@@ -712,7 +712,7 @@ export function printResumenInterno({ project, cot, calc, companyObj }) {
      bruto/neto sobre costo, costo total c/IVA y s/IVA) se elimina por
      completo de este PDF a propósito. Este documento está pensado para
      el cliente externo (gobierno) — nunca debe revelar costos internos,
-     utilidad ni margen de MSMS/Surman/Broking. Esos datos SÍ deben vivir
+     utilidad ni margen internos. Esos datos SÍ deben vivir
      únicamente en printResumenInterno (admin-only por uso), no aquí. -->
 
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
@@ -782,7 +782,7 @@ function buildOrdenCompraHTML({ project, partidas, condiciones, folio: folioPara
       </tr>`;
   }).join('');
 
-  // costoMSMS ya viene c/IVA — el total c/IVA es directo
+  // el costo interno ya viene c/IVA — el total c/IVA es directo
   const totalCIVA = partidas.reduce((s,p)=>(p.costoMSMS||0)*(p.cantidad||0)+s, 0);
   const totalSIVA = totalCIVA / (1 + IVA);
   const totalIVA  = totalCIVA - totalSIVA;

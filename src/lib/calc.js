@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────
-// calc.js  —  Lógica financiera de cotización MSMS
+// calc.js  —  Lógica financiera de cotización
 //
-// Fórmulas extraídas directamente del COTIZADOR_MSMS_.xltx
+// Fórmulas extraídas directamente del archivo de cálculo original
 // Hoja "06 Corrida Financiera" (verificado celda por celda)
 //
 // COSTO TOTAL s/IVA = veh_sIVA + eq_sIVA + internos_sIVA + retornos_sIVA + fianzas_sIVA
@@ -15,7 +15,7 @@ const IVA = 0.16;
 
 /**
  * Calcula la corrida financiera completa.
- * Replica exactamente las fórmulas del COTIZADOR_MSMS_.xltx
+ * Replica exactamente las fórmulas del archivo de cálculo original
  */
 export function calcCotizacion(cot) {
   const empty = {

@@ -1,4 +1,4 @@
-// catalog.js — Catálogo de productos MSMS CORP (actualizado)
+// catalog.js — Catálogo de productos (actualizado)
 // vis:true = visible en cotización cliente
 // vis:false = uso interno / mano de obra / logística
 

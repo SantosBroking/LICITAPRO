@@ -1,4 +1,4 @@
-// Cotizacion.js — Tab de cotización MSMS (5 sub-tabs, sin htm)
+// Cotizacion.js — Tab de cotización (5 sub-tabs, sin htm)
 import { h, useState, useEffect, useMemo, useCallback } from '../lib/core.js';
 import { CATALOG_PRODUCTS } from '../lib/catalog.js';
 import { calcCotizacion } from '../lib/calc.js';

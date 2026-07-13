@@ -700,9 +700,9 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
         const enFlujo = oc => (project.firmas||[]).find(f => f.ocId===oc.id && f.estatus!=='completado');
         const equipo = usuariosActivosDetalle;
         const enviarAprobacion = async (oc) => {
-          // Fase mini Firmas/OC: una Orden de Compra SIEMPRE contiene
-          // costoMSMS -- el firmante SIEMPRE debe ser admin. Se reutiliza
-          // el permiso que ya existe (verCostosInternos), no se crea uno
+          // Fase mini Firmas/OC: una Orden de Compra siempre contiene
+          // costos internos -- el firmante SIEMPRE debe ser admin. Se
+          // reutiliza el permiso que ya existe (verCostosInternos), no se crea uno
           // nuevo. Se elimina la captura manual para esta acción
           // específica -- antes permitía escribir cualquier correo sin
           // validar rol.

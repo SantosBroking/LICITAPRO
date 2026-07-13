@@ -36,7 +36,7 @@ export function getPermissions(user) {
     verCotizacionOperativa: !!role,      // puerta de entrada futura — hoy sin efecto, Cotización sigue admin-only por el gate de tab existente
     editarCotizacionOperativa: !!role,   // ídem — sin efecto hasta 2A4
     editarPartidasOperativas: !!role,    // ídem
-    verCostosInternos: isAdmin,          // costoMSMS/costoConIVA — usado por data_sanitize.js
+    verCostosInternos: isAdmin,          // costos internos de compra — usado por data_sanitize.js
     editarCostosInternos: isAdmin,       // alias de guardarFinancieros — mismo valor, nombre más específico donde ayude a leer el código
     verMargenUtilidad: isAdmin,
     editarMargenUtilidad: isAdmin,       // alias
@@ -81,7 +81,7 @@ const TODAS_LAS_PESTANAS_PROYECTO = ['info','cotizacion','flujo','bases','vehicu
 // Decisión verificada con código real (ver documento de diseño): cotizacion y
 // facturacion muestran costos/montos reales de factura; flujo es el
 // calendario de pagos a proveedores. 'borrador' se inspeccionó (buildBorradorHTML/
-// buildBorradorText) y NO contiene costoMSMS/costoConIVA/utilidad/margen —
+// buildBorradorText) y NO contiene costos internos/utilidad/margen —
 // solo compila montoEstimado (ya visible a empleados en otros 5 lugares),
 // fechas, y composición de vehículos sin precios. Queda permitido.
 const PESTANAS_ADMIN_ONLY = ['cotizacion', 'facturacion', 'flujo'];

@@ -1,4 +1,4 @@
-// Catalog.js — Catálogo de equipo MSMS con productos personalizados
+// Catalog.js — Catálogo de equipo con productos personalizados
 import { h, useState, useRef } from '../lib/core.js';
 import { NumInput, StorageImg } from '../ui/primitives.js';
 import { CATALOG_PRODUCTS } from '../lib/catalog.js';
