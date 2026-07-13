@@ -2,6 +2,7 @@
 // Tres plantillas: Cotización Cliente, Resumen Retornos, Resumen Interno
 import { fmt, pctS, numeroALetras } from './utils.js';
 import { calcCotizacion } from './calc.js';
+import { buildResumenInternoData, SEMAFORO_MARGEN_VERDE, SEMAFORO_MARGEN_AMARILLO } from './resumen_interno.js';
 import { CATALOG_IMAGES } from './catalog_images.js';
 import { CATALOG_PRODUCTS, KIT_MAP } from './catalog.js';
 import { getCompanyLogo } from './company_logos.js';
@@ -656,98 +657,140 @@ export function printResumenRetornos({ project, cot, calc, companyObj }) {
 // 3. RESUMEN INTERNO
 // ══════════════════════════════════════════════════════════════
 export function printResumenInterno({ project, cot, calc, companyObj }) {
-  const activeParts = (cot.partidas||[]).filter(p => p.activo && p.cantidad > 0);
+  const data = buildResumenInternoData(project, cot, calc, companyObj);
+  const { base, kpis, corrida, partidas, semaforo } = data;
+
+  const colorSemaforo = { verde:'#1D9E75', amarillo:'#d97706', rojo:'#e24b4a' };
+  const badgeSemaforo = (nivel) => `<span class="badge" style="background:${colorSemaforo[nivel]}22;color:${colorSemaforo[nivel]}">${nivel==='verde'?'🟢':nivel==='amarillo'?'🟡':'🔴'} ${nivel.toUpperCase()}</span>`;
 
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-<title>Resumen Interno ${cot.folio||''}</title>
+<title>Resumen Interno ${base.folio}</title>
 <style>${BASE_CSS}
 .kpi-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-bottom: 20px; }
 .kpi { background: #f6f6f4; padding: 12px 14px; border-radius: 6px; border-left: 3px solid #e0ddd8; }
 .kpi.green { border-left-color: #1D9E75; }
+.kpi.amber { border-left-color: #d97706; }
 .kpi.blue  { border-left-color: #3b6cf4; }
 .kpi.red   { border-left-color: #e24b4a; }
 .kpi .k-label { font-size: 10px; color: #6b6862; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .3px; }
 .kpi .k-value { font-size: 16px; font-weight: 700; }
+.pagina { page-break-before: always; }
+.pagina:first-of-type { page-break-before: auto; }
+.venta-row td { font-weight: 700; background: #EAF2FE; }
+.costo-row td { border-top: 1.5px solid #1a1917; font-weight: 700; }
+.decision-box { padding: 16px 20px; border-radius: 8px; margin: 16px 0 24px; text-align: center; }
 </style></head><body>
 
 <div class="no-print" style="position:fixed;top:0;left:0;right:0;z-index:100;background:#1a1917;color:white;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px">
-  <span style="font-weight:500">Resumen Interno — ${cot.folio||''}</span>
+  <span style="font-weight:500">Resumen Interno — ${base.folio}</span>
   <span style="display:flex;gap:8px"><button onclick="try{window.close()}catch(e){};setTimeout(function(){if(history.length>1)history.back()},100)" style="background:transparent;color:white;border:1px solid rgba(255,255,255,.4);padding:6px 16px;border-radius:4px;cursor:pointer;font-weight:500">← Cerrar</button><button onclick="window.print()" style="background:white;color:#1a1917;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-weight:500">Imprimir / Guardar PDF</button></span>
 </div>
 <div class="sheet">
 
 <div class="confidential">⚠ USO INTERNO — NO COMPARTIR CON CLIENTE</div>
 
+<!-- ══════════ PÁGINA 1 — RESUMEN EJECUTIVO ══════════ -->
+<div class="pagina">
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid #1a1917">
   <div>
-    <h1>Resumen Interno</h1>
-    <div style="font-size:16px;font-weight:500;color:#3b6cf4;margin-top:4px">${project.name||'—'}</div>
+    <h1>Resumen Interno — Corrida Financiera</h1>
+    <div style="font-size:16px;font-weight:500;color:#3b6cf4;margin-top:4px">${base.proyecto}</div>
   </div>
   <div style="text-align:right">
     <div style="font-size:11px;color:#6b6862">Folio</div>
-    <div style="font-size:18px;font-weight:300;color:#3b6cf4">${cot.folio||'—'}</div>
+    <div style="font-size:18px;font-weight:300;color:#3b6cf4">${base.folio}</div>
   </div>
 </div>
 
 <div class="section">
   <h2>Identificación</h2>
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-    ${[['Proyecto',project.name],['Dependencia',project.dependencia],['Responsable',project.responsable],['Fecha cotización',cot.fechaCotizacion],['Vigencia',cot.vigenciaDias+' días'],['Agencia/Proveedor',cot.agenciaProveedor]].map(([l,v])=>`
+    ${[['Proyecto',base.proyecto],['Dependencia',base.dependencia],['Empresa',base.empresa],['Fecha cotización',base.fecha],['Vigencia',base.vigenciaDias?base.vigenciaDias+' días':'—'],['Estatus',base.estatus]].map(([l,v])=>`
     <div style="padding:8px 0;border-bottom:.5px solid #e0ddd8">
       <div class="label">${l}</div><div class="value">${v||'—'}</div>
     </div>`).join('')}
   </div>
 </div>
 
-<div class="section">
-  <h2>Volumen y venta</h2>
-  <div class="kpi-grid">
-    <div class="kpi blue"><div class="k-label">Venta total c/IVA</div><div class="k-value" style="color:#3b6cf4">${fmt(calc.ventaTotal)}</div></div>
-    <div class="kpi"><div class="k-label">Venta total s/IVA</div><div class="k-value">${fmt(calc.ventaSIVA)}</div></div>
-    <div class="kpi"><div class="k-label">Total unidades</div><div class="k-value">${calc.unidades}</div></div>
-  </div>
+<div class="decision-box" style="background:${colorSemaforo[semaforo.nivel]}15">
+  <div style="margin-bottom:8px">${badgeSemaforo(semaforo.nivel)}</div>
+  <div style="font-size:15px;font-weight:700;color:${colorSemaforo[semaforo.nivel]}">${semaforo.decision}</div>
 </div>
 
-<!-- Fase 2A0: la sección "Utilidad y margen" (utilidad bruta/neta, margen
-     bruto/neto sobre costo, costo total c/IVA y s/IVA) se elimina por
-     completo de este PDF a propósito. Este documento está pensado para
-     el cliente externo (gobierno) — nunca debe revelar costos internos,
-     utilidad ni margen internos. Esos datos SÍ deben vivir
-     únicamente en printResumenInterno (admin-only por uso), no aquí. -->
+<div class="section">
+  <h2>KPIs financieros</h2>
+  <div class="kpi-grid">
+    <div class="kpi blue"><div class="k-label">Venta total</div><div class="k-value" style="color:#3b6cf4">${fmt(kpis.ventaTotalCIVA)}</div></div>
+    <div class="kpi"><div class="k-label">Costo total</div><div class="k-value">${fmt(kpis.costoTotalCIVA)}</div></div>
+    <div class="kpi ${kpis.utilNeta>=0?'green':'red'}"><div class="k-label">Utilidad neta</div><div class="k-value" style="color:${kpis.utilNeta>=0?'#1D9E75':'#e24b4a'}">${fmt(kpis.utilNeta)}</div></div>
+    <div class="kpi ${kpis.margenNeto>=SEMAFORO_MARGEN_VERDE?'green':kpis.margenNeto>=SEMAFORO_MARGEN_AMARILLO?'amber':'red'}"><div class="k-label">Margen neto</div><div class="k-value">${pctS(kpis.margenNeto)}</div></div>
+    <div class="kpi"><div class="k-label">Unidades</div><div class="k-value">${base.unidades}</div></div>
+    <div class="kpi"><div class="k-label">Utilidad por unidad</div><div class="k-value" style="color:${kpis.utilidadPorUnidad>=0?'#1D9E75':'#e24b4a'}">${fmt(kpis.utilidadPorUnidad)}</div></div>
+  </div>
+</div>
+</div>
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
-  <div class="section">
-    <h2>Desglose de IVA</h2>
-    <table>
-      ${[['IVA cobrado en venta',fmt(calc.ivaVenta),''],['IVA acreditable (costos)',fmt(calc.ivaAcreditable),''],['IVA sobrante',fmt(calc.ivaSobrante),'font-weight:600'],['% al SAT',pctS(calc.ivaAlSAT/Math.max(calc.ivaSobrante,1)),'color:#6b6862'],['IVA pagado al SAT',fmt(calc.ivaAlSAT),''],['IVA a utilidad',fmt(calc.ivaAUtilidad),'color:#1D9E75;font-weight:600']].map(([l,v,s])=>`
-      <tr><td style="color:#6b6862">${l}</td><td class="right" style="${s}">${v}</td></tr>`).join('')}
-    </table>
-  </div>
-  <div class="section">
-    <h2>Costos internos</h2>
-    <table>
-      ${[['Retornos totales',fmt(calc.totalRetornos),'color:#e24b4a'],['Fianzas / ISR',fmt(calc.totalFianzas),'color:#e24b4a'],['Total costos internos',fmt(calc.totalRetornos+calc.totalFianzas),'font-weight:600;color:#e24b4a']].map(([l,v,s])=>`
-      <tr><td style="color:#6b6862">${l}</td><td class="right" style="${s}">${v}</td></tr>`).join('')}
-    </table>
-    <h2 style="margin-top:16px">Por partida</h2>
-    <table>
-      <thead><tr><th>Partida</th><th>Vehículo</th><th style="text-align:center">Qty</th><th style="text-align:right">Util. bruta s/IVA</th></tr></thead>
-      <tbody>
-      ${activeParts.map(p=>{
-        const pi=parseInt(p.id.replace('P',''))-1,qty=p.cantidad||0;
-        const vehSIVA_unit=(p.costoMSMS||0)/(1+IVA);
-        const eqSIVA_unit=(cot.equipo||[]).filter(e=>e.usar).reduce((s,e)=>{const cnt=(e.cnts&&e.cnts[pi])||0;return s+(e.llevaIVA?(e.costoConIVA||0)/(1+IVA):(e.costoConIVA||0))*cnt;},0);
-        const costoUnit=vehSIVA_unit+eqSIVA_unit;
-        let pvUnit=0;
-        if(p.modoPrecio==='Techo presupuestal')pvUnit=(p.techo||0)>0?(p.techo||0)/(1+IVA)/qty:costoUnit;
-        else if(p.modoPrecio==='Utilidad deseada %')pvUnit=costoUnit*(1+(p.utilidadPct||0));
-        else pvUnit=costoUnit+(p.utilidadDeseada||0);
-        const util=(pvUnit-costoUnit)*qty;
-        return `<tr><td>${p.id}</td><td style="font-size:10px">${p.marca} ${p.modelo}</td><td style="text-align:center">${qty}</td><td style="text-align:right;color:${util>0?'#1D9E75':'#e24b4a'};font-weight:600">${fmt(util)}</td></tr>`;
-      }).join('')}
-      </tbody>
-    </table>
-  </div>
+<!-- ══════════ PÁGINA 2 — CORRIDA FINANCIERA UNITARIA ══════════ -->
+<div class="pagina">
+<h1 style="margin-bottom:16px">Corrida financiera unitaria</h1>
+<div class="section">
+  <table>
+    <thead><tr><th>Concepto</th><th style="text-align:right">Unitario</th><th style="text-align:right">Total</th><th>Notas / alerta</th></tr></thead>
+    <tbody>
+    ${corrida.conceptos.map(c=>`
+      <tr>
+        <td>${c.label}</td>
+        <td class="right">${fmt(c.montoUnitario)}</td>
+        <td class="right">${fmt(c.montoTotal)}</td>
+        <td style="font-size:9px;color:${c.alerta?'#e24b4a':'#6b6862'}">${c.alerta?'⚠ ':''}${c.notas||''}</td>
+      </tr>`).join('')}
+    <tr class="costo-row">
+      <td>Total costo unitario</td>
+      <td class="right">${fmt(corrida.costoUnitarioTotal)}</td>
+      <td class="right">${fmt(corrida.costoTotal)}</td>
+      <td></td>
+    </tr>
+    <tr class="venta-row">
+      <td>Venta (s/IVA)</td>
+      <td class="right" style="color:#3b6cf4">${fmt(corrida.ventaUnitaria)}</td>
+      <td class="right" style="color:#3b6cf4">${fmt(corrida.ventaTotal)}</td>
+      <td></td>
+    </tr>
+    <tr class="costo-row">
+      <td>Utilidad bruta</td>
+      <td class="right" style="color:${corrida.utilidadUnitaria>=0?'#1D9E75':'#e24b4a'}">${fmt(corrida.utilidadUnitaria)}</td>
+      <td class="right" style="color:${corrida.utilidadTotal>=0?'#1D9E75':'#e24b4a'}">${fmt(corrida.utilidadTotal)}</td>
+      <td style="font-size:9px">Margen: ${pctS(corrida.margen)}</td>
+    </tr>
+    </tbody>
+  </table>
+  <div style="font-size:9px;color:#6b6862;margin-top:-10px">Unidades: ${corrida.unidades}. Cifras s/IVA salvo donde se indique. La venta no forma parte de los conceptos de costo — se muestra aparte para llegar a la utilidad.</div>
+</div>
+</div>
+
+<!-- ══════════ PÁGINA 3 — PARTIDAS ══════════ -->
+<div class="pagina">
+<h1 style="margin-bottom:16px">Partidas (ordenadas por riesgo/impacto)</h1>
+<div class="section">
+  <table>
+    <thead><tr><th>Partida</th><th>Descripción</th><th style="text-align:center">Cant.</th><th style="text-align:right">Venta unit.</th><th style="text-align:right">Costo unit.</th><th style="text-align:right">Util. unit.</th><th style="text-align:right">Util. total</th><th style="text-align:center">Margen</th><th style="text-align:center">Sem.</th><th>Alertas</th></tr></thead>
+    <tbody>
+    ${partidas.map(p=>`
+      <tr>
+        <td>${p.id}</td>
+        <td style="font-size:9px">${p.descripcion}</td>
+        <td style="text-align:center">${p.cantidad}</td>
+        <td class="right">${fmt(p.ventaUnitSIVA)}</td>
+        <td class="right">${fmt(p.costoUnitSIVA)}</td>
+        <td class="right" style="color:${p.utilUnit>=0?'#1D9E75':'#e24b4a'}">${fmt(p.utilUnit)}</td>
+        <td class="right" style="font-weight:600;color:${p.utilTotal>=0?'#1D9E75':'#e24b4a'}">${fmt(p.utilTotal)}</td>
+        <td style="text-align:center">${pctS(p.margen)}</td>
+        <td style="text-align:center">${badgeSemaforo(p.semaforo)}</td>
+        <td style="font-size:8.5px;color:#e24b4a">${p.alertas.join('; ')}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>
+</div>
 </div>
 
 <div class="footer">
