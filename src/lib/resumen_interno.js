@@ -171,7 +171,7 @@ export function buildCorridaUnitaria(cot, calc, partidasDetalle, equipoDetalle) 
       tipo: 'vehiculo',
       montoUnitario: unidades > 0 ? calc.costoVehSIVA / unidades : 0,
       montoTotal: calc.costoVehSIVA,
-      fuente: 'partidas[].costoMSMS',
+      fuente: 'partida_costo_base',
       alerta: partidasDetalle.some(p => p.alertas.includes('Partida activa sin costo de vehículo')),
       notas: '',
     });
