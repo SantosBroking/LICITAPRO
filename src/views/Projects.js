@@ -6,7 +6,7 @@ import { h, useState, useMemo, useCallback, useRef, useEffect } from '../lib/cor
 import { STATUSES, FINAL_STATUS, KANBAN_COLS, TIPOS_PROCEDIMIENTO, DEPENDENCIAS_COMUNES, TIPOS_PRODUCTO } from '../lib/constants.js';
 import { fmt, daysUntil, alertLevel, TODAY, NOW, uid } from '../lib/utils.js';
 import { Badge, AlertChip, Metric, Inp, EmptyState, ConfirmAction, NumInput, DeleteConfirmModal } from '../ui/primitives.js';
-import { getPermissions, canProjectTab } from '../lib/permissions.js'; // Fase 1C + fix navegación
+import { getPermissions, canProjectTab, getAllowedSubTabs } from '../lib/permissions.js'; // Fase 1C + fix navegación + Fase 2A6 (sub-nav de Operación)
 import { sb } from '../lib/supabase.js'; // Fase 1C — directorio de usuarios activos
 import CotizacionTab from './Cotizacion.js';
 import CotizacionOperativa from './CotizacionOperativa.js'; // Fase 2A4
@@ -442,7 +442,7 @@ export function ProjectForm({ project, companies, config, onSave, onCancel, user
   );
 }
 
-export function ProjectDetail({ project, vehicles, companies, config, onSaveConfig, onSaveCompany, onUpdate, onDelete, onSave, onNav, user, logFn, activeTab, setActiveTab, cotSubTab, setCotSubTab }) {
+export function ProjectDetail({ project, vehicles, companies, config, onSaveConfig, onSaveCompany, onUpdate, onDelete, onSave, onNav, user, logFn, activeTab, setActiveTab, cotSubTab, setCotSubTab, operacionSubTab, setOperacionSubTab }) {
   const [showEdit, setShowEdit]     = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [showOC, setShowOC]         = useState(false);
@@ -673,7 +673,30 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
             ),
       ),
     )),
-    tab==='flujo' && h(Flujo, { project, onUpdate:updProject }),
+    // Fase 2A6: Operación fusiona Vehículos + Facturación + Flujo de Pagos
+    // bajo un solo tab principal, con su propia sub-navegación interna.
+    // Facturación y Flujo siguen siendo admin-only -- ahora ese gate vive
+    // en getAllowedSubTabs('operacion', user) en vez de a nivel de tab
+    // completo (mismo patrón que Cotización desde Fase 2A4). Ninguno de
+    // los 3 componentes (VehiclesTab, BillingTab, Flujo) cambió su lógica
+    // interna -- solo se re-envuelven aquí.
+    tab==='operacion' && (() => {
+      const opSubTabsPermitidas = getAllowedSubTabs('operacion', user);
+      const opSubTab = (opSubTabsPermitidas.includes(operacionSubTab) ? operacionSubTab : opSubTabsPermitidas[0]) || 'vehiculos';
+      const OP_LABELS = { vehiculos:'Vehículos', facturacion:'Facturación', flujo:'Flujo de Pagos' };
+      return h('div', null,
+        opSubTabsPermitidas.length > 1 && h('div', { style:{ display:'flex', gap:6, marginBottom:16, borderBottom:'1px solid var(--b1)', paddingBottom:2, overflowX:'auto' } },
+          opSubTabsPermitidas.map(st => h('button', {
+            key:st,
+            onClick:()=>setOperacionSubTab && setOperacionSubTab(st),
+            style:{ fontSize:12, padding:'7px 14px', borderRadius:'var(--r) var(--r) 0 0', border:'none', borderBottom: opSubTab===st?'2px solid var(--blue)':'2px solid transparent', background:'transparent', color: opSubTab===st?'var(--blue)':'var(--t2)', fontWeight: opSubTab===st?600:400, cursor:'pointer', flexShrink:0, whiteSpace:'nowrap' },
+          }, OP_LABELS[st] || st)),
+        ),
+        opSubTab==='vehiculos' && h(VehiclesTab, { project, vehicles:pVehicles, onSave:v=>onNav('save_vehicle',v), onDelete:id=>onNav('delete_vehicle',id), onNav:(view,id)=>{ if(view==='vehicle_detail')setSelVehicle(id); else onNav(view,id); }, user, logFn }),
+        opSubTab==='facturacion' && h(BillingTab, { project, vehicles:pVehicles, onNav:(view,id)=>{ if(view==='vehicle_detail'){ setSelVehicle(id); } else { onNav(view,id); } } }),
+        opSubTab==='flujo' && h(Flujo, { project, onUpdate:updProject }),
+      );
+    })(),
     // Cotización — Fase 2A4: admin ve CotizacionTab completa (costos,
     // márgenes, PDF interno/cliente, OC); empleado ve CotizacionOperativa,
     // un componente completamente distinto, sin ningún dato/cálculo
@@ -695,10 +718,6 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
     tab==='cotizacion' && !isAdmin && h(CotizacionOperativa, { project, onUpdate:updProject, activeTab:cotSubTab, setActiveTab:setCotSubTab }),
     // Bases
     tab==='bases' && h(BasesPreparacion, { project, config, onUpdate:updProject, user, logFn }),
-    // Vehículos
-    tab==='vehiculos' && h(VehiclesTab, { project, vehicles:pVehicles, onSave:v=>onNav('save_vehicle',v), onDelete:id=>onNav('delete_vehicle',id), onNav:(view,id)=>{ if(view==='vehicle_detail')setSelVehicle(id); else onNav(view,id); }, user, logFn }),
-    // Facturación
-    tab==='facturacion' && h(BillingTab, { project, vehicles:pVehicles, onNav:(view,id)=>{ if(view==='vehicle_detail'){ setSelVehicle(id); } else { onNav(view,id); } } }),
     // Documentos
     tab==='docs' && h('div', null,
       // Órdenes de Compra generadas
