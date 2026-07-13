@@ -382,6 +382,16 @@ export default function App() {
   const handleSaveProject = useCallback(async (p, navigate) => {
     const original = projects.find(x=>x.id===p.id);
     const paraGuardar = sanitizeProjectUpdateForRole(original, p, user); // Fase 2A2 — admin: sin cambios; empleado: merge seguro contra el original
+    // Fase 2A4 — decisión deliberada, verificada con pruebas reales: NO se
+    // recalcula montoEstimado aquí para guardados de empleado. Cualquier
+    // edición desde CotizacionOperativa.js (cantidad, partida nueva, etc.)
+    // llega SIN los campos financieros necesarios para un cálculo correcto
+    // (el empleado nunca los ve) — recalcular con datos incompletos
+    // produciría una cifra menor a la real, no solo desactualizada.
+    // montoEstimado se preserva tal cual (confirmado: sanitizeProjectUpdateForRole
+    // ya lo hace, sin necesidad de lógica adicional aquí) hasta que admin
+    // vuelva a abrir Cotización completa y lo recalcule con los precios
+    // reales. Esto no es un caso "a veces seguro" — desde esta vía nunca lo es.
     setProjects(prev => { const ex=prev.find(x=>x.id===paraGuardar.id); return ex?prev.map(x=>x.id===paraGuardar.id?paraGuardar:x):[paraGuardar,...prev]; });
     if (navigate) nav('project_detail', paraGuardar.id);
     try { await saveProject(paraGuardar, getUID()); await maybeSaveFinancials(paraGuardar); log(user,'guardó','proyecto',paraGuardar.id,paraGuardar.name); } catch(e){ console.error(e); }
@@ -389,7 +399,7 @@ export default function App() {
 
   const upProject = useCallback((updated) => {
     const original = projects.find(x=>x.id===updated.id);
-    const paraGuardar = sanitizeProjectUpdateForRole(original, updated, user); // Fase 2A2
+    const paraGuardar = sanitizeProjectUpdateForRole(original, updated, user); // Fase 2A2 — mismo razonamiento de montoEstimado que handleSaveProject, arriba
     setProjects(prev => prev.map(p => p.id===paraGuardar.id ? paraGuardar : p));
     _pending.current = paraGuardar;
     if (_timer.current) clearTimeout(_timer.current);
