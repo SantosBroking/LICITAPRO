@@ -75,20 +75,21 @@ export function sanitizeView(view, user) {
 }
 
 // Espejo de PROJ_TABS (src/views/Projects.js) — NO se importa directo para
-// evitar un ciclo de imports (Projects.js ya importa getPermissions de aquí).
-// Si PROJ_TABS cambia en Projects.js, actualizar también esta lista.
-const TODAS_LAS_PESTANAS_PROYECTO = ['info','cotizacion','flujo','bases','vehiculos','facturacion','docs','preguntas','borrador','activity'];
-// Decisión verificada con código real (ver documento de diseño): cotizacion y
-// facturacion muestran costos/montos reales de factura; flujo es el
-// calendario de pagos a proveedores. 'borrador' se inspeccionó (buildBorradorHTML/
-// buildBorradorText) y NO contiene costos internos/utilidad/margen —
-// solo compila montoEstimado (ya visible a empleados en otros 5 lugares),
-// fechas, y composición de vehículos sin precios. Queda permitido.
-// Fase 2A4: 'cotizacion' se retira de esta lista -- empleado ahora puede
-// entrar al tab, pero Projects.js decide qué componente montar (
-// CotizacionTab para admin, CotizacionOperativa para empleado) y las
-// sub-pestañas financieras siguen bloqueadas por separado, abajo.
-const PESTANAS_ADMIN_ONLY = ['facturacion', 'flujo'];
+// Fase 2A6 -- Navegación Esencial v1: de 10 tabs a 4 (resumen, cotizacion,
+// operacion, documentos). 'info'/'borrador'/'activity' se fusionan dentro
+// de 'resumen'; 'vehiculos'/'facturacion'/'flujo' dentro de 'operacion';
+// 'bases'/'preguntas' se ocultan por ahora (sin borrar sus datos, sin
+// desarrollar el futuro módulo de IA de bases). Ningún dato se pierde --
+// solo cambia qué id de tab principal existe y qué componente monta cada
+// uno; los datos siguen viviendo exactamente donde ya vivían
+// (project.notes, project.preguntas, etc.).
+const TODAS_LAS_PESTANAS_PROYECTO = ['resumen', 'cotizacion', 'operacion', 'docs'];
+// 'operacion' ya NO es admin-only a nivel de tab completo -- Facturación y
+// Flujo siguen siendo admin-only, pero ahora como sub-navegación INTERNA
+// dentro de 'operacion' (mismo patrón que 'cotizacion' desde Fase 2A4:
+// un tab, contenido distinto según rol). Empleado sigue viendo 'operacion'
+// si tiene algo permitido ahí (hoy: Vehículos).
+const PESTANAS_ADMIN_ONLY = [];
 
 export function getAllowedProjectTabs(user) {
   const admin = getPermissions(user).isAdmin;
@@ -98,7 +99,7 @@ export function canProjectTab(tab, user) {
   return typeof tab === 'string' && getAllowedProjectTabs(user).includes(tab);
 }
 export function sanitizeProjectTab(tab, user) {
-  return canProjectTab(tab, user) ? tab : 'info';
+  return canProjectTab(tab, user) ? tab : 'resumen';
 }
 
 // ── Sub-pestañas dentro de un módulo. "Scope" es el identificador del
@@ -108,15 +109,23 @@ export function sanitizeProjectTab(tab, user) {
 // financieras (extras/corrida/unitario/agente), sin importar qué se
 // intente forzar por URL/localStorage.
 //
+// Fase 2A6: dentro de 'cotizacion' (admin), 'corrida' y 'unitario' se
+// fusionan en una sola sub-pestaña 'finanzas' -- ya no son dos secciones
+// separadas. Nuevo scope 'operacion': admin ve vehiculos/facturacion/
+// flujo; empleado ve solo vehiculos (Facturación y Flujo siguen
+// admin-only, ahora como sub-pestaña en vez de tab principal).
+//
 // Espejo de TABS (src/views/Cotizacion.js:26) para admin — NO se importa
 // directo (mismo riesgo de ciclo de imports que PROJ_TABS). Si TABS cambia
 // en Cotizacion.js, actualizar también esta lista.
 const SUBTABS_POR_SCOPE_ADMIN = {
-  cotizacion: ['partidas', 'equipo', 'extras', 'corrida', 'unitario', 'agente'],
+  cotizacion: ['partidas', 'equipo', 'extras', 'finanzas', 'agente'],
+  operacion: ['vehiculos', 'facturacion', 'flujo'],
 };
 // Sub-pestañas de CotizacionOperativa.js (Fase 2A4) — ninguna financiera.
 const SUBTABS_POR_SCOPE_EMPLEADO = {
   cotizacion: ['resumen', 'partidas', 'equipo'],
+  operacion: ['vehiculos'],
 };
 
 export function getAllowedSubTabs(scope, user) {
