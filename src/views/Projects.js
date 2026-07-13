@@ -9,6 +9,7 @@ import { Badge, AlertChip, Metric, Inp, EmptyState, ConfirmAction, NumInput, Del
 import { getPermissions, canProjectTab } from '../lib/permissions.js'; // Fase 1C + fix navegación
 import { sb } from '../lib/supabase.js'; // Fase 1C — directorio de usuarios activos
 import CotizacionTab from './Cotizacion.js';
+import CotizacionOperativa from './CotizacionOperativa.js'; // Fase 2A4
 import BasesPreparacion from './Bases.js';
 import { VehiclesTab, VehicleDetail, BillingTab, DocsTab } from './Vehicles.js';
 import Flujo from './Flujo.js';
@@ -658,9 +659,12 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
             )
           ),
     ),
-    // Cotización — Fase 0C: guardián extra; aunque `tab` llegara a ser
-    // 'cotizacion' por una URL vieja o estado residual, no renderiza para
-    // quien no sea admin.
+    // Cotización — Fase 2A4: admin ve CotizacionTab completa (costos,
+    // márgenes, PDF interno/cliente, OC); empleado ve CotizacionOperativa,
+    // un componente completamente distinto, sin ningún dato/cálculo
+    // financiero en su alcance. `project` que reciben ambos ya viene
+    // decidido por App.js (raw para admin, saneado para empleado) — este
+    // bloque no necesita sanear nada por su cuenta.
     tab==='cotizacion' && isAdmin && h('div', null,
       h('div', { style:{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap', paddingBottom:14, borderBottom:'.5px solid var(--b3)' } },
         h('div', { style:{ fontSize:11, color:'var(--t2)', alignSelf:'center', marginRight:4 } }, 'Exportar PDF:'),
@@ -671,6 +675,9 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
       ),
       h(CotizacionTab, { project, onUpdate:(updated)=>{ cotRef.current=updated.cotizacion||{}; updProject(updated); }, activeTab:cotSubTab, setActiveTab:setCotSubTab, config, onSaveConfig }),
     ),
+    // Cotización Operativa — empleado. Sin botones de PDF/OC/IA financiera;
+    // ninguno de esos vive dentro de CotizacionOperativa.js en absoluto.
+    tab==='cotizacion' && !isAdmin && h(CotizacionOperativa, { project, onUpdate:updProject, activeTab:cotSubTab, setActiveTab:setCotSubTab }),
     // Bases
     tab==='bases' && h(BasesPreparacion, { project, config, onUpdate:updProject, user, logFn }),
     // Vehículos
