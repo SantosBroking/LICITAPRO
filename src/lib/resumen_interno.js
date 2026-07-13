@@ -1,12 +1,12 @@
 // resumen_interno.js — Fase 2A5 v3: helper de datos para la Corrida
 // Financiera Interna, organizada POR PARTIDA. Admin-only.
 //
-// Cambio de diseño respecto a v2: la corrida central ya NO promedia
+// Cambio de diseño respecto a v2: la corrida central ya NO combina
 // vehículo/equipo entre partidas distintas (ej. Ford Explorer + Toyota
-// Hilux mezclados en un solo "vehículo base promedio"). Cada partida
-// activa tiene su propia corrida completa, con sus propios conceptos de
-// costo y su propio equipo. El consolidado del proyecto es un resumen al
-// final, nunca el cálculo central.
+// Hilux en una sola cifra unificada). Cada partida activa tiene su
+// propia corrida completa, con sus propios conceptos de costo y su
+// propio equipo. El consolidado del proyecto es un resumen al final,
+// nunca el cálculo central.
 //
 // Principio que se mantiene igual que v2: nunca se duplica una fórmula
 // agregada que calcCotizacion ya calcula -- los totales consolidados
@@ -24,9 +24,9 @@
 //   - 'Monto fijo total'       -> prorrateo por participación de venta
 //     de esa partida sobre la venta total del proyecto.
 //
-// v2 tenía semáforos, riesgos, alertas y una "decisión sugerida" -- todo
-// eso se elimina en esta v3 a petición explícita: se quiere una corrida
-// financiera clara, sin que el reporte interprete o califique.
+// Esta v3 se enfoca únicamente en la corrida financiera clara, sin que
+// el reporte interprete, califique ni añada capas de interpretación
+// adicionales -- solo los números desglosados por partida.
 
 import { TODAY } from './utils.js';
 
