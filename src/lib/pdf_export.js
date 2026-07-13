@@ -747,29 +747,33 @@ ${partidas.map(p => `
 <div class="section">
   <h2>Corrida financiera unitaria</h2>
   <table>
-    <thead><tr><th>Concepto</th><th style="text-align:right">Unitario</th><th style="text-align:right">Total</th><th>Nota</th></tr></thead>
+    <thead><tr><th>Concepto</th><th style="text-align:center">IVA</th><th style="text-align:right">Unitario</th><th style="text-align:right">Total</th><th>Nota</th></tr></thead>
     <tbody>
     ${p.conceptosCosto.map(c=>`
       <tr>
         <td>${c.label}</td>
+        <td style="text-align:center;font-size:10px;color:#6b6862">${c.iva||'—'}</td>
         <td class="right">${fmt(c.unitario)}</td>
         <td class="right">${fmt(c.total)}</td>
         <td style="font-size:9px;color:#6b6862">${c.nota||''}</td>
       </tr>`).join('')}
     <tr class="costo-row">
       <td>Total costo unitario</td>
+      <td></td>
       <td class="right">${fmt(p.costoUnitario)}</td>
       <td class="right">${fmt(p.costoTotal)}</td>
       <td></td>
     </tr>
     <tr class="venta-row">
       <td>Venta (s/IVA)</td>
+      <td></td>
       <td class="right" style="color:#3b6cf4">${fmt(p.ventaUnitaria)}</td>
       <td class="right" style="color:#3b6cf4">${fmt(p.ventaTotal)}</td>
       <td></td>
     </tr>
     <tr class="costo-row">
       <td>Utilidad</td>
+      <td></td>
       <td class="right">${fmt(p.utilidadUnitaria)}</td>
       <td class="right">${fmt(p.utilidadTotal)}</td>
       <td style="font-size:9px">Margen: ${pctS(p.margen)}</td>
@@ -777,27 +781,6 @@ ${partidas.map(p => `
     </tbody>
   </table>
 </div>
-
-${p.equipo.length>0 ? `
-<div class="section">
-  <h2>Equipo — ${p.id} ${p.nombre}</h2>
-  <table>
-    <thead><tr><th>Equipo</th><th>Categoría</th><th style="text-align:center">Cant./unidad</th><th style="text-align:center">Cant. total</th><th style="text-align:right">Costo unit.</th><th style="text-align:right">Costo total</th><th style="text-align:center">Fecha costo</th><th>Notas</th></tr></thead>
-    <tbody>
-    ${p.equipo.map(e=>`
-      <tr>
-        <td>${e.nombre}</td>
-        <td style="font-size:9px">${e.categoria}</td>
-        <td style="text-align:center">${e.cantidadPorUnidad}</td>
-        <td style="text-align:center">${e.cantidadTotal}</td>
-        <td class="right">${fmt(e.costoUnitario)}</td>
-        <td class="right">${fmt(e.costoTotal)}</td>
-        <td style="text-align:center;font-size:9px">${e.fechaCosto||'—'}</td>
-        <td style="font-size:9px">${e.notas||''}</td>
-      </tr>`).join('')}
-    </tbody>
-  </table>
-</div>` : ''}
 `).join('')}
 </div>
 
