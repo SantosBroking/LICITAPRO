@@ -6,7 +6,7 @@
 
 ## Estado actual
 
-- **Fase en curso:** ninguna — última entrega cerrada: Corrida Financiera Interna v3 — por partida, **completa en producción**; siguiente paso sugerido: probar visualmente el nuevo PDF con proyectos reales y ajustar layout si hace falta, o continuar con otro incremento pendiente (agregar equipo desde catálogo en Cotización Operativa, quitar partida/equipo, Fase 2E), según decisión
+- **Fase en curso:** ninguna — última entrega cerrada: Corrida Financiera Interna v3 — equipo inline + IVA, **completa en producción**; siguiente paso sugerido: probar visualmente con proyectos reales y ajustar layout si hace falta, o continuar con otro incremento pendiente (agregar equipo desde catálogo en Cotización Operativa, quitar partida/equipo, Fase 2E), según decisión
 - **Rama de trabajo:** `fase0-seguridad`
 - **`main` no ha sido tocado.** Todo el trabajo de Fase 0 se construye en esta rama hasta que esté probado y aprobado explícitamente para merge.
 - **Diseño completo de la migración:** documentado fuera del repo (tres documentos técnicos: Master Blueprint de auditoría, Plan de Migración Fase 0+1 v1 y v2, Preparación Fase 0A, Guía de Backup Manual). Este archivo resume el estado operativo; el diseño detallado vive en esos documentos.
@@ -624,6 +624,68 @@ Exactamente 3 commits, sin ninguno extra. Exactamente 2 archivos modificados. B�
 - Asignación manual de retornos/fianzas por partida — hoy se usan las 3 reglas automáticas ya confirmadas según cómo esté capturado cada retorno/fianza; una asignación manual explícita por partida podría ser una mejora futura, no implementada en esta versión.
 - Cambios de base de datos — ninguno.
 - Renombrar el campo técnico `costoMSMS` — sigue como campo heredado, sin cambios.
+
+### ✅ Corrida Financiera Interna v3 — ajuste: equipo inline + columna IVA
+
+**Contexto:** tras probar visualmente Corrida Financiera Interna v3 (por partida), se detectó que la sección separada de equipo por partida ("Equipo — P1 Ford Explorer", "Equipo — P2 Toyota Hilux") duplicaba información que ya existía en la corrida financiera de cada partida — la corrida ya mostraba conceptos de equipo, así que la tabla separada solo ocupaba espacio y hacía el PDF más largo y menos claro. Además, se necesitaba ver directamente en la tabla principal qué conceptos tenían IVA.
+
+**Decisión:** eliminar la tabla separada de equipo; mostrar el equipo directamente dentro de la corrida de cada partida, por nombre real (no por categoría agrupada); agregar una columna "IVA"; ajustar los anchos de columna para que la tabla no quedara apretada.
+
+#### A. Equipo inline dentro de la corrida
+
+La sección separada de equipo fue eliminada — el equipo ahora aparece dentro de la tabla principal de la corrida, por nombre real (ej. "Kit Imagen institucional completa", "Kit fierros SUV Leve", "Kit Radio Hytera TETRA"), ya no como conceptos agregados por categoría (ej. "Equipo: 01 Imagen"). La categoría se muestra en la columna Nota.
+
+#### B. Columna IVA
+
+Nueva columna "IVA", con 3 valores posibles: "Sí" (`llevaIVA === true`), "No" (`llevaIVA === false`), "—" (no existe el campo o no aplica) — nunca se inventa. El vehículo base muestra "—" porque no existe un campo `llevaIVA` real capturado por partida para el vehículo (a diferencia de equipo/retornos/fianzas, que sí lo tienen).
+
+#### C. Nota compacta para equipo
+
+La columna Nota muestra la categoría, y si la cantidad por unidad es mayor a 1, se agrega de forma compacta (ej. `01 Imagen` vs. `07 Consumibles · 2 x unidad`) — sin necesitar una columna extra de cantidad total, ya que el total ya está calculado en la columna Total.
+
+#### D. Tabla separada eliminada
+
+Se eliminó por completo la sección "EQUIPO — P1"/"EQUIPO — P2" y sus 8 columnas (Equipo, Categoría, Cant./unidad, Cant. total, Costo unit., Costo total, Fecha costo, Notas).
+
+#### E. Anchos explícitos
+
+Nueva clase `corrida-partida-table`: Concepto 32%, IVA 8%, Unitario 16%, Total 16%, Nota 28% — aplicados únicamente a la tabla de corrida por partida (no a la tabla resumen de Página 1, ni al anexo, ni a ningún otro PDF). El objetivo fue evitar que, bajo `table-layout: fixed` sin anchos explícitos, "Concepto" quedara con el mismo ancho estrecho que "IVA".
+
+#### F. Totales sin cambios
+
+El ajuste fue exclusivamente de presentación — no cambió ninguna lógica financiera. La comparación directa contra la versión anterior (venta, costo, utilidad, margen, consolidado) dio resultados idénticos en cada escenario probado.
+
+#### Commits
+
+| # | Commit | Contenido | Archivo(s) |
+|---|---|---|---|
+| 1 | `3e3007098b42bb2ef49c23de9dfbf35dcaa765be` | Helper: equipo inline por item real + columna IVA | `src/lib/resumen_interno.js` |
+| 2 | `ebe884366419e0bcd839b2a813a26ddcd4e51698` | PDF: quitar tabla separada de equipo, agregar columna IVA | `src/lib/pdf_export.js` |
+| 3 | `89cd238870467be41943339406b648697dc9e09e` | Anchos explícitos de tabla y limpieza de comentario | `src/lib/pdf_export.js`, `src/lib/resumen_interno.js` |
+
+**Archivos modificados (2, únicamente):** `src/lib/resumen_interno.js`, `src/lib/pdf_export.js`. No se tocó Supabase, RLS, SQL, variables, `api/`, `data_sanitize.js`, `calc.js`, `Cotizacion.js`, `CotizacionOperativa.js`, `Catalog.js`, `Firmas.js`, `Projects.js`, ni `package.json`.
+
+**Commit final en `main`:** `89cd238870467be41943339406b648697dc9e09e`
+
+**Estado: cerrado en producción.** URL: `https://licitapro-beta.vercel.app`
+
+#### Validaciones finales
+
+Exactamente 3 commits, sin ninguno extra. Exactamente 2 archivos modificados. Tabla separada de equipo: eliminada, cero apariciones de "EQUIPO —"/"Equipo —". Equipo inline confirmado dentro de la tabla principal, por nombre real, no agrupado. Columna IVA confirmada con sus 3 valores correctos, sin inventar datos. Anchos explícitos confirmados (32/8/16/16/28%), aplicados solo a la tabla de corrida por partida. Totales sin cambios — comparación directa contra la versión anterior idéntica. Búsqueda de secciones prohibidas y de "Equipo:" como label visible: 0 líneas. Grep de "MSMS": 17 líneas, todas `costoMSMS` como propiedad técnica interna. Deploy de producción confirmado exitoso.
+
+#### Límites pendientes, documentados a propósito (no resueltos en este ajuste)
+
+- Network/DevTools crudo — sigue pendiente (Fase 2E).
+- RLS `UPDATE` amplio — sigue pendiente.
+- PDF cliente para empleado — sigue diferido.
+- IA operativa — sigue diferida.
+- Agregar/quitar equipo operativo en Cotización Operativa — pendiente.
+- DPP como campo real — no existe, no se inventó.
+- Asignación manual de retornos/fianzas por partida — sigue usando las 3 reglas automáticas ya confirmadas.
+- Cambios de base de datos — ninguno.
+- Renombrar el campo técnico `costoMSMS` — sigue como campo heredado.
+
+Este ajuste fue únicamente de presentación/legibilidad del PDF interno — no cambia permisos, no cambia seguridad, no cambia ningún cálculo.
 
 ### Fase futura (pendiente, re-etiquetada) — Multiempresa y nuevo proyecto
 - Organización única: **Grupo Santiago**
