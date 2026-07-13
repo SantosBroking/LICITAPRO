@@ -453,7 +453,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
   const [usuariosActivosDetalle, setUsuariosActivosDetalle] = useState([]);
   useEffect(() => {
     let cancel = false;
-    sb.from('user_profiles').select('name,email').eq('active', true).then(({ data }) => {
+    sb.from('user_profiles').select('name,email,role').eq('active', true).then(({ data }) => {
       if (!cancel && data) setUsuariosActivosDetalle(data);
     });
     return () => { cancel = true; };
@@ -700,20 +700,27 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
         const enFlujo = oc => (project.firmas||[]).find(f => f.ocId===oc.id && f.estatus!=='completado');
         const equipo = usuariosActivosDetalle;
         const enviarAprobacion = async (oc) => {
-          // Elegir responsable que firmará (de la lista de equipo o manual)
+          // Fase mini Firmas/OC: una Orden de Compra SIEMPRE contiene
+          // costoMSMS -- el firmante SIEMPRE debe ser admin. Se reutiliza
+          // el permiso que ya existe (verCostosInternos), no se crea uno
+          // nuevo. Se elimina la captura manual para esta acción
+          // específica -- antes permitía escribir cualquier correo sin
+          // validar rol.
+          const soloAdmins = equipo.filter(u => getPermissions({ role: u.role }).verCostosInternos);
+          if (soloAdmins.length === 0) {
+            alert('No hay ningún admin activo disponible para firmar esta Orden de Compra. Contacta a soporte.');
+            return;
+          }
           let respNombre = '', respEmail = '';
-          if (equipo.length > 0) {
-            const opciones = equipo.map((e,i)=>`${i+1}. ${e.name} (${e.email})`).join('\n');
-            const sel = prompt('¿Quién firmará esta OC? Escribe el número:\n\n'+opciones);
+          if (soloAdmins.length === 1) {
+            respNombre = soloAdmins[0].name; respEmail = soloAdmins[0].email;
+          } else {
+            const opciones = soloAdmins.map((e,i)=>`${i+1}. ${e.name} (${e.email})`).join('\n');
+            const sel = prompt('¿Quién firmará esta Orden de Compra? (solo admins, contiene costos internos)\n\n'+opciones);
             if (sel===null) return;
             const idx = parseInt(sel,10)-1;
-            if (equipo[idx]) { respNombre = equipo[idx].name; respEmail = equipo[idx].email; }
-            else { alert('Opción no válida.'); return; }
-          } else {
-            respNombre = prompt('Nombre del responsable que firmará:') || '';
-            if (!respNombre) return;
-            respEmail = prompt('Correo del responsable:') || '';
-            if (!respEmail) return;
+            if (!soloAdmins[idx]) { alert('Opción no válida.'); return; }
+            respNombre = soloAdmins[idx].name; respEmail = soloAdmins[idx].email;
           }
           const doc = nuevoDocFlujo({
             tipo:'oc', titulo:'Orden de compra · '+(oc.proveedor||''), folio:oc.folio, proyectoId:project.id,

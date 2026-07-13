@@ -1,9 +1,9 @@
 // Firmas.js — Buzón del flujo de autorizaciones (5 estados)
-import { h, useState, useRef } from '../lib/core.js';
+import { h, useState, useEffect, useRef } from '../lib/core.js';
 import { EmptyState } from '../ui/primitives.js';
 import { TODAY } from '../lib/utils.js';
 import { getPermissions } from '../lib/permissions.js'; // Fase 1C
-import { uploadFileToStorage, abrirArchivo } from '../lib/supabase.js';
+import { sb, uploadFileToStorage, abrirArchivo } from '../lib/supabase.js';
 import { ESTADO_INFO, aprobar, rechazar, reenviar, subirFirmadoDoc, vistoFinal, devolver,
          avisarFirma, avisarRechazo, avisarVistoFinal, avisarAprobacion } from '../lib/firmas.js';
 import { ordenCompraPdfBase64, documentoMembretadoPdfBase64 } from '../lib/pdf_export.js';
@@ -38,6 +38,20 @@ export default function FirmasView({ projects, companies, user, onUpdateProject,
   tabsDisp.push(['mios','Míos ('+mios.length+')']);
   tabsDisp.push(['todos','Todos']);
   const [tab, setTab] = useState(esJefe ? 'aprobar' : 'firmar');
+  // Fase mini Firmas/OC: conjunto de correos de admins activos, para
+  // validar en doAprobar que el responsable de una OC financiera sea
+  // admin -- segunda capa, cubre documentos ya existentes o cualquier vía
+  // que no haya pasado por el filtro de Projects.js. null = aún cargando.
+  const [adminEmails, setAdminEmails] = useState(null);
+  useEffect(() => {
+    let cancel = false;
+    sb.from('user_profiles').select('email,role').eq('active', true).then(({ data }) => {
+      if (!cancel && data) {
+        setAdminEmails(new Set(data.filter(u => getPermissions({ role: u.role }).verCostosInternos).map(u => (u.email||'').toLowerCase())));
+      }
+    });
+    return () => { cancel = true; };
+  }, []);
 
   const lista = tab==='aprobar'?porAprobar : tab==='firmar'?porFirmar : tab==='mios'?mios : todos;
 
@@ -77,6 +91,17 @@ export default function FirmasView({ projects, companies, user, onUpdateProject,
 
   // ── Acciones del jefe ──
   const doAprobar = async (d) => {
+    // Fase mini Firmas/OC: si es una Orden de Compra, el responsable
+    // SIEMPRE debe ser admin -- segunda capa de defensa, cubre documentos
+    // ya existentes o cualquier vía que no haya pasado por el filtro de
+    // Projects.js. No genera PDF, no llama avisarFirma, no cambia estatus.
+    if (d.tipo === 'oc') {
+      const respEmail = (d.responsable?.email||'').toLowerCase();
+      if (!adminEmails || !adminEmails.has(respEmail)) {
+        alert('Esta OC contiene costos internos y solo puede enviarse a un admin. Reasigna el responsable a un admin.');
+        return;
+      }
+    }
     setGenPdfId(d.id);
     const nuevo = aprobar(d, miNombre);
     actualizarDoc(d.proyecto, d.id, nuevo);
@@ -175,7 +200,7 @@ export default function FirmasView({ projects, companies, user, onUpdateProject,
               h('div', { style:{ display:'flex', gap:8, marginTop:14, flexWrap:'wrap', alignItems:'center' } },
                 // JEFE aprobando (paso 2)
                 esJefe && d.estatus==='en_aprobacion' && h('div', { style:{ display:'flex', gap:8 } },
-                  h('button', { className:'bp', disabled:genPdfId===d.id, onClick:()=>doAprobar(d) }, genPdfId===d.id?'Generando PDF...':'✅ Aprobar'),
+                  h('button', { className:'bp', disabled:genPdfId===d.id || adminEmails===null, onClick:()=>doAprobar(d) }, adminEmails===null?'Cargando…':(genPdfId===d.id?'Generando PDF...':'✅ Aprobar')),
                   h('button', { onClick:()=>doRechazar(d), disabled:genPdfId===d.id, style:{ fontSize:13, padding:'8px 14px', background:'transparent', border:'1px solid #E24B4A55', borderRadius:'var(--r)', cursor:'pointer', color:'var(--red)' } }, '❌ Rechazar'),
                 ),
                 // JEFE visto final (paso 4)
