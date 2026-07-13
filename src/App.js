@@ -4,6 +4,7 @@ import { DEFAULT_CONFIG } from './lib/constants.js';
 import { sb, authSb, signOut, buildAppUser, WORKSPACE_ID, dbLoad, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveAuditLog, saveProjectFinancials } from './lib/supabase.js';
 import { calcCotizacion } from './lib/calc.js'; // Fase 0C — solo se USA, calc.js no se modifica
 import { getPermissions, canView, sanitizeView, canProjectTab, sanitizeProjectTab, sanitizeSubTab } from './lib/permissions.js'; // Fase 1C — permisos centralizados
+import { sanitizeProjectsForRole, sanitizeVehiclesForRole, sanitizeProjectUpdateForRole, sanitizeVehicleUpdateForRole } from './lib/data_sanitize.js'; // Fase 2A2 — sanitización React profunda
 import { uid, NOW } from './lib/utils.js';
 import { sendMonthlyReminders, shouldSendMonthlyReminder, currentMonthKey } from './lib/email_reminders.js';
 
@@ -379,21 +380,25 @@ export default function App() {
   };
 
   const handleSaveProject = useCallback(async (p, navigate) => {
-    setProjects(prev => { const ex=prev.find(x=>x.id===p.id); return ex?prev.map(x=>x.id===p.id?p:x):[p,...prev]; });
-    if (navigate) nav('project_detail', p.id);
-    try { await saveProject(p, getUID()); await maybeSaveFinancials(p); log(user,'guardó','proyecto',p.id,p.name); } catch(e){ console.error(e); }
-  }, [user, nav, log]);
+    const original = projects.find(x=>x.id===p.id);
+    const paraGuardar = sanitizeProjectUpdateForRole(original, p, user); // Fase 2A2 — admin: sin cambios; empleado: merge seguro contra el original
+    setProjects(prev => { const ex=prev.find(x=>x.id===paraGuardar.id); return ex?prev.map(x=>x.id===paraGuardar.id?paraGuardar:x):[paraGuardar,...prev]; });
+    if (navigate) nav('project_detail', paraGuardar.id);
+    try { await saveProject(paraGuardar, getUID()); await maybeSaveFinancials(paraGuardar); log(user,'guardó','proyecto',paraGuardar.id,paraGuardar.name); } catch(e){ console.error(e); }
+  }, [user, nav, log, projects]);
 
   const upProject = useCallback((updated) => {
-    setProjects(prev => prev.map(p => p.id===updated.id ? updated : p));
-    _pending.current = updated;
+    const original = projects.find(x=>x.id===updated.id);
+    const paraGuardar = sanitizeProjectUpdateForRole(original, updated, user); // Fase 2A2
+    setProjects(prev => prev.map(p => p.id===paraGuardar.id ? paraGuardar : p));
+    _pending.current = paraGuardar;
     if (_timer.current) clearTimeout(_timer.current);
     _timer.current = setTimeout(async () => {
       const toSave = _pending.current;
       const uid = getUID();
       if (toSave && uid) { try { await saveProject(toSave, uid); await maybeSaveFinancials(toSave); } catch(e){ console.error(e); } }
     }, 800);
-  }, [user]);
+  }, [user, projects]);
 
   const handleDeleteProject = useCallback(async (id) => {
     const p = projects.find(x=>x.id===id);
@@ -417,9 +422,11 @@ export default function App() {
   }, [projects, user, log]);
 
   const handleSaveVehicle = useCallback(async (v) => {
-    setVehicles(prev => { const ex=prev.find(x=>x.id===v.id); return ex?prev.map(x=>x.id===v.id?v:x):[...prev,v]; });
-    try { await saveVehicle(v, getUID()); } catch(e){ console.error(e); }
-  }, [user]);
+    const original = vehicles.find(x=>x.id===v.id);
+    const paraGuardar = sanitizeVehicleUpdateForRole(original, v, user); // Fase 2A2
+    setVehicles(prev => { const ex=prev.find(x=>x.id===paraGuardar.id); return ex?prev.map(x=>x.id===paraGuardar.id?paraGuardar:x):[...prev,paraGuardar]; });
+    try { await saveVehicle(paraGuardar, getUID()); } catch(e){ console.error(e); }
+  }, [user, vehicles]);
 
   const handleDeleteVehicle = useCallback(async (id) => {
     setVehicles(prev=>prev.filter(v=>v.id!==id));
@@ -454,23 +461,32 @@ export default function App() {
     return h('div', { style:{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--t2)', fontSize:13 } }, 'Cargando LicitaPro…');
   }
 
+  // Fase 2A2 — derivados por rol: admin siempre recibe raw (líneas de abajo
+  // ya lo hacen vía el operador `isAdmin ? raw : visible`); empleado recibe
+  // la versión saneada en TODO componente que reciba projects/vehicles,
+  // exista o no un botón que efectivamente use el dato financiero — el
+  // objetivo es que no aparezca en props inspeccionables (React DevTools),
+  // no solo que no se use en el render.
+  const visibleProjects = sanitizeProjectsForRole(projects, user);
+  const visibleVehicles = sanitizeVehiclesForRole(vehicles, user);
   const currentProject = projects.find(p=>p.id===effectiveProjId);
+  const visibleCurrentProject = visibleProjects.find(p=>p.id===effectiveProjId);
   const projDetailView = currentProject
-    ? h(ProjectDetail, { project:currentProject, vehicles, companies, config, onSaveConfig:handleSaveConfig, onSaveCompany:async c=>{ const ex=companies.find(x=>x.id===c.id||x.rfc===c.rfc); setCompanies(ex?companies.map(x=>(x.id===c.id||x.rfc===c.rfc)?{...x,...c}:x):[...companies,c]); try{ await saveCompany(c, getUID()); log(user, ex?'actualizó':'creó', 'empresa', c.id, c.name); }catch(e){ console.error('Error guardando empresa:', e); } }, onUpdate:upProject, onSave:handleSaveProject, onDelete:handleDeleteProject, onNav:nav, user, logFn:log, activeTab:effectiveProjTab, setActiveTab:setProjTab, cotSubTab:effectiveSubTabs.cotizacion, setCotSubTab:(val)=>setSubTab('cotizacion', val) })
+    ? h(ProjectDetail, { project: isAdmin?currentProject:visibleCurrentProject, vehicles: isAdmin?vehicles:visibleVehicles, companies, config, onSaveConfig:handleSaveConfig, onSaveCompany:async c=>{ const ex=companies.find(x=>x.id===c.id||x.rfc===c.rfc); setCompanies(ex?companies.map(x=>(x.id===c.id||x.rfc===c.rfc)?{...x,...c}:x):[...companies,c]); try{ await saveCompany(c, getUID()); log(user, ex?'actualizó':'creó', 'empresa', c.id, c.name); }catch(e){ console.error('Error guardando empresa:', e); } }, onUpdate:upProject, onSave:handleSaveProject, onDelete:handleDeleteProject, onNav:nav, user, logFn:log, activeTab:effectiveProjTab, setActiveTab:setProjTab, cotSubTab:effectiveSubTabs.cotizacion, setCotSubTab:(val)=>setSubTab('cotizacion', val) })
     : h('div', { className:'empty' }, h('h3', null, 'Proyecto no encontrado'), h('button', { onClick:()=>nav('projects') }, '← Volver'));
 
   const content = ({
-    dashboard:      h(Dashboard,     { projects, vehicles, companies, onNav:nav, onUpdate:upProject }),
-    projects:       h(ProjectsList,  { projects, vehicles, onNav:nav, onUpdate:p=>handleSaveProject(p,false), user }),
+    dashboard:      h(Dashboard,     { projects: isAdmin?projects:visibleProjects, vehicles: isAdmin?vehicles:visibleVehicles, companies, onNav:nav, onUpdate:upProject }),
+    projects:       h(ProjectsList,  { projects: isAdmin?projects:visibleProjects, vehicles: isAdmin?vehicles:visibleVehicles, onNav:nav, onUpdate:p=>handleSaveProject(p,false), user }),
     project_new:    h(ProjectForm,   { companies, config, user, onSaveConfig:handleSaveConfig, onSave:handleSaveProject, onCancel:()=>nav('projects') }),
     project_detail: projDetailView,
     companies:      h(Companies,     { companies, setCompanies, projects, config, appConfig:config, onUpdateProject:(p)=>handleSaveProject(p,false), onSave:async c=>{ const ex=companies.find(x=>x.id===c.id); setCompanies(ex?companies.map(x=>x.id===c.id?c:x):[...companies,c]); try{ await saveCompany(c, getUID()); log(user, ex?'actualizó':'creó', 'empresa', c.id, c.name); }catch(e){ console.error('Error guardando empresa:', e); } }, user, logFn:log }),
     catalog:        h(CatalogView, { config, onSaveConfig:handleSaveConfig }),
-    firmas:         h(FirmasView,    { projects, companies, user, onUpdateProject:(p)=>handleSaveProject(p,false), onNav:nav }),
+    firmas:         h(FirmasView,    { projects: isAdmin?projects:visibleProjects, companies, user, onUpdateProject:(p)=>handleSaveProject(p,false), onNav:nav }),
     reports:        h(Reports,       { projects, vehicles, companies, audit }),
     settings:       h(Settings,      { config, user, onSave:handleSaveConfig }),
     audit:          h(AuditLogView,  { audit }),
-  })[effectiveView] || h(Dashboard, { projects, vehicles, companies, onNav:nav, onUpdate:upProject });
+  })[effectiveView] || h(Dashboard, { projects: isAdmin?projects:visibleProjects, vehicles: isAdmin?vehicles:visibleVehicles, companies, onNav:nav, onUpdate:upProject });
 
 
   return h('div', { style:{ display:'flex', minHeight:'100vh', background:'var(--bg3)' } },

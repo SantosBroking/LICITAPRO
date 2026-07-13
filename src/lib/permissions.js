@@ -30,6 +30,28 @@ export function getPermissions(user) {
     generarPDFCliente: !!role,         // ambos roles — el PDF ya se corrigió en esta misma Fase 2A0
                                         // (printCotizacionCliente ya no incluye margen/utilidad/costos internos)
     generarPDFCompleto: isAdmin,        // printResumenInterno
+
+    // ── Fase 2A1: permisos granulares (preparación para Cotización Operativa,
+    // NO abre ninguna UI todavía — eso es Fase 2A4) ──
+    verCotizacionOperativa: !!role,      // puerta de entrada futura — hoy sin efecto, Cotización sigue admin-only por el gate de tab existente
+    editarCotizacionOperativa: !!role,   // ídem — sin efecto hasta 2A4
+    editarPartidasOperativas: !!role,    // ídem
+    verCostosInternos: isAdmin,          // costoMSMS/costoConIVA — usado por data_sanitize.js
+    editarCostosInternos: isAdmin,       // alias de guardarFinancieros — mismo valor, nombre más específico donde ayude a leer el código
+    verMargenUtilidad: isAdmin,
+    editarMargenUtilidad: isAdmin,       // alias
+    verRetornosEstrategicos: isAdmin,
+    editarRetornosEstrategicos: isAdmin, // alias
+    verCorridaFinanciera: isAdmin,
+    verUnitarioFinanciero: isAdmin,
+    aprobarCotizacion: isAdmin,          // reservado — no hay flujo de aprobación de cotización hoy
+    guardarFinancieros: isAdmin,         // ya era el comportamiento real de maybeSaveFinancials, se nombra aquí
+
+    usarIAOperativa: !!role,             // futuro chat sin datos financieros — sin efecto hasta 2A4/2C
+    usarIAFinanciera: isAdmin,           // chat actual de CotizacionTab, sin cambios
+
+    editarVehiculosFinancieros: isAdmin,
+    descargarFacturasVehiculo: isAdmin,  // alias de verFacturasVehiculo — no hay hoy una vía de descarga distinta de "ver" que amerite valor propio
   };
 }
 
