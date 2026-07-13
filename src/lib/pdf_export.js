@@ -2,7 +2,7 @@
 // Tres plantillas: Cotización Cliente, Resumen Retornos, Resumen Interno
 import { fmt, pctS, numeroALetras } from './utils.js';
 import { calcCotizacion } from './calc.js';
-import { buildResumenInternoData, SEMAFORO_MARGEN_VERDE, SEMAFORO_MARGEN_AMARILLO } from './resumen_interno.js';
+import { buildResumenInternoData } from './resumen_interno.js';
 import { CATALOG_IMAGES } from './catalog_images.js';
 import { CATALOG_PRODUCTS, KIT_MAP } from './catalog.js';
 import { getCompanyLogo } from './company_logos.js';
@@ -658,42 +658,37 @@ export function printResumenRetornos({ project, cot, calc, companyObj }) {
 // ══════════════════════════════════════════════════════════════
 export function printResumenInterno({ project, cot, calc, companyObj }) {
   const data = buildResumenInternoData(project, cot, calc, companyObj);
-  const { base, kpis, corrida, partidas, equipo, riesgos, semaforo } = data;
-
-  const colorSemaforo = { verde:'#1D9E75', amarillo:'#d97706', rojo:'#e24b4a' };
-  const badgeSemaforo = (nivel) => `<span class="badge" style="background:${colorSemaforo[nivel]}22;color:${colorSemaforo[nivel]}">${nivel==='verde'?'🟢':nivel==='amarillo'?'🟡':'🔴'} ${nivel.toUpperCase()}</span>`;
+  const { base, kpis, partidas, consolidado, ivaSelectivo, ivaAlSAT, ivaAUtilidad, ivaVenta, ivaAcreditable, ivaSobrante } = data;
 
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-<title>Resumen Interno ${base.folio}</title>
+<title>Corrida Financiera Interna ${base.folio}</title>
 <style>${BASE_CSS}
 .kpi-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-bottom: 20px; }
 .kpi { background: #f6f6f4; padding: 12px 14px; border-radius: 6px; border-left: 3px solid #e0ddd8; }
-.kpi.green { border-left-color: #1D9E75; }
-.kpi.amber { border-left-color: #d97706; }
 .kpi.blue  { border-left-color: #3b6cf4; }
-.kpi.red   { border-left-color: #e24b4a; }
 .kpi .k-label { font-size: 10px; color: #6b6862; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .3px; }
 .kpi .k-value { font-size: 16px; font-weight: 700; }
 .pagina { page-break-before: always; }
 .pagina:first-of-type { page-break-before: auto; }
 .venta-row td { font-weight: 700; background: #EAF2FE; }
 .costo-row td { border-top: 1.5px solid #1a1917; font-weight: 700; }
-.decision-box { padding: 16px 20px; border-radius: 8px; margin: 16px 0 24px; text-align: center; }
+.partida-header { font-size: 15px; font-weight: 700; color: #1a1917; margin: 24px 0 4px; padding-bottom: 6px; border-bottom: 1.5px solid #1a1917; }
+.partida-header:first-of-type { margin-top: 0; }
 </style></head><body>
 
 <div class="no-print" style="position:fixed;top:0;left:0;right:0;z-index:100;background:#1a1917;color:white;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px">
-  <span style="font-weight:500">Resumen Interno — ${base.folio}</span>
+  <span style="font-weight:500">Corrida Financiera Interna — ${base.folio}</span>
   <span style="display:flex;gap:8px"><button onclick="try{window.close()}catch(e){};setTimeout(function(){if(history.length>1)history.back()},100)" style="background:transparent;color:white;border:1px solid rgba(255,255,255,.4);padding:6px 16px;border-radius:4px;cursor:pointer;font-weight:500">← Cerrar</button><button onclick="window.print()" style="background:white;color:#1a1917;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-weight:500">Imprimir / Guardar PDF</button></span>
 </div>
 <div class="sheet">
 
 <div class="confidential">⚠ USO INTERNO — NO COMPARTIR CON CLIENTE</div>
 
-<!-- ══════════ PÁGINA 1 — RESUMEN EJECUTIVO ══════════ -->
+<!-- ══════════ PÁGINA 1 — RESUMEN GENERAL DEL PROYECTO ══════════ -->
 <div class="pagina">
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid #1a1917">
   <div>
-    <h1>Resumen Interno — Corrida Financiera</h1>
+    <h1>Corrida Financiera Interna</h1>
     <div style="font-size:16px;font-weight:500;color:#3b6cf4;margin-top:4px">${base.proyecto}</div>
   </div>
   <div style="text-align:right">
@@ -712,139 +707,115 @@ export function printResumenInterno({ project, cot, calc, companyObj }) {
   </div>
 </div>
 
-<div class="decision-box" style="background:${colorSemaforo[semaforo.nivel]}15">
-  <div style="margin-bottom:8px">${badgeSemaforo(semaforo.nivel)}</div>
-  <div style="font-size:15px;font-weight:700;color:${colorSemaforo[semaforo.nivel]}">${semaforo.decision}</div>
-</div>
-
 <div class="section">
-  <h2>KPIs financieros</h2>
+  <h2>KPIs consolidados</h2>
   <div class="kpi-grid">
-    <div class="kpi blue"><div class="k-label">Venta total</div><div class="k-value" style="color:#3b6cf4">${fmt(kpis.ventaTotalCIVA)}</div></div>
-    <div class="kpi"><div class="k-label">Costo total</div><div class="k-value">${fmt(kpis.costoTotalCIVA)}</div></div>
-    <div class="kpi ${kpis.utilNeta>=0?'green':'red'}"><div class="k-label">Utilidad neta</div><div class="k-value" style="color:${kpis.utilNeta>=0?'#1D9E75':'#e24b4a'}">${fmt(kpis.utilNeta)}</div></div>
-    <div class="kpi ${kpis.margenNeto>=SEMAFORO_MARGEN_VERDE?'green':kpis.margenNeto>=SEMAFORO_MARGEN_AMARILLO?'amber':'red'}"><div class="k-label">Margen neto</div><div class="k-value">${pctS(kpis.margenNeto)}</div></div>
-    <div class="kpi"><div class="k-label">Unidades</div><div class="k-value">${base.unidades}</div></div>
-    <div class="kpi"><div class="k-label">Utilidad por unidad</div><div class="k-value" style="color:${kpis.utilidadPorUnidad>=0?'#1D9E75':'#e24b4a'}">${fmt(kpis.utilidadPorUnidad)}</div></div>
+    <div class="kpi blue"><div class="k-label">Venta total</div><div class="k-value" style="color:#3b6cf4">${fmt(consolidado.ventaTotal)}</div></div>
+    <div class="kpi"><div class="k-label">Costo total</div><div class="k-value">${fmt(consolidado.costoTotal)}</div></div>
+    <div class="kpi"><div class="k-label">Utilidad total</div><div class="k-value">${fmt(consolidado.utilidadTotal)}</div></div>
+    <div class="kpi"><div class="k-label">Margen general</div><div class="k-value">${pctS(consolidado.margenGeneral)}</div></div>
+    <div class="kpi"><div class="k-label">Unidades</div><div class="k-value">${consolidado.unidadesTotales}</div></div>
   </div>
 </div>
-</div>
 
-<!-- ══════════ PÁGINA 2 — CORRIDA FINANCIERA UNITARIA ══════════ -->
-<div class="pagina">
-<h1 style="margin-bottom:16px">Corrida financiera unitaria</h1>
 <div class="section">
+  <h2>Resumen por partida</h2>
   <table>
-    <thead><tr><th>Concepto</th><th style="text-align:right">Unitario</th><th style="text-align:right">Total</th><th>Notas / alerta</th></tr></thead>
-    <tbody>
-    ${corrida.conceptos.map(c=>`
-      <tr>
-        <td>${c.label}</td>
-        <td class="right">${fmt(c.montoUnitario)}</td>
-        <td class="right">${fmt(c.montoTotal)}</td>
-        <td style="font-size:9px;color:${c.alerta?'#e24b4a':'#6b6862'}">${c.alerta?'⚠ ':''}${c.notas||''}</td>
-      </tr>`).join('')}
-    <tr class="costo-row">
-      <td>Total costo unitario</td>
-      <td class="right">${fmt(corrida.costoUnitarioTotal)}</td>
-      <td class="right">${fmt(corrida.costoTotal)}</td>
-      <td></td>
-    </tr>
-    <tr class="venta-row">
-      <td>Venta (s/IVA)</td>
-      <td class="right" style="color:#3b6cf4">${fmt(corrida.ventaUnitaria)}</td>
-      <td class="right" style="color:#3b6cf4">${fmt(corrida.ventaTotal)}</td>
-      <td></td>
-    </tr>
-    <tr class="costo-row">
-      <td>Utilidad bruta</td>
-      <td class="right" style="color:${corrida.utilidadUnitaria>=0?'#1D9E75':'#e24b4a'}">${fmt(corrida.utilidadUnitaria)}</td>
-      <td class="right" style="color:${corrida.utilidadTotal>=0?'#1D9E75':'#e24b4a'}">${fmt(corrida.utilidadTotal)}</td>
-      <td style="font-size:9px">Margen: ${pctS(corrida.margen)}</td>
-    </tr>
-    </tbody>
-  </table>
-  <div style="font-size:9px;color:#6b6862;margin-top:-10px">Unidades: ${corrida.unidades}. Cifras s/IVA salvo donde se indique. La venta no forma parte de los conceptos de costo — se muestra aparte para llegar a la utilidad.</div>
-</div>
-</div>
-
-<!-- ══════════ PÁGINA 3 — PARTIDAS ══════════ -->
-<div class="pagina">
-<h1 style="margin-bottom:16px">Partidas (ordenadas por riesgo/impacto)</h1>
-<div class="section">
-  <table>
-    <thead><tr><th>Partida</th><th>Descripción</th><th style="text-align:center">Cant.</th><th style="text-align:right">Venta unit.</th><th style="text-align:right">Costo unit.</th><th style="text-align:right">Util. unit.</th><th style="text-align:right">Util. total</th><th style="text-align:center">Margen</th><th style="text-align:center">Sem.</th><th>Alertas</th></tr></thead>
+    <thead><tr><th>Partida</th><th>Vehículo / producto</th><th style="text-align:center">Cant.</th><th style="text-align:right">Venta unit.</th><th style="text-align:right">Costo unit.</th><th style="text-align:right">Util. unit.</th><th style="text-align:right">Util. total</th><th style="text-align:center">Margen</th></tr></thead>
     <tbody>
     ${partidas.map(p=>`
       <tr>
         <td>${p.id}</td>
-        <td style="font-size:9px">${p.descripcion}</td>
+        <td style="font-size:10px">${p.nombre}</td>
         <td style="text-align:center">${p.cantidad}</td>
-        <td class="right">${fmt(p.ventaUnitSIVA)}</td>
-        <td class="right">${fmt(p.costoUnitSIVA)}</td>
-        <td class="right" style="color:${p.utilUnit>=0?'#1D9E75':'#e24b4a'}">${fmt(p.utilUnit)}</td>
-        <td class="right" style="font-weight:600;color:${p.utilTotal>=0?'#1D9E75':'#e24b4a'}">${fmt(p.utilTotal)}</td>
+        <td class="right">${fmt(p.ventaUnitaria)}</td>
+        <td class="right">${fmt(p.costoUnitario)}</td>
+        <td class="right">${fmt(p.utilidadUnitaria)}</td>
+        <td class="right" style="font-weight:600">${fmt(p.utilidadTotal)}</td>
         <td style="text-align:center">${pctS(p.margen)}</td>
-        <td style="text-align:center">${badgeSemaforo(p.semaforo)}</td>
-        <td style="font-size:8.5px;color:#e24b4a">${p.alertas.join('; ')}</td>
       </tr>`).join('')}
     </tbody>
   </table>
 </div>
 </div>
 
-<!-- ══════════ PÁGINA 4 — EQUIPO / EXTRAS ══════════ -->
+<!-- ══════════ CORRIDA + EQUIPO, UNA SECCIÓN COMPLETA POR PARTIDA ══════════ -->
 <div class="pagina">
-<h1 style="margin-bottom:16px">Equipo / extras</h1>
+${partidas.map(p => `
+<div class="partida-header">${p.id} — ${p.nombre} — ${p.cantidad} unidades</div>
+
 <div class="section">
-  ${equipo.length===0 ? '<div style="color:#6b6862;font-size:11px">Sin equipo capturado en esta cotización.</div>' : `
+  <h2>Corrida financiera unitaria</h2>
   <table>
-    <thead><tr><th>Equipo</th><th>Categoría</th><th style="text-align:center">Cant.</th><th style="text-align:right">Costo unit.</th><th style="text-align:right">Costo total</th><th style="text-align:center">Fecha costo</th><th>Notas</th><th>Alerta</th></tr></thead>
+    <thead><tr><th>Concepto</th><th style="text-align:right">Unitario</th><th style="text-align:right">Total</th><th>Nota</th></tr></thead>
     <tbody>
-    ${equipo.map(e=>`
-      <tr style="opacity:${e.usar?1:.5}">
-        <td>${e.nombre}${e.usar?'':' (no usado)'}</td>
-        <td style="font-size:9px">${e.categoria||'—'}</td>
+    ${p.conceptosCosto.map(c=>`
+      <tr>
+        <td>${c.label}</td>
+        <td class="right">${fmt(c.unitario)}</td>
+        <td class="right">${fmt(c.total)}</td>
+        <td style="font-size:9px;color:#6b6862">${c.nota||''}</td>
+      </tr>`).join('')}
+    <tr class="costo-row">
+      <td>Total costo unitario</td>
+      <td class="right">${fmt(p.costoUnitario)}</td>
+      <td class="right">${fmt(p.costoTotal)}</td>
+      <td></td>
+    </tr>
+    <tr class="venta-row">
+      <td>Venta (s/IVA)</td>
+      <td class="right" style="color:#3b6cf4">${fmt(p.ventaUnitaria)}</td>
+      <td class="right" style="color:#3b6cf4">${fmt(p.ventaTotal)}</td>
+      <td></td>
+    </tr>
+    <tr class="costo-row">
+      <td>Utilidad</td>
+      <td class="right">${fmt(p.utilidadUnitaria)}</td>
+      <td class="right">${fmt(p.utilidadTotal)}</td>
+      <td style="font-size:9px">Margen: ${pctS(p.margen)}</td>
+    </tr>
+    </tbody>
+  </table>
+</div>
+
+${p.equipo.length>0 ? `
+<div class="section">
+  <h2>Equipo — ${p.id} ${p.nombre}</h2>
+  <table>
+    <thead><tr><th>Equipo</th><th>Categoría</th><th style="text-align:center">Cant./unidad</th><th style="text-align:center">Cant. total</th><th style="text-align:right">Costo unit.</th><th style="text-align:right">Costo total</th><th style="text-align:center">Fecha costo</th><th>Notas</th></tr></thead>
+    <tbody>
+    ${p.equipo.map(e=>`
+      <tr>
+        <td>${e.nombre}</td>
+        <td style="font-size:9px">${e.categoria}</td>
+        <td style="text-align:center">${e.cantidadPorUnidad}</td>
         <td style="text-align:center">${e.cantidadTotal}</td>
-        <td class="right">${fmt(e.costoUnitCIVA)}</td>
-        <td class="right">${fmt(e.costoTotalCIVA)}</td>
+        <td class="right">${fmt(e.costoUnitario)}</td>
+        <td class="right">${fmt(e.costoTotal)}</td>
         <td style="text-align:center;font-size:9px">${e.fechaCosto||'—'}</td>
         <td style="font-size:9px">${e.notas||''}</td>
-        <td style="font-size:8.5px;color:#e24b4a">${e.alertas.join('; ')}</td>
       </tr>`).join('')}
     </tbody>
-  </table>`}
-</div>
-</div>
-
-<!-- ══════════ PÁGINA 5 — RIESGOS Y PENDIENTES ══════════ -->
-<div class="pagina">
-<h1 style="margin-bottom:16px">Riesgos y pendientes</h1>
-${['rojo','amarillo','info'].map(nivel => {
-  const items = riesgos.filter(r=>r.nivel===nivel);
-  if (items.length===0) return '';
-  const titulo = { rojo:'Riesgos críticos', amarillo:'Advertencias', info:'Notas / datos no disponibles' }[nivel];
-  const color = { rojo:'#e24b4a', amarillo:'#d97706', info:'#6b6862' }[nivel];
-  return `
-  <div class="section">
-    <h2 style="color:${color}">${titulo}</h2>
-    <ul style="margin-left:16px;font-size:11px;line-height:1.8">
-      ${items.map(r=>`<li style="color:${color}">${r.texto}</li>`).join('')}
-    </ul>
-  </div>`;
-}).join('')}
-${riesgos.length===0 ? '<div style="color:#1D9E75;font-size:12px">Sin riesgos ni pendientes detectados.</div>' : ''}
+  </table>
+</div>` : ''}
+`).join('')}
 </div>
 
-<!-- ══════════ PÁGINA 6 — ANEXO TÉCNICO INTERNO ══════════ -->
+<!-- ══════════ ANEXO FISCAL / TÉCNICO ══════════ -->
 <div class="pagina">
-<h1 style="margin-bottom:16px">Anexo técnico interno</h1>
+<h1 style="margin-bottom:16px">Anexo fiscal / técnico</h1>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
   <div class="section">
-    <h2>Desglose de IVA</h2>
+    <h2>IVA</h2>
     <table>
-      ${[['IVA cobrado en venta',fmt(calc.ivaVenta),''],['IVA acreditable (costos)',fmt(calc.ivaAcreditable),''],['IVA sobrante',fmt(calc.ivaSobrante),'font-weight:600'],['% al SAT',pctS(calc.ivaAlSAT/Math.max(calc.ivaSobrante,1)),'color:#6b6862'],['IVA pagado al SAT',fmt(calc.ivaAlSAT),''],['IVA a utilidad',fmt(calc.ivaAUtilidad),'color:#1D9E75;font-weight:600']].map(([l,v,s])=>`
-      <tr><td style="color:#6b6862">${l}</td><td class="right" style="${s}">${v}</td></tr>`).join('')}
+      ${[
+        ['IVA cobrado en venta',fmt(ivaVenta)],
+        ['IVA acreditable (costos)',fmt(ivaAcreditable)],
+        ['IVA sobrante',fmt(ivaSobrante)],
+        ['IVA pagado al SAT',fmt(ivaAlSAT)],
+        ...(ivaSelectivo ? [['IVA a utilidad',fmt(ivaAUtilidad)]] : []),
+      ].map(([l,v])=>`
+      <tr><td style="color:#6b6862">${l}</td><td class="right">${v}</td></tr>`).join('')}
     </table>
   </div>
   <div class="section">
@@ -856,7 +827,7 @@ ${riesgos.length===0 ? '<div style="color:#1D9E75;font-size:12px">Sin riesgos ni
     </div>` : ''}
   </div>
 </div>
-<div style="font-size:9px;color:#a0998f;margin-top:20px">Retornos y fianzas ya desglosados por item real en la Corrida financiera unitaria (página 2).</div>
+<div style="font-size:9px;color:#a0998f;margin-top:20px">Retornos y fianzas ya desglosados por item real dentro de la corrida de cada partida.</div>
 </div>
 
 <div class="footer">
@@ -867,6 +838,7 @@ ${riesgos.length===0 ? '<div style="color:#1D9E75;font-size:12px">Sin riesgos ni
 
   openPrint(html);
 }
+
 
 // ── Orden de Compra ───────────────────────────────────────────
 function buildOrdenCompraHTML({ project, partidas, condiciones, folio: folioParam, companyObj }) {
