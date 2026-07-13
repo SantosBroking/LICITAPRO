@@ -6,7 +6,7 @@
 
 ## Estado actual
 
-- **Fase en curso:** ninguna — última entrega cerrada: mini-fase Firmas/OC (seguridad) + Limpieza de texto visible "MSMS", **completa en producción**; siguiente fase sugerida: diseño de Cotización Operativa (2A4) o Fase 2E (separación real Network/RLS), según decisión
+- **Fase en curso:** ninguna — última entrega cerrada: Fase 2A4 (Cotización Operativa), **completa en producción**; siguiente paso sugerido: planear próximos incrementos de Cotización Operativa (agregar equipo desde catálogo, quitar partida/equipo, PDF cliente e IA operativa para empleado) o Fase 2E (separación real Network/RLS), según decisión
 - **Rama de trabajo:** `fase0-seguridad`
 - **`main` no ha sido tocado.** Todo el trabajo de Fase 0 se construye en esta rama hasta que esté probado y aprobado explícitamente para merge.
 - **Diseño completo de la migración:** documentado fuera del repo (tres documentos técnicos: Master Blueprint de auditoría, Plan de Migración Fase 0+1 v1 y v2, Preparación Fase 0A, Guía de Backup Manual). Este archivo resume el estado operativo; el diseño detallado vive en esos documentos.
@@ -445,6 +445,61 @@ Búsqueda global en `src/` y `api/`, en 3 rondas sucesivas. Se eliminó "MSMS" d
 - Correos ya enviados **antes** de este cambio a un responsable empleado — no se revocan retroactivamente.
 - El campo técnico `costoMSMS` se conserva tal cual, como campo heredado — no debe renderizarse ni mostrarse como label en ningún punto nuevo del código. Si algún día se decide renombrarlo, debe ser una fase separada con su propio control de migración de datos — no se tocó ni se migró nada aquí.
 - Folios de cotización creados **antes** de este cambio conservan su prefijo original — no se migran.
+
+### ✅ Fase 2A4 — Cotización Operativa para empleados
+
+**Contexto:** antes de esta fase, el tab Cotización estaba completamente cerrado para empleados — admin usaba `Cotizacion.js` completo, sin ninguna alternativa. El diagnóstico de esta fase confirmó, con código real, que `Cotizacion.js` **no podía reutilizarse** para empleados: mezcla campos operativos y financieros en el mismo bloque de render, y recalcula con el motor de cálculo de cotización en cada edición — si se le diera una cotización sin datos financieros, el cálculo produciría valores incorrectos, no solo un riesgo de confidencialidad. También se detectó, durante el diagnóstico, que **Catálogo exponía el precio de cada producto a empleados** — y ese precio se usa literalmente como costo interno de equipo al agregarse a una cotización. Abrir Cotización Operativa sin cerrar antes esa fuga habría dejado un camino indirecto hacia el mismo dato que se buscaba proteger.
+
+**Decisión de arquitectura:** mantener `Cotizacion.js` admin-only e intacto; construir una vista nueva, `CotizacionOperativa.js`, desde cero, sin ningún dato ni cálculo financiero en su alcance. PDF cliente, IA operativa y Orden de Compra para empleado quedan fuera de esta fase — no se abrieron.
+
+#### A. Cierre de fuga en Catálogo
+
+Catálogo ya no muestra el precio a empleados — ni en tarjetas, ni en labels, ni en placeholders del formulario. Empleado no puede crear productos nuevos ni duplicar productos existentes (ambas acciones habrían requerido capturar o heredar un costo interno sin poder verlo) — se bloquean con un mensaje claro, tanto en la UI como en el guardado, incluso si se intenta por payload directo. Si empleado edita un producto ya existente, el precio original se preserva exacto, nunca se acepta lo que traiga el formulario. Admin conserva el comportamiento completo: ve, edita, crea y duplica productos con normalidad, incluida la herencia correcta de precio al duplicar.
+
+#### B. Gate de Cotización por rol
+
+Admin sigue montando `Cotizacion.js`, sin ningún cambio en ese archivo. Empleado monta `CotizacionOperativa.js`. El ajuste de permisos permite el tab `cotizacion` a empleados **solo por esta ruta operativa** — `facturacion` y `flujo` siguen bloqueados, y las sub-pestañas financieras de Cotización (retornos y condiciones, corrida financiera, unitario, agente) siguen completamente fuera del alcance de empleado.
+
+#### C. Vista nueva `CotizacionOperativa.js`
+
+Empleado ve únicamente: Resumen, Partidas, Equipo. No ve PDF, IA, Orden de Compra, corrida financiera, unitario financiero, retornos, fianzas, facturación, flujo, costos, precios internos, márgenes, utilidad, ni ningún campo financiero. El archivo no importa el motor de cálculo de cotización, ni la generación de PDF, ni funciones de Firmas/OC, ni el analizador de IA — no contiene ningún string sensible, ni "MSMS", en ningún punto, incluidos los comentarios. No guarda directo a Supabase — usa el flujo normal de guardado del proyecto, ya protegido.
+
+#### D. Guardado y monto estimado
+
+`CotizacionOperativa.js` nunca calcula el monto estimado del proyecto. El guardado de empleado pasa por el mismo flujo ya protegido desde Fase 2A2 (`sanitizeProjectUpdateForRole`) — el payload se fusiona contra el original antes de guardar, preservando siempre los datos financieros existentes; un empleado no puede inyectar ni borrar ningún campo financiero, y el monto estimado nunca se corrompe ni se recalcula con datos incompletos. El ajuste correspondiente en `App.js` fue principalmente de verificación y documentación de un comportamiento que ya funcionaba correctamente, no una reescritura de lógica.
+
+#### Commits
+
+| # | Commit | Contenido | Archivos |
+|---|---|---|---|
+| 1 | `4da4e08d46348aad7b9449afaff36fa4d9d2de99` | Cerrar fuga de costo interno en Catálogo | `src/views/Catalog.js`, `src/App.js` |
+| 2 | `373095d467ceeb4f32753655b6e8c2ff42fd5a82` | Permisos/gate + esqueleto de Cotización Operativa | `src/lib/permissions.js`, `src/views/Projects.js`, `src/views/CotizacionOperativa.js` |
+| 3 | `bae636febc42aa19b37ce4372d3fb8d92ffeafeb` | Partidas y Equipo operativos completos | `src/views/CotizacionOperativa.js` |
+| 4 | `8151cf7fcbde940dcdb44479f68ec2679eaea02c` | Verificación/documentación de guardado y monto estimado | `src/App.js` |
+| 5 | `9ec3bbec1f3c2b2366dc3bdf3911c631ea406ec9` | Limpieza de comentarios sensibles | `src/views/CotizacionOperativa.js` |
+| 6 | `ff7cbc7806e2d3bb38e346feacfb9d59dd36c959` | Evitar que empleados creen/dupliquen productos sin costo interno | `src/views/Catalog.js` |
+
+**Archivos modificados en toda la fase (5, únicamente):** `src/App.js`, `src/lib/permissions.js`, `src/views/Catalog.js`, `src/views/CotizacionOperativa.js`, `src/views/Projects.js`. No se tocó Supabase, RLS, SQL, variables, `api/`, `data_sanitize.js`, `Cotizacion.js`, `calc.js`, `pdf_export.js`, ni `firmas.js`.
+
+**Commit final en `main`:** `ff7cbc7806e2d3bb38e346feacfb9d59dd36c959`
+
+**Estado: cerrado en producción.** URL: `https://licitapro-beta.vercel.app`
+
+#### Validaciones finales
+
+Exactamente 6 commits, sin ninguno extra. Exactamente 5 archivos modificados. Grep de "MSMS" en `src/`/`api/`: 17 líneas, todas el campo técnico `costoMSMS`, cero texto visible, cero comentarios, `CotizacionOperativa.js` confirmado sin aparecer. Búsqueda de strings financieros y de funciones prohibidas (PDF, IA, OC) dentro de `CotizacionOperativa.js`: 0 líneas en ambas. Catálogo y Cotización revalidados para ambos roles antes del merge. Deploy de producción confirmado exitoso.
+
+#### Límites pendientes, documentados a propósito (no resueltos en esta fase)
+
+- Quitar partida/equipo dentro de Cotización Operativa.
+- Agregar equipo nuevo desde catálogo dentro de Cotización Operativa.
+- PDF cliente para empleado.
+- IA operativa para empleado.
+- Network/DevTools crudo — sigue pendiente.
+- RLS `UPDATE` amplio — sigue pendiente.
+- Seguridad real a nivel de base de datos, incluida RLS por rol en `projects` — no se resuelve en esta fase, que es de UI/props/write-guard, no un sustituto de la Fase 2E.
+- Renombrar el campo técnico `costoMSMS` — sigue como campo heredado, sin cambios.
+- Migración de datos — no se hizo ninguna.
 
 ### Fase futura (pendiente, re-etiquetada) — Multiempresa y nuevo proyecto
 - Organización única: **Grupo Santiago**
