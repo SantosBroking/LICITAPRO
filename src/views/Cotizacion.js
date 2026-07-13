@@ -23,8 +23,12 @@ function liveEquipo(e) {
   return { ...e, nombre: live.nom || e.nombre, cat: live.cat || e.cat, vis: live.vis ?? e.vis };
 }
 
-const TABS = ['partidas','equipo','extras','corrida','unitario','agente'];
-const TAB_LABELS = { partidas:'1 · Partidas', equipo:'2 · Equipo', extras:'3 · Retornos y condiciones', corrida:'4 · Corrida financiera', unitario:'5 · Unitario', agente:'6 · Agente Claude' };
+// Fase 2A6: 'corrida' y 'unitario' se fusionan en una sola sub-pestaña
+// 'finanzas' -- ambos bloques de render (líneas más abajo) ahora
+// disparan con el mismo id, uno después del otro, sin tocar ninguna
+// fórmula ni cálculo de ninguno de los dos.
+const TABS = ['partidas','equipo','extras','finanzas','agente'];
+const TAB_LABELS = { partidas:'1 · Partidas', equipo:'2 · Equipo', extras:'3 · Retornos y condiciones', finanzas:'4 · Finanzas', agente:'5 · Agente Claude' };
 const BASES_RETORNO = ['% sobre venta c/IVA','% sobre venta s/IVA','Monto fijo total','Monto fijo por unidad'];
 const BASES_FIANZA  = ['% sobre venta c/IVA','% sobre venta s/IVA','Monto fijo total','Monto fijo por unidad'];
 const IVA = 0.16;
@@ -583,8 +587,8 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
       h(NavButtons),
     ),
 
-    // ══ 4. CORRIDA FINANCIERA ══
-    tab==='corrida' && h('div', null,
+    // ══ 4. FINANZAS (Corrida financiera) ══
+    tab==='finanzas' && h('div', null,
       // ── Pre-cálculo por partida (evita re-calcular en cada celda) ──
       (() => {
         const pdata = activeParts.map(p => {
@@ -742,8 +746,10 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
       h(NavButtons),
     ),
 
-    // ══ 5. UNITARIO ══
-    tab==='unitario' && h('div', null,
+    // ══ 5. FINANZAS (Unitario) -- mismo id que Corrida financiera arriba,
+    // se renderiza justo después, dentro de la misma sub-pestaña ══
+    tab==='finanzas' && h('div', { style:{ marginTop:24, paddingTop:20, borderTop:'1px solid var(--b1)' } },
+      h('div', { style:{ fontSize:13, fontWeight:600, marginBottom:14, color:'var(--t2)', textTransform:'uppercase', letterSpacing:'.4px' } }, 'Detalle unitario por partida'),
       activeParts.length===0
         ? h('div', { style:{ padding:20, color:'var(--t2)', fontSize:13 } }, 'No hay partidas activas con vehículos.')
         : activeParts.map(p => {
