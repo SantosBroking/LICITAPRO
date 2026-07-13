@@ -658,7 +658,7 @@ export function printResumenRetornos({ project, cot, calc, companyObj }) {
 // ══════════════════════════════════════════════════════════════
 export function printResumenInterno({ project, cot, calc, companyObj }) {
   const data = buildResumenInternoData(project, cot, calc, companyObj);
-  const { base, kpis, corrida, partidas, semaforo } = data;
+  const { base, kpis, corrida, partidas, equipo, riesgos, semaforo } = data;
 
   const colorSemaforo = { verde:'#1D9E75', amarillo:'#d97706', rojo:'#e24b4a' };
   const badgeSemaforo = (nivel) => `<span class="badge" style="background:${colorSemaforo[nivel]}22;color:${colorSemaforo[nivel]}">${nivel==='verde'?'🟢':nivel==='amarillo'?'🟡':'🔴'} ${nivel.toUpperCase()}</span>`;
@@ -791,6 +791,72 @@ export function printResumenInterno({ project, cot, calc, companyObj }) {
     </tbody>
   </table>
 </div>
+</div>
+
+<!-- ══════════ PÁGINA 4 — EQUIPO / EXTRAS ══════════ -->
+<div class="pagina">
+<h1 style="margin-bottom:16px">Equipo / extras</h1>
+<div class="section">
+  ${equipo.length===0 ? '<div style="color:#6b6862;font-size:11px">Sin equipo capturado en esta cotización.</div>' : `
+  <table>
+    <thead><tr><th>Equipo</th><th>Categoría</th><th style="text-align:center">Cant.</th><th style="text-align:right">Costo unit.</th><th style="text-align:right">Costo total</th><th style="text-align:center">Fecha costo</th><th>Notas</th><th>Alerta</th></tr></thead>
+    <tbody>
+    ${equipo.map(e=>`
+      <tr style="opacity:${e.usar?1:.5}">
+        <td>${e.nombre}${e.usar?'':' (no usado)'}</td>
+        <td style="font-size:9px">${e.categoria||'—'}</td>
+        <td style="text-align:center">${e.cantidadTotal}</td>
+        <td class="right">${fmt(e.costoUnitCIVA)}</td>
+        <td class="right">${fmt(e.costoTotalCIVA)}</td>
+        <td style="text-align:center;font-size:9px">${e.fechaCosto||'—'}</td>
+        <td style="font-size:9px">${e.notas||''}</td>
+        <td style="font-size:8.5px;color:#e24b4a">${e.alertas.join('; ')}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>`}
+</div>
+</div>
+
+<!-- ══════════ PÁGINA 5 — RIESGOS Y PENDIENTES ══════════ -->
+<div class="pagina">
+<h1 style="margin-bottom:16px">Riesgos y pendientes</h1>
+${['rojo','amarillo','info'].map(nivel => {
+  const items = riesgos.filter(r=>r.nivel===nivel);
+  if (items.length===0) return '';
+  const titulo = { rojo:'Riesgos críticos', amarillo:'Advertencias', info:'Notas / datos no disponibles' }[nivel];
+  const color = { rojo:'#e24b4a', amarillo:'#d97706', info:'#6b6862' }[nivel];
+  return `
+  <div class="section">
+    <h2 style="color:${color}">${titulo}</h2>
+    <ul style="margin-left:16px;font-size:11px;line-height:1.8">
+      ${items.map(r=>`<li style="color:${color}">${r.texto}</li>`).join('')}
+    </ul>
+  </div>`;
+}).join('')}
+${riesgos.length===0 ? '<div style="color:#1D9E75;font-size:12px">Sin riesgos ni pendientes detectados.</div>' : ''}
+</div>
+
+<!-- ══════════ PÁGINA 6 — ANEXO TÉCNICO INTERNO ══════════ -->
+<div class="pagina">
+<h1 style="margin-bottom:16px">Anexo técnico interno</h1>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+  <div class="section">
+    <h2>Desglose de IVA</h2>
+    <table>
+      ${[['IVA cobrado en venta',fmt(calc.ivaVenta),''],['IVA acreditable (costos)',fmt(calc.ivaAcreditable),''],['IVA sobrante',fmt(calc.ivaSobrante),'font-weight:600'],['% al SAT',pctS(calc.ivaAlSAT/Math.max(calc.ivaSobrante,1)),'color:#6b6862'],['IVA pagado al SAT',fmt(calc.ivaAlSAT),''],['IVA a utilidad',fmt(calc.ivaAUtilidad),'color:#1D9E75;font-weight:600']].map(([l,v,s])=>`
+      <tr><td style="color:#6b6862">${l}</td><td class="right" style="${s}">${v}</td></tr>`).join('')}
+    </table>
+  </div>
+  <div class="section">
+    <h2>Condiciones comerciales</h2>
+    <div style="font-size:11px;line-height:1.6;color:#6b6862">${cot.condicionesComerciales || '—'}</div>
+    ${(cot.condicionesLista||[]).length>0 ? `
+    <div style="margin-top:10px">
+      ${(cot.condicionesLista||[]).map(c=>`<div style="font-size:10px;margin-bottom:4px"><strong>${c.titulo||''}</strong> ${c.texto||''}</div>`).join('')}
+    </div>` : ''}
+  </div>
+</div>
+<div style="font-size:9px;color:#a0998f;margin-top:20px">Retornos y fianzas ya desglosados por item real en la Corrida financiera unitaria (página 2).</div>
 </div>
 
 <div class="footer">
