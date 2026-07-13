@@ -146,7 +146,7 @@ export function buildPartidasDetalle(cot, calc) {
         iva: ivaLabel(undefined),
       });
     }
-    // Equipo: UNA LÍNEA POR ITEM REAL seleccionado (no agrupado por
+    // Equipo -- UNA LÍNEA POR ITEM REAL seleccionado (no agrupado por
     // categoría) -- se quiere ver exactamente qué equipo se eligió, no
     // solo la categoría. La categoría y la cantidad por unidad van en la
     // columna Nota, compactas.

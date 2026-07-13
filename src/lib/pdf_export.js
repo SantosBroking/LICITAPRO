@@ -674,6 +674,11 @@ export function printResumenInterno({ project, cot, calc, companyObj }) {
 .costo-row td { border-top: 1.5px solid #1a1917; font-weight: 700; }
 .partida-header { font-size: 15px; font-weight: 700; color: #1a1917; margin: 24px 0 4px; padding-bottom: 6px; border-bottom: 1.5px solid #1a1917; }
 .partida-header:first-of-type { margin-top: 0; }
+.corrida-partida-table col.col-concepto { width: 32%; }
+.corrida-partida-table col.col-iva      { width: 8%; }
+.corrida-partida-table col.col-unitario { width: 16%; }
+.corrida-partida-table col.col-total    { width: 16%; }
+.corrida-partida-table col.col-nota     { width: 28%; }
 </style></head><body>
 
 <div class="no-print" style="position:fixed;top:0;left:0;right:0;z-index:100;background:#1a1917;color:white;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px">
@@ -746,7 +751,10 @@ ${partidas.map(p => `
 
 <div class="section">
   <h2>Corrida financiera unitaria</h2>
-  <table>
+  <table class="corrida-partida-table">
+    <colgroup>
+      <col class="col-concepto"><col class="col-iva"><col class="col-unitario"><col class="col-total"><col class="col-nota">
+    </colgroup>
     <thead><tr><th>Concepto</th><th style="text-align:center">IVA</th><th style="text-align:right">Unitario</th><th style="text-align:right">Total</th><th>Nota</th></tr></thead>
     <tbody>
     ${p.conceptosCosto.map(c=>`
