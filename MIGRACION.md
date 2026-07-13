@@ -6,7 +6,7 @@
 
 ## Estado actual
 
-- **Fase en curso:** ninguna — última entrega cerrada: Fase 2A4 (Cotización Operativa), **completa en producción**; siguiente paso sugerido: planear próximos incrementos de Cotización Operativa (agregar equipo desde catálogo, quitar partida/equipo, PDF cliente e IA operativa para empleado) o Fase 2E (separación real Network/RLS), según decisión
+- **Fase en curso:** ninguna — última entrega cerrada: Fase 2A5 (Resumen Interno v2 / Corrida Financiera Desglosada), **completa en producción**; siguiente paso sugerido: probar visualmente el nuevo PDF con proyectos reales y ajustar presentación/umbrales si hace falta, continuar con el siguiente incremento pendiente de Cotización Operativa (agregar equipo desde catálogo, quitar partida/equipo), o Fase 2E (separación real Network/RLS), según decisión
 - **Rama de trabajo:** `fase0-seguridad`
 - **`main` no ha sido tocado.** Todo el trabajo de Fase 0 se construye en esta rama hasta que esté probado y aprobado explícitamente para merge.
 - **Diseño completo de la migración:** documentado fuera del repo (tres documentos técnicos: Master Blueprint de auditoría, Plan de Migración Fase 0+1 v1 y v2, Preparación Fase 0A, Guía de Backup Manual). Este archivo resume el estado operativo; el diseño detallado vive en esos documentos.
@@ -500,6 +500,65 @@ Exactamente 6 commits, sin ninguno extra. Exactamente 5 archivos modificados. Gr
 - Seguridad real a nivel de base de datos, incluida RLS por rol en `projects` — no se resuelve en esta fase, que es de UI/props/write-guard, no un sustituto de la Fase 2E.
 - Renombrar el campo técnico `costoMSMS` — sigue como campo heredado, sin cambios.
 - Migración de datos — no se hizo ninguna.
+
+### ✅ Fase 2A5 — Resumen Interno v2 / Corrida Financiera Desglosada
+
+**Contexto:** el "Resumen interno" anterior era poco útil como herramienta de decisión — mostraba algunos datos, pero no respondía con claridad cuánto se vende, cuánto cuesta, cuánto deja, cuál es el margen, qué partida está en riesgo, qué costos faltan, ni qué decisión conviene tomar. La utilidad total y el margen agregado ya existían en `calcCotizacion`, pero no estaban presentados en el PDF interno. Además, la tabla por partida reimplementaba cálculos de forma independiente dentro de `pdf_export.js`, con riesgo real de desalineación frente a `calcCotizacion`.
+
+**Decisión de negocio:** convertir el resumen interno en una **Corrida financiera interna** para admin — la venta nunca se mezcla como costo, se muestra aparte; todos los costos se suman para llegar a un costo unitario total; venta unitaria menos costo unitario total da la utilidad unitaria; utilidad unitaria por unidades da la utilidad total. El reporte debe servir para decidir rápido si una operación conviene. No es para cliente ni para empleados.
+
+#### A. Helper nuevo de datos internos
+
+`src/lib/resumen_interno.js` (nuevo) — `buildResumenInternoData(project, cot, calc, companyObj, options)` centraliza las métricas internas, reutilizando `calcCotizacion`/`calc` como fuente de verdad para los totales agregados (nunca los recalcula ni los duplica), y expone datos base del proyecto, KPIs agregados, la corrida financiera unitaria con sus conceptos de costo, detalle por partida, detalle de equipo/extras, riesgos y pendientes, semáforo general y decisión sugerida. No modifica `calc.js`, no renombra `costoMSMS`, no toca base de datos, no se expone a empleados, y no reintroduce texto visible "MSMS" — `costoMSMS` se conserva únicamente como campo técnico interno.
+
+#### B. Corrida financiera unitaria
+
+Reglas: la venta nunca se suma dentro de los conceptos de costo, se muestra aparte; el costo unitario total es la suma de los conceptos de costo; utilidad unitaria = venta unitaria − costo unitario total; utilidad total = utilidad unitaria × unidades (salvo redondeo); un costo que viene por unidad se usa tal cual, uno que viene total se prorratea; sin unidades activas se evita cualquier división peligrosa; un costo faltante, una partida sin costo o un equipo sin costo fuerzan alerta roja automática, igual que una utilidad negativa.
+
+**Bug real encontrado y corregido durante el desarrollo:** `cnts[pi]` representa la cantidad de un equipo *por vehículo* dentro de la partida, no un total absoluto — para obtener la cantidad total real hay que multiplicarlo por la cantidad de esa partida. La primera versión del helper no hacía esta multiplicación, y el costo total de equipo no coincidía con `calcCotizacion`; se corrigió y se verificó con pruebas numéricas exactas (3 × 10 = 30, confirmado) antes de continuar.
+
+#### C. Semáforos y decisión sugerida
+
+Umbrales iniciales, editables, no definitivos: margen ≥ 25% verde, entre 10% y 25% amarillo, < 10% rojo; utilidad negativa, costo faltante y equipo sin costo fuerzan rojo automático; fecha de costo con más de 30 días, amarillo; retornos/fianzas por encima de 10% de la venta, amarillo; por encima de 20%, rojo. Decisión sugerida: verde → "Aprobar / operación sana"; amarillo → "Revisar antes de avanzar"; rojo → "No avanzar sin ajuste/autorización" — es una recomendación interna para admin, nunca una decisión automática definitiva.
+
+#### D. PDF interno rediseñado
+
+`src/lib/pdf_export.js` — `printResumenInterno` ahora consume `buildResumenInternoData` en vez de recalcular por su cuenta. Seis secciones lógicas: **1** Resumen ejecutivo (identificación, semáforo, decisión sugerida, KPIs de venta/costo/utilidad/margen/unidades/utilidad por unidad); **2** Corrida financiera unitaria (tabla de conceptos con unitario/total/notas, y los totales de cierre, con la venta siempre separada visualmente de los costos); **3** Partidas (venta/costo/utilidad unitaria y total, margen, semáforo, alertas — ordenadas por riesgo/impacto); **4** Equipo/extras (categoría, cantidad, costo unitario/total, fecha de costo, notas, alertas); **5** Riesgos y pendientes (costos faltantes, equipo sin costo, márgenes bajos, utilidad negativa, fechas de costo vencidas, documentos/firmas pendientes, conceptos no disponibles); **6** Anexo técnico interno (IVA, retornos, fianzas, condiciones comerciales).
+
+#### E. Botón admin
+
+`src/views/Projects.js` — el botón cambió a "🔒 Corrida financiera interna", sin ningún cambio de lógica ni de permisos: sigue exactamente dentro de `tab==='cotizacion' && isAdmin`, empleado no lo ve, no se abrió nada nuevo.
+
+#### Commits
+
+| # | Commit | Contenido | Archivo |
+|---|---|---|---|
+| 1 | `f35035ea859f3f9cbd8bd61fcfefbbab7efbf1a7` | Helper de datos internos | `src/lib/resumen_interno.js` |
+| 2 | `6e69396e851cb73dd0c608add42a1ca11a71d1ca` | Rediseño PDF, secciones 1-3 | `src/lib/pdf_export.js` |
+| 3 | `a05750c85d41a743d4801385af68f9d37b963f42` | Rediseño PDF, secciones 4-6 | `src/lib/pdf_export.js` |
+| 4 | `e49ed67750c129a6d681e13b97df510a55f1bf44` | Cambio de texto del botón | `src/views/Projects.js` |
+| 5 | `80dd6c0fa0c8e7792fbe78c24a2f372d10001ebe` | Limpieza de strings técnicos sensibles en el helper | `src/lib/resumen_interno.js` |
+
+**Archivos modificados en toda la fase (3, únicamente):** `src/lib/resumen_interno.js`, `src/lib/pdf_export.js`, `src/views/Projects.js`. No se tocó Supabase, RLS, SQL, variables, `api/`, `data_sanitize.js`, `calc.js`, `Cotizacion.js`, `CotizacionOperativa.js`, `Catalog.js`, `Firmas.js`, `firmas.js`, ni `package.json`.
+
+**Commit final en `main`:** `80dd6c0fa0c8e7792fbe78c24a2f372d10001ebe`
+
+**Estado: cerrado en producción.** URL: `https://licitapro-beta.vercel.app`
+
+#### Validaciones finales
+
+Exactamente 5 commits, sin ninguno extra. Exactamente 3 archivos modificados. Grep de "MSMS" en `src/`/`api/`: 18 líneas — correcto, ya que el helper agrega 2 accesos técnicos reales a `p.costoMSMS`; cero texto visible, cero comentarios, cero strings descriptivos, cero fuentes tipo `'partidas[].costoMSMS'`. Búsqueda específica de strings sensibles en el helper: 0 líneas. El campo `fuente` interno del helper nunca se imprime en el PDF. Seis escenarios de prueba del helper (cotización simple, con retornos/fianzas, equipo sin costo, sin unidades activas, partida sin costo de vehículo, equipo con `cnts[pi]` y cantidad de partida mayor a 1) — todos verificados: sin `undefined`/`NaN`/`Infinity`, totales coincidentes con `calc`, igualdad `ventaUnitaria - costoUnitarioTotal = utilidadUnitaria` y `utilidadUnitaria × unidades = utilidadTotal`, equipo multiplicado correctamente, costo faltante y utilidad negativa forzando rojo, DPP nunca inventado, "ISR" apareciendo solo cuando existe como concepto real capturado en fianzas. PDF cliente, Orden de Compra, Cotización Operativa, Catálogo y Firmas/OC confirmados intactos. Deploy de producción confirmado exitoso.
+
+#### Límites pendientes, documentados a propósito (no resueltos en esta fase)
+
+- RLS/Network crudo — sigue pendiente (Fase 2E).
+- PDF cliente para empleado — sigue diferido.
+- IA operativa — sigue diferida.
+- Agregar/quitar equipo operativo dentro de Cotización Operativa — pendiente, fuera de esta fase.
+- DPP como campo real — **no existe** en el código actual; no se inventó ningún campo. Si algún día se desea capturarlo, requiere su propia fase con su propio diseño de dato.
+- Campos nuevos de proveedor de equipo, moneda, responsable de costo, o un campo explícito de riesgo capturado por el usuario — todos documentados como ausentes, ninguno se programó.
+- Cambios de base de datos — ninguno; toda esta fase es cálculo y presentación sobre datos ya existentes.
+- Renombrar el campo técnico `costoMSMS` — sigue como campo heredado, sin cambios.
 
 ### Fase futura (pendiente, re-etiquetada) — Multiempresa y nuevo proyecto
 - Organización única: **Grupo Santiago**
