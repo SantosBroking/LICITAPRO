@@ -6,7 +6,7 @@
 
 ## Estado actual
 
-- **Fase en curso:** 2A0 (Contención visible inmediata) — **completa en producción**; próxima sub-fase de Fase 2 (2A1 en adelante) pendiente de autorización
+- **Fase en curso:** 2A1 + 2A2 (Permisos granulares + Sanitización React profunda) — **completas en producción**; próxima sub-fase de Fase 2 (2A3/2A4 en adelante) pendiente de autorización
 - **Rama de trabajo:** `fase0-seguridad`
 - **`main` no ha sido tocado.** Todo el trabajo de Fase 0 se construye en esta rama hasta que esté probado y aprobado explícitamente para merge.
 - **Diseño completo de la migración:** documentado fuera del repo (tres documentos técnicos: Master Blueprint de auditoría, Plan de Migración Fase 0+1 v1 y v2, Preparación Fase 0A, Guía de Backup Manual). Este archivo resume el estado operativo; el diseño detallado vive en esos documentos.
@@ -372,6 +372,44 @@ Una sola política nueva, de solo `SELECT`. **Sin política de `UPDATE`** (decis
 - **RLS `UPDATE` amplio** — cualquier usuario activo del workspace puede escribir en `projects`/`vehicles`, sin distinguir rol; confirmado que esta misma vía es la que usan acciones legítimas cotidianas (ej. cambiar estatus de vehículo), lo que hace que cerrarlo de verdad sea del tamaño de Fase 2E, no una sub-fase corta.
 - **Sanitización React profunda** de `project`/`vehicles` antes de pasarlos como props a componentes de empleado — diseñada (`sanitizeProjectForRole`, `sanitizeVehicleForRole`, etc.) pero no implementada — es Fase 2A2.
 - **Cotización operativa para empleado** — sigue sin existir; Cotización completa sigue admin-only — es Fase 2A4.
+
+### ✅ Fase 2A1 + 2A2 — Permisos granulares + Sanitización React profunda (parte de Fase 2)
+
+**Contexto:** Fase 2A0 cerró las fugas visibles/exportables (UI, Excel, descargas). Esta ronda ataca el nivel de props/estado React: aunque el dato financiero completo sigue llegando por Network/Supabase (eso queda para una fase posterior), deja de llegar a los *componentes* que un empleado usa.
+
+**Objetivo:** permisos granulares en `getPermissions`, sanitización React profunda para que empleados no reciban datos financieros en props/estado React de ningún componente accesible, y protección de los guardados normales desde la app con allowlist explícita (no denylist).
+
+#### Cambios realizados
+
+1. **Nuevos permisos granulares en `permissions.js`** (13 nuevos + 3 alias) — sin cambiar roles en base de datos ni el `CHECK` existente. Cubren Cotización (`verCotizacionOperativa`, `verCostosInternos`, `verMargenUtilidad`, `verRetornosEstrategicos`, `verCorridaFinanciera`, `verUnitarioFinanciero`, `guardarFinancieros`, etc.), IA (`usarIAOperativa`/`usarIAFinanciera`) y Vehículos (`editarVehiculosFinancieros`, `descargarFacturasVehiculo`). Los permisos que preparan Cotización Operativa (`verCotizacionOperativa`, `editarCotizacionOperativa`, `usarIAOperativa`) ya son `true` para ambos roles, pero **sin ningún efecto todavía** — Cotización sigue admin-only por el gate de tab ya existente, no tocado en esta ronda.
+
+2. **Archivo nuevo `src/lib/data_sanitize.js`** — funciones puras de sanitización:
+   - **Lectura:** `sanitizeProjectForRole`, `sanitizeCotizacionForRole`, `sanitizeVehicleForRole`, `sanitizeDocsForRole`, más `removeSensitiveKeysDeep` como segunda capa de defensa contra campos financieros futuros no contemplados explícitamente.
+   - **Escritura:** `sanitizeProjectUpdateForRole`, `sanitizeVehicleUpdateForRole`, `sanitizeDocsUpdateForRole`, `sanitizeFirmasUpdateForRole` — todas por **allowlist explícita**, nunca copiando el objeto completo que manda un empleado. Un campo financiero inventado (`cotizacion.calc`, `partida.margen`, `equipo.precioTotal`, etc.) nunca se copia, porque no está en ninguna lista permitida.
+   - Se incluyó también el caso de `project.docs` (categorías "Facturas", "Propuesta económica", "Garantías", "Fianzas" se preservan del original si el empleado no las veía) y de `project.firmas` (empleado solo puede actualizar `estatus`/`archivoFirmado`/`comentarioRechazo`/`historial` de un documento existente; nunca puede crear uno nuevo ni modificar a quién se le asigna).
+
+3. **`App.js`** ahora calcula `visibleProjects`/`visibleVehicles`/`visibleCurrentProject` junto al resto de la navegación efectiva. **Dashboard, ProjectsList, ProjectDetail, VehiclesTab (vía ProjectDetail) y FirmasView** reciben la versión sanitizada cuando el usuario es empleado — admin sigue recibiendo los datos completos sin cambios, en los 5 puntos. El guardado normal (`handleSaveProject`, `upProject`, `handleSaveVehicle`) aplica el merge seguro contra el objeto original **antes** de `saveProject`/`saveVehicle` — así, aunque un empleado edite un campo operativo, los campos financieros existentes nunca se pierden ni se pueden inyectar desde la app normal.
+
+4. **`maybeSaveFinancials` sigue admin-only, sin ningún cambio de código.**
+
+5. **Cotización operativa NO se abrió** — sigue siendo exactamente la misma vista admin-only de siempre.
+
+#### Archivos modificados
+
+`src/App.js`, `src/lib/data_sanitize.js` (nuevo), `src/lib/permissions.js`. No se tocó `Cotizacion.js`, `Vehicles.js`, `Projects.js`, `Firmas.js`, `pdf_export.js`, `calc.js`, `api/ai-proxy.js`, `api/admin-users.js`, `project_financials`, Supabase, RLS, SQL, ni Vercel/variables de entorno.
+
+#### Commit
+
+`3047808ded0c934e0fe2c80d0c72e33251ce244d`
+
+**Estado: cerrado en producción.** URL: `https://licitapro-beta.vercel.app`
+
+#### Límites pendientes, documentados a propósito (no resueltos en esta ronda)
+
+- **Network/DevTools crudo** — la respuesta de red de `projects`/`vehicles` sigue trayendo todos los campos financieros; RLS no distingue rol. Requiere una fase de separación real a nivel de Supabase/RLS.
+- **RLS `UPDATE` amplio** — cualquier usuario activo del workspace puede escribir en `projects`/`vehicles` vía API directa, sin distinguir rol. Confirmado que cerrarlo de verdad (sin romper acciones operativas legítimas de empleado) requiere un rediseño de mayor alcance, no una sub-fase corta.
+- **Cotización operativa para empleado** — sigue sin existir; Cotización completa sigue admin-only.
+- **Vector de correo de Orden de Compra con costos** — si un empleado es designado firmante de una OC, recibe por correo el PDF con `costoMSMS` cuando admin aprueba. Es una decisión de proceso de negocio pendiente, fuera del alcance de sanitización React.
 
 ### Fase futura (pendiente, re-etiquetada) — Multiempresa y nuevo proyecto
 - Organización única: **Grupo Santiago**
