@@ -126,17 +126,12 @@ module.exports = async function handler(req, res) {
   const data = isAdmin
     ? { projects, vehicles, companies, config, auditLog }
     : {
-        // HALLAZGO (Fase 2E1, no corregido en data_sanitize.js a propósito --
-        // no estaba autorizado modificar ese archivo): sanitizeProjectForRole
-        // solo limpia project.cotizacion y project.docs. NO toca
-        // project.ordenesCompra, que también trae costoMSMS embebido (mismo
-        // vector ya documentado del correo de aprobación de OC). Confirmado
-        // con prueba simulada: sin esta segunda capa, "costoMSMS" aparecía
-        // 1 vez en la respuesta de empleado por esta vía. Se cierra aquí
-        // aplicando removeSensitiveKeysDeep (ya existía, exportada, sin uso
-        // activo hasta ahora) como defensa adicional -- no reemplaza a
-        // sanitizeProjectForRole, se aplica DESPUÉS, como está documentado
-        // en su propio comentario en data_sanitize.js.
+        // Fase 2E1 — Commit 2: el hallazgo de `ordenesCompra` (precioUnit
+        // sin sanear, equivalente a costoMSMS) ya se cerró en la fuente
+        // compartida (sanitizeProjectForRole, src/lib/data_sanitize.js),
+        // no solo aquí. removeSensitiveKeysDeep se mantiene como defensa de
+        // SEGUNDA capa (para campos futuros que la sanitización explícita
+        // no contemple todavía), no como el único lugar que lo resuelve.
         projects: projects.map(p => removeSensitiveKeysDeep(sanitizeProjectForRole(p, appUser))),
         vehicles: vehicles.map(v => removeSensitiveKeysDeep(sanitizeVehicleForRole(v, appUser))),
         companies,

@@ -71,6 +71,44 @@ export function sanitizeDocsForRole(docs, user) {
   return (docs || []).filter(d => !DOC_CATEGORIAS_FINANCIERAS.includes(d && d.category));
 }
 
+// Orden de Compra — shape real verificado en src/views/Projects.js:1175-1184
+// (generarOC) y confirmado en src/views/Firmas.js:66-79 y Projects.js:756-760
+// (reimprimir), donde SIEMPRE se reconstruye así:
+//   costoMSMS: op.precioUnit || orig.costoMSMS || 0
+// Es decir: `precioUnit` en cada partida de una OC ES el costo interno
+// (costoMSMS), aunque no se llame igual -- confirmado con evidencia real,
+// no supuesto. Shape completo de una OC:
+//   { id, folio, fecha, proveedor, proveedorRfc, proveedorAddress,
+//     partidas: [{ id, vehiculo, tipo, cantidad, precioUnit }],
+//     condiciones: [{ id, label, value }] }
+// `condiciones` son términos comerciales (forma de pago, anticipo, garantía,
+// penalización, facturación...) -- mismo tipo de dato que
+// COTIZACION_CAMPOS_FINANCIEROS a nivel cotización (condicionesComerciales/
+// condicionesLista ya se tratan como financieras ahí); mismo criterio aquí,
+// se excluye el array completo para empleado.
+const OC_CAMPOS_FINANCIEROS = ['condiciones'];
+const OC_PARTIDA_CAMPOS_FINANCIEROS = ['precioUnit'];
+
+export function sanitizeOrdenCompraForRole(orden, user) {
+  if (getPermissions(user).verCostosInternos) return orden; // admin: sin cambios
+  if (!orden) return orden;
+
+  const limpia = { ...orden };
+  OC_CAMPOS_FINANCIEROS.forEach(campo => { delete limpia[campo]; });
+
+  limpia.partidas = (orden.partidas || []).map(p => {
+    const pLimpia = { ...p };
+    OC_PARTIDA_CAMPOS_FINANCIEROS.forEach(campo => { delete pLimpia[campo]; });
+    return pLimpia;
+  });
+
+  return limpia;
+}
+
+export function sanitizeOrdenesCompraForRole(ordenes, user) {
+  return (ordenes || []).map(o => sanitizeOrdenCompraForRole(o, user));
+}
+
 export function sanitizeProjectForRole(project, user) {
   if (getPermissions(user).verCostosInternos) return project; // admin: sin cambios
   if (!project) return project;
@@ -78,6 +116,10 @@ export function sanitizeProjectForRole(project, user) {
     ...project,
     cotizacion: sanitizeCotizacionForRole(project.cotizacion, user),
     docs: sanitizeDocsForRole(project.docs, user),
+    // Fase 2E1 (Commit 2) -- hallazgo cerrado aquí: antes esta función NO
+    // tocaba ordenesCompra, dejando pasar precioUnit (=costoMSMS real) sin
+    // sanear. Ver sanitizeOrdenCompraForRole arriba.
+    ordenesCompra: sanitizeOrdenesCompraForRole(project.ordenesCompra, user),
   };
 }
 
