@@ -716,7 +716,14 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
     // Cotización Operativa — empleado. Sin botones de PDF/OC/IA financiera;
     // ninguno de esos vive dentro de CotizacionOperativa.js en absoluto.
     tab==='cotizacion' && !isAdmin && h(CotizacionOperativa, { project, onUpdate:updProject, activeTab:cotSubTab, setActiveTab:setCotSubTab }),
-    // Bases
+    // Fase 2A6 -- Bases se oculta de la navegación principal (ya no está
+    // en TODAS_LAS_PESTANAS_PROYECTO, permissions.js), pero este bloque
+    // NO se borra: ningún dato de "Bases" se pierde, y el proceso
+    // BasesPreparacion queda disponible para cuando se decida su destino
+    // final (Documentos > Bases y anexos, o un futuro módulo de IA de
+    // bases). tab nunca puede valer 'bases' hoy -- sanitizeProjectTab lo
+    // redirige a 'resumen' antes de llegar aquí -- por eso este bloque es
+    // inalcanzable a propósito, no un descuido.
     tab==='bases' && h(BasesPreparacion, { project, config, onUpdate:updProject, user, logFn }),
     // Documentos
     tab==='docs' && h('div', null,
@@ -821,7 +828,13 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
       })(),
       h(DocsTab, { project, vehicles:pVehicles, companies, config, onSaveCompany, onUpdate:updProject, user, logFn }),
     ),
-    // Preguntas
+    // Fase 2A6 -- Preguntas se oculta de la navegación principal (ya no
+    // está en TODAS_LAS_PESTANAS_PROYECTO, permissions.js). project.preguntas[]
+    // NO se borra ni se migra -- el dato sigue intacto, solo deja de tener
+    // tab propio. tab nunca puede valer 'preguntas' hoy -- sanitizeProjectTab
+    // lo redirige a 'resumen' antes de llegar aquí. En el futuro, el
+    // módulo de análisis de bases / junta de aclaraciones absorberá esta
+    // funcionalidad -- por eso se deja el bloque, no se borra.
     tab==='preguntas' && h('div', null,
       h('div', { className:'card', style:{ marginBottom:16 } },
         h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:10 } }, 'Preguntas y aclaraciones'),

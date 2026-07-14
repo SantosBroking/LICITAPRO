@@ -98,8 +98,27 @@ export function getAllowedProjectTabs(user) {
 export function canProjectTab(tab, user) {
   return typeof tab === 'string' && getAllowedProjectTabs(user).includes(tab);
 }
+// Fase 2A6: mapeo de ids de tab viejos (localStorage previo a la
+// reorganización) a su nueva ubicación real -- 'vehiculos'/'facturacion'/
+// 'flujo' ahora viven DENTRO de 'operacion' (como sub-pestañas), así que
+// un usuario con ese valor guardado debe caer en 'operacion', no en el
+// fallback genérico 'resumen'. Esto es seguro para ambos roles: dentro de
+// 'operacion', cada rol ya ve solo lo que le corresponde (empleado nunca
+// ve facturacion/flujo, sin importar por qué id viejo haya entrado).
+const LEGACY_TAB_MAP = {
+  info: 'resumen',
+  borrador: 'resumen',
+  activity: 'resumen',
+  preguntas: 'resumen',
+  bases: 'resumen',
+  vehiculos: 'operacion',
+  facturacion: 'operacion',
+  flujo: 'operacion',
+};
 export function sanitizeProjectTab(tab, user) {
-  return canProjectTab(tab, user) ? tab : 'resumen';
+  if (canProjectTab(tab, user)) return tab;
+  const mapeado = LEGACY_TAB_MAP[tab];
+  return (mapeado && canProjectTab(mapeado, user)) ? mapeado : 'resumen';
 }
 
 // ── Sub-pestañas dentro de un módulo. "Scope" es el identificador del
@@ -135,8 +154,17 @@ export function getAllowedSubTabs(scope, user) {
 export function canSubTab(scope, tab, user) {
   return typeof tab === 'string' && getAllowedSubTabs(scope, user).includes(tab);
 }
+// Fase 2A6: 'corrida' y 'unitario' (sub-pestañas viejas de Cotización,
+// ya fusionadas en 'finanzas') deben caer específicamente en 'finanzas'
+// para quien tuviera ese valor guardado -- no en la primera sub-pestaña
+// genérica de la lista.
+const LEGACY_SUBTAB_MAP = {
+  cotizacion: { corrida: 'finanzas', unitario: 'finanzas' },
+};
 export function sanitizeSubTab(scope, tab, user) {
   const permitidas = getAllowedSubTabs(scope, user);
   if (permitidas.length === 0) return null; // el scope entero está prohibido para este usuario
-  return canSubTab(scope, tab, user) ? tab : permitidas[0]; // cae a la primera permitida, no a un valor fijo
+  if (canSubTab(scope, tab, user)) return tab;
+  const mapeado = LEGACY_SUBTAB_MAP[scope] && LEGACY_SUBTAB_MAP[scope][tab];
+  return (mapeado && canSubTab(scope, mapeado, user)) ? mapeado : permitidas[0];
 }
