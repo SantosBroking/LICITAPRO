@@ -54,13 +54,16 @@ module.exports = async function handler(req, res) {
   // en package.json, que no se toca) y data_sanitize.js/permissions.js son
   // ESM. Probado: Node 22.x resuelve esto sin error (con una advertencia de
   // rendimiento por reparseo, no un fallo) -- ver reporte de diagnóstico.
-  let sanitizeProjectForRole, sanitizeVehicleForRole, removeSensitiveKeysDeep;
+  let sanitizeProjectForRole, sanitizeVehicleForRole, removeSensitiveKeysDeep, sanitizeCompaniesForRole, sanitizeConfigForRole;
   try {
     const mod = await import('../src/lib/data_sanitize.js');
     sanitizeProjectForRole = mod.sanitizeProjectForRole;
     sanitizeVehicleForRole = mod.sanitizeVehicleForRole;
     removeSensitiveKeysDeep = mod.removeSensitiveKeysDeep;
-    if (typeof sanitizeProjectForRole !== 'function' || typeof sanitizeVehicleForRole !== 'function' || typeof removeSensitiveKeysDeep !== 'function') {
+    sanitizeCompaniesForRole = mod.sanitizeCompaniesForRole;
+    sanitizeConfigForRole = mod.sanitizeConfigForRole;
+    if (typeof sanitizeProjectForRole !== 'function' || typeof sanitizeVehicleForRole !== 'function' || typeof removeSensitiveKeysDeep !== 'function'
+        || typeof sanitizeCompaniesForRole !== 'function' || typeof sanitizeConfigForRole !== 'function') {
       throw new Error('Exports esperados no encontrados en data_sanitize.js');
     }
   } catch(e) {
@@ -104,13 +107,15 @@ module.exports = async function handler(req, res) {
   const config    = (configRaw && configRaw[0] && configRaw[0].data) || null;
   const auditLog  = auditRaw.map(r => r.data);
 
-  // ── Decisión: companies y config van igual para ambos roles ──
-  // companies: data_sanitize.js NO tiene (ni tuvo nunca) una función
-  // sanitizeCompanyForRole -- confirmado en el diagnóstico de Fase 2E. Hoy
-  // App.js ya pasa `companies` sin filtrar a ambos roles. Mismo criterio aquí.
-  // config: shape real confirmado en src/lib/constants.js (DEFAULT_CONFIG) y
-  // customProducts (catálogo) -- ningún campo de costo/precio interno. Mismo
-  // criterio: sin cambios para ningún rol.
+  // ── Decisión: companies y config -- microfix (mensaje siguiente a Commit 3) ──
+  // HALLAZGO real de escaneo (no supuesto): companies[].objetoSocial,
+  // companies[].documentosMembretados[].cuerpo, y config.ocSettings.condicionesDefault
+  // mencionaban "factura"/"fianza" en texto libre o en términos comerciales
+  // por defecto. Se cierran con sanitizeCompaniesForRole/sanitizeConfigForRole
+  // (nuevas en data_sanitize.js) -- admin sin cambios, empleado sin esos campos.
+  // config NO se vacía por completo ({}): customProducts/checklistTemplate/
+  // customStatuses siguen siendo necesarios para Catálogo/Bases, accesibles
+  // para ambos roles -- solo se quita ocSettings, el campo con el hallazgo real.
   //
   // Decisión: audit_log SOLO para admin, [] para empleado.
   // Motivo (hallazgo de este diagnóstico, no una regla ya existente):
@@ -134,8 +139,8 @@ module.exports = async function handler(req, res) {
         // no contemple todavía), no como el único lugar que lo resuelve.
         projects: projects.map(p => removeSensitiveKeysDeep(sanitizeProjectForRole(p, appUser))),
         vehicles: vehicles.map(v => removeSensitiveKeysDeep(sanitizeVehicleForRole(v, appUser))),
-        companies,
-        config,
+        companies: sanitizeCompaniesForRole(companies, appUser),
+        config: sanitizeConfigForRole(config, appUser),
         auditLog: [],
       };
 

@@ -197,6 +197,57 @@ export function sanitizeVehiclesForRole(vehicles, user) {
   return (vehicles || []).map(v => sanitizeVehicleForRole(v, user));
 }
 
+// Empresa (company) — shape real verificado en src/views/Companies.js:294
+// (mapeo de campos del formulario) y :443 (empresa nueva): incluye
+// { id, name, rfc, address, notario, notaria, escritura, fechaEscritura,
+//   estado, objetoSocial, socios, regimen, cp, situacion,
+//   documentosMembretados:[...] }. `objetoSocial` (objeto social notarial,
+// texto libre) y `documentosMembretados` (cartas membretadas, texto libre)
+// no son financieros en sentido estricto, pero HALLAZGO real (escaneo de
+// preview, no supuesto): su texto libre puede mencionar términos como
+// "facturación"/"fianza" según cómo esté redactado cada uno. Autorizado
+// explícitamente excluirlos para empleado.
+// NOTA para el resto del alcance de Fase 2E: hoy src/views/Companies.js NO
+// tiene ningún gate de rol -- un empleado ya puede ver/editar objetoSocial
+// y documentosMembretados completos vía la app en vivo (dbLoad, sin tocar).
+// Este endpoint nuevo es el primero en restringirlo; no protege nada
+// todavía en producción hasta que 2E2 reemplace dbLoad(), y aun entonces
+// Companies.js seguiría sin gate visual -- quedaría pendiente como su
+// propio hallazgo, fuera de alcance aquí.
+const COMPANY_CAMPOS_RESTRINGIDOS = ['objetoSocial', 'documentosMembretados'];
+
+export function sanitizeCompanyForRole(company, user) {
+  if (getPermissions(user).isAdmin) return company; // admin: sin cambios
+  if (!company) return company;
+  const limpia = { ...company };
+  COMPANY_CAMPOS_RESTRINGIDOS.forEach(campo => { delete limpia[campo]; });
+  return limpia;
+}
+
+export function sanitizeCompaniesForRole(companies, user) {
+  return (companies || []).map(c => sanitizeCompanyForRole(c, user));
+}
+
+// Config — shape real verificado en src/lib/constants.js (DEFAULT_CONFIG:
+// groupName, currency, checklistTemplate, customStatuses, customProductTypes)
+// más `customProducts` (catálogo, agregado dinámicamente) y `ocSettings`
+// (src/views/Projects.js:1034-1123: { direcciones:[...], condicionesDefault:[...] }).
+// Solo `ocSettings.condicionesDefault` es el hallazgo real (default GLOBAL
+// de términos comerciales de OC -- mismo tipo de dato que oc.condiciones/
+// project.ocCondiciones, ya excluidos). El resto de config (catálogo,
+// checklist, estatus/tipos personalizados) SÍ es necesario para empleado
+// hoy (Catalog.js, Bases.js son accesibles para ambos roles) -- por eso NO
+// se regresa `{}` completo como sugerencia de último recurso: hay
+// evidencia concreta de que se rompería Catálogo/Bases para empleado sin
+// necesidad, ya que el hallazgo real está acotado a ocSettings.
+export function sanitizeConfigForRole(config, user) {
+  if (getPermissions(user).isAdmin) return config; // admin: sin cambios
+  if (!config) return config;
+  const limpio = { ...config };
+  delete limpio.ocSettings;
+  return limpio;
+}
+
 // ── Defensa de segunda capa — captura campos futuros que las funciones
 // explícitas de arriba no contemplen todavía. Se aplica DESPUÉS de la
 // sanitización explícita, nunca en su lugar (lo explícito es más preciso y
