@@ -109,10 +109,47 @@ export function sanitizeOrdenesCompraForRole(ordenes, user) {
   return (ordenes || []).map(o => sanitizeOrdenCompraForRole(o, user));
 }
 
+// Firmas — shape real verificado en src/lib/firmas.js:15-31 (nuevoDocFlujo):
+//   { id, tipo, titulo, folio, proyectoId, creadoPor:{nombre,email},
+//     responsable:{nombre,email}, estatus, archivoFirmado, comentarioRechazo,
+//     ocId, docMembretadoId, empresaId, notas, historial }
+// `proyecto` NO es parte de ese shape real -- se adjunta solo EN MEMORIA en
+// src/views/Firmas.js:25 (`{...f, proyecto:p}`) para el render de esa vista.
+// HALLAZGO (confirmado con escaneo real de preview, no solo simulado): las
+// funciones de escritura en src/lib/firmas.js (aprobar/rechazar/reenviar/
+// subirFirmadoDoc/vistoFinal/devolver) hacen `{ ...doc, ... }` -- si `doc`
+// traía `.proyecto` pegado (porque venía de la lista ya construida en
+// Firmas.js), ese snapshot COMPLETO del proyecto (con toda su cotización,
+// ordenesCompra, flujo, y sus propias firmas) queda PERSISTIDO dentro de
+// project.firmas[] en la base real, de forma recursiva
+// (firmas[].proyecto.firmas[].proyecto...). No se corrige el origen aquí
+// (src/views/Firmas.js / src/lib/firmas.js quedan fuera de alcance
+// autorizado en este fix) -- se cierra en lectura con una ALLOWLIST
+// explícita que nunca copia `proyecto`, sin importar qué tan anidado venga.
+const FIRMA_CAMPOS_SEGUROS = [
+  'id', 'tipo', 'titulo', 'folio', 'proyectoId', 'creadoPor', 'responsable',
+  'estatus', 'archivoFirmado', 'comentarioRechazo', 'ocId', 'docMembretadoId',
+  'empresaId', 'notas', 'historial',
+];
+
+export function sanitizeFirmaForRole(firma, user) {
+  if (getPermissions(user).isAdmin) return firma; // admin: sin cambios
+  if (!firma) return firma;
+  const limpia = {};
+  FIRMA_CAMPOS_SEGUROS.forEach(campo => {
+    if (Object.prototype.hasOwnProperty.call(firma, campo)) limpia[campo] = firma[campo];
+  });
+  return limpia;
+}
+
+export function sanitizeFirmasForRole(firmas, user) {
+  return (firmas || []).map(f => sanitizeFirmaForRole(f, user));
+}
+
 export function sanitizeProjectForRole(project, user) {
   if (getPermissions(user).verCostosInternos) return project; // admin: sin cambios
   if (!project) return project;
-  return {
+  const limpio = {
     ...project,
     cotizacion: sanitizeCotizacionForRole(project.cotizacion, user),
     docs: sanitizeDocsForRole(project.docs, user),
@@ -120,7 +157,25 @@ export function sanitizeProjectForRole(project, user) {
     // tocaba ordenesCompra, dejando pasar precioUnit (=costoMSMS real) sin
     // sanear. Ver sanitizeOrdenCompraForRole arriba.
     ordenesCompra: sanitizeOrdenesCompraForRole(project.ordenesCompra, user),
+    // Fase 2E1 (fix adicional) -- cierra el hallazgo real de firmas[].proyecto
+    // (ver sanitizeFirmaForRole arriba).
+    firmas: sanitizeFirmasForRole(project.firmas, user),
+    // project.flujo (src/views/Flujo.js:161) es 100% financiero (costos,
+    // % de anticipo, días de crédito) -- misma sub-pestaña admin-only de
+    // Operación desde Fase 2A6. El empleado no tiene ningún uso operativo
+    // de esta estructura; se vacía completa en vez de redactar parcialmente
+    // (evita dejar pasar valores de texto tipo "Retorno"/"Fianza" dentro de
+    // bloques[].nom, que removeSensitiveKeysDeep no detectaría por ser
+    // VALORES, no llaves).
+    flujo: null,
   };
+  // project.ocCondiciones (src/views/Projects.js:1186) es la última
+  // condicion comercial usada al generar una OC (forma de pago, anticipo,
+  // garantía...) -- mismo tipo de dato que OC_CAMPOS_FINANCIEROS a nivel de
+  // cada orden de compra individual (ver sanitizeOrdenCompraForRole);
+  // mismo criterio aquí, se elimina para empleado.
+  delete limpio.ocCondiciones;
+  return limpio;
 }
 
 export function sanitizeProjectsForRole(projects, user) {
