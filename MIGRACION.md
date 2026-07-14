@@ -6,7 +6,7 @@
 
 ## Estado actual
 
-- **Fase en curso:** ninguna — última entrega cerrada: Corrida Financiera Interna v3 — equipo inline + IVA, **completa en producción**; siguiente paso sugerido: probar visualmente con proyectos reales y ajustar layout si hace falta, o continuar con otro incremento pendiente (agregar equipo desde catálogo en Cotización Operativa, quitar partida/equipo, Fase 2E), según decisión
+- **Fase en curso:** ninguna — última entrega cerrada: Fase 2A6 — Navegación esencial v1 (incluye cierre de Expediente: Bases + Documentos + Preguntas), **completa en producción**; siguiente paso sugerido: probar visualmente con usuarios reales, revisar si el título del navegador aún expone "MSMS CORP", o continuar con otro incremento pendiente, según decisión
 - **Rama de trabajo:** `fase0-seguridad`
 - **`main` no ha sido tocado.** Todo el trabajo de Fase 0 se construye en esta rama hasta que esté probado y aprobado explícitamente para merge.
 - **Diseño completo de la migración:** documentado fuera del repo (tres documentos técnicos: Master Blueprint de auditoría, Plan de Migración Fase 0+1 v1 y v2, Preparación Fase 0A, Guía de Backup Manual). Este archivo resume el estado operativo; el diseño detallado vive en esos documentos.
@@ -687,7 +687,79 @@ Exactamente 3 commits, sin ninguno extra. Exactamente 2 archivos modificados. Ta
 
 Este ajuste fue únicamente de presentación/legibilidad del PDF interno — no cambia permisos, no cambia seguridad, no cambia ningún cálculo.
 
-### Fase futura (pendiente, re-etiquetada) — Multiempresa y nuevo proyecto
+### ✅ Fase 2A6 — Navegación esencial v1
+
+**Contexto:** antes de esta fase, la navegación principal de un proyecto tenía 10 tabs visibles (Información, Cotización, Flujo de Pagos, Bases, Vehículos, Facturación, Documentos, Preguntas, Borrador, Actividad). Demasiados botones principales, varias secciones pertenecientes al mismo flujo operativo, navegación más compleja de lo necesario, vistas con el mismo peso visual aunque no tuvieran la misma importancia. Se buscó ordenar la app por etapas reales del proyecto.
+
+**Decisión:** reducir la navegación principal a 4 tabs esenciales: Resumen, Cotización, Operación, Expediente.
+
+#### A. Nuevo mapa de navegación principal
+
+Nuevo menú principal: Resumen, Cotización, Operación, Expediente. El id técnico interno de Expediente sigue siendo `docs` para minimizar riesgo y conservar compatibilidad — el label visible es `Expediente`. No se tocó base de datos, permisos financieros, ni RLS.
+
+#### B. Resumen
+
+Fusiona Información + Borrador + Actividad. Objetivo: que la vista inicial del proyecto concentre datos generales, notas/borrador y actividad reciente sin tener tres tabs principales separados.
+
+#### C. Operación
+
+Fusiona Vehículos + Facturación + Flujo de Pagos, con su propia sub-navegación interna. Facturación y Flujo siguen siendo admin-only, ahora como sub-pestaña dentro de Operación (mismo patrón que Cotización desde Fase 2A4) en vez de gate a nivel de tab completo.
+
+#### D. Cotización
+
+Conserva su flujo; fusiona Corrida financiera + Unitario en una sola sub-pestaña "Finanzas". Ningún cálculo ni fórmula fue tocado — solo ids/labels/estructura de presentación.
+
+#### E. Expediente
+
+Fusiona Documentos + Bases + Preguntas como subtabs internas: `documentos`, `bases`, `preguntas`. Bases y Preguntas ya no son tabs principales, pero tampoco quedan inalcanzables — viven dentro de Expediente con su mismo contenido funcional (`BasesPreparacion`, OC + `DocsTab`, bloque de preguntas), reubicado sin reprogramar lógica interna. Esta pieza se cerró en un commit separado (Commit 6) tras detectarse, en una verificación previa al primer intento de merge, que Bases y Preguntas habían quedado ocultos y sin ruta de navegación — la fase no se dio por cerrada hasta corregir eso.
+
+#### F. Legacy / persistencia
+
+`LEGACY_TAB_MAP`: `bases → docs`, `preguntas → docs` (antes caían en el fallback genérico `resumen`); `vehiculos/facturacion/flujo → operacion`. `LEGACY_SUBTAB_MAP` nuevo scope `docs`: `docs → documentos`. Un usuario con tab viejo `bases` guardado en localStorage abre Expediente/Bases; con `preguntas`, Expediente/Preguntas; con `docs`, Expediente/Documentos. La persistencia reutiliza el mecanismo genérico ya existente de `subTabs` por scope (`setSubTab`/`effectiveSubTabs`/`sanitizeSubTab`) — no se modificó `sanitizeNavigation`.
+
+#### G. Permisos
+
+`PESTANAS_ADMIN_ONLY = []` — el gate de Facturación/Flujo ya no vive a nivel de tab principal, vive dentro de `getAllowedSubTabs('operacion', user)`. El scope `docs` da acceso a `documentos`, `bases`, `preguntas` para ambos roles (admin y empleado) — el mismo acceso que ya tenían cuando eran tabs principales sin gate. No se abrió acceso financiero indebido, no se tocó Cotización admin, no se tocó Cotización Operativa, no se tocó RLS.
+
+#### Commits
+
+| # | Commit | Contenido | Archivo(s) |
+|---|---|---|---|
+| 1 | `a6181d3` | Nuevo mapa de tabs principales y permisos base | `src/lib/permissions.js` |
+| 2 | `485c005` | Resumen: fusionar Información + Borrador + Actividad | `src/views/Projects.js` |
+| 3 | `240c953` | Operación: fusionar Vehículos + Facturación + Flujo de Pagos | `src/views/Projects.js`, `src/App.js` |
+| 4 | `6175468` | Cotización: fusionar Corrida financiera + Unitario en Finanzas | `src/views/Cotizacion.js` |
+| 5 | `cb87cdf` | Limpieza final: mapeo de migración exacto y comentarios de intención | `src/lib/permissions.js`, `src/views/Projects.js` |
+| 6 | `3674c23f974f7082db21bf1ba21c7636db809ec8` | Fusionar Bases, Documentos y Preguntas en Expediente | `src/App.js`, `src/lib/permissions.js`, `src/views/Projects.js` |
+
+**Archivos modificados (4, únicamente):** `src/App.js`, `src/lib/permissions.js`, `src/views/Cotizacion.js`, `src/views/Projects.js`. No se tocó Supabase, RLS, SQL, variables, `api/`, `data_sanitize.js`, `calc.js`, `pdf_export.js`, `resumen_interno.js`, `Catalog.js`, `Firmas.js`, `Companies.js`, ni `package.json`.
+
+**Commit final en `main`:** `3674c23f974f7082db21bf1ba21c7636db809ec8`
+
+**Estado: cerrado en producción.** URL: `https://licitapro-beta.vercel.app`
+
+#### Validaciones finales
+
+Exactamente 6 commits, sin ninguno extra. Exactamente 4 archivos modificados. `node --check` sin errores en todo `src/`. `PROJ_TABS` confirmado con solo los 4 tabs nuevos, label del cuarto tab confirmado como "Expediente" (id técnico `docs`). Subtabs de Expediente confirmadas (`documentos`, `bases`, `preguntas`); ningún `tab==='bases'`/`tab==='preguntas'` a nivel principal. `LEGACY_TAB_MAP` y `LEGACY_SUBTAB_MAP` confirmados y simulados en Node para ambos roles: los 8 mapeos de tab y los 3 de subtab de este cierre quedaron exactos. `costoMSMS` confirmado sin cambios, presente solo en los archivos ya conocidos. Merge a `main` fast-forward limpio, sin conflictos. Deploy de producción confirmado (push exitoso; verificación de disponibilidad por `curl` no fue posible desde el entorno de ejecución por restricción de red hacia `vercel.app`, sin relación con el estado real del deploy).
+
+#### Límites pendientes, documentados a propósito (no resueltos en esta fase)
+
+- Network/DevTools crudo — sigue pendiente (Fase 2E).
+- RLS `UPDATE` amplio — sigue pendiente.
+- PDF cliente para empleado — sigue diferido.
+- IA operativa — sigue diferida.
+- Agregar/quitar equipo operativo en Cotización Operativa — pendiente.
+- DPP como campo real — no existe, no se inventó.
+- Asignación manual de retornos/fianzas por partida — sigue usando las reglas automáticas ya confirmadas.
+- ZIP expediente — pendiente.
+- Expansión completa de Documentos a expediente (categorías, split facturas venta/compra, XML propio, comprobantes de pago) — pendiente.
+- IA de análisis de bases — módulo futuro grande, pendiente.
+- Renombrar el campo técnico `costoMSMS` — sigue como campo heredado, sin cambios.
+- Revisión del título visible del navegador, por si sigue apareciendo "MSMS CORP" — pendiente de revisar.
+
+Esta fase fue una reorganización de navegación. No cambió lógica financiera, no cambió cálculos, no cambió RLS, no cambió estructura de base de datos.
+
+
 - Organización única: **Grupo Santiago**
 - Empresas operadoras: Broking, SATHRI/Satri (datos fiscales pendientes de confirmar), tercera empresa
 - Extender tabla `companies` existente (no crear una nueva) + `organization_id`
@@ -708,4 +780,4 @@ Este ajuste fue únicamente de presentación/legibilidad del PDF interno — no 
 
 ---
 
-*Última actualización: 10 de julio de 2026 — Fase 0F.*
+*Última actualización: 14 de julio de 2026 — Fase 2A6, Navegación esencial v1.*
