@@ -19,7 +19,10 @@ import { AIAnalyzerButton } from '../ui/AIAnalyzerButton.js';
 // contenido de 'operacion' se agrega en un commit posterior de esta misma
 // rama (Vehículos/Facturación/Flujo) -- hasta entonces, el tab existe en
 // el menú pero su contenido se completa en el siguiente commit.
-const PROJ_TABS = [{id:'resumen',l:'Resumen'},{id:'cotizacion',l:'Cotización'},{id:'operacion',l:'Operación'},{id:'docs',l:'Documentos'}];
+// Fase 2A6 (cierre): el id interno sigue siendo 'docs' (persistencia/legacy
+// map no se tocan), pero el label visible pasa a 'Expediente' porque ahora
+// agrupa Documentos + Bases + Preguntas como sub-pestañas internas.
+const PROJ_TABS = [{id:'resumen',l:'Resumen'},{id:'cotizacion',l:'Cotización'},{id:'operacion',l:'Operación'},{id:'docs',l:'Expediente'}];
 
 const GRUPOS = {
   proyecciones: ['prospecto','analisis','preparacion','aclaraciones','presentada','evaluacion'],
@@ -442,7 +445,7 @@ export function ProjectForm({ project, companies, config, onSave, onCancel, user
   );
 }
 
-export function ProjectDetail({ project, vehicles, companies, config, onSaveConfig, onSaveCompany, onUpdate, onDelete, onSave, onNav, user, logFn, activeTab, setActiveTab, cotSubTab, setCotSubTab, operacionSubTab, setOperacionSubTab }) {
+export function ProjectDetail({ project, vehicles, companies, config, onSaveConfig, onSaveCompany, onUpdate, onDelete, onSave, onNav, user, logFn, activeTab, setActiveTab, cotSubTab, setCotSubTab, operacionSubTab, setOperacionSubTab, docsSubTab, setDocsSubTab }) {
   const [showEdit, setShowEdit]     = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [showOC, setShowOC]         = useState(false);
@@ -716,17 +719,29 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
     // Cotización Operativa — empleado. Sin botones de PDF/OC/IA financiera;
     // ninguno de esos vive dentro de CotizacionOperativa.js en absoluto.
     tab==='cotizacion' && !isAdmin && h(CotizacionOperativa, { project, onUpdate:updProject, activeTab:cotSubTab, setActiveTab:setCotSubTab }),
-    // Fase 2A6 -- Bases se oculta de la navegación principal (ya no está
-    // en TODAS_LAS_PESTANAS_PROYECTO, permissions.js), pero este bloque
-    // NO se borra: ningún dato de "Bases" se pierde, y el proceso
-    // BasesPreparacion queda disponible para cuando se decida su destino
-    // final (Documentos > Bases y anexos, o un futuro módulo de IA de
-    // bases). tab nunca puede valer 'bases' hoy -- sanitizeProjectTab lo
-    // redirige a 'resumen' antes de llegar aquí -- por eso este bloque es
-    // inalcanzable a propósito, no un descuido.
-    tab==='bases' && h(BasesPreparacion, { project, config, onUpdate:updProject, user, logFn }),
-    // Documentos
-    tab==='docs' && h('div', null,
+    // Fase 2A6 (cierre): Expediente fusiona Bases + Documentos + Preguntas
+    // bajo el tab principal 'docs' (id interno sin cambios, label visible
+    // 'Expediente'), con su propia sub-navegación interna -- mismo patrón
+    // que Operación (Fase 2A6) y Cotización (Fase 2A4). Ninguno de los 3
+    // bloques (BasesPreparacion, OC+DocsTab, Preguntas) cambió su lógica
+    // interna -- solo se re-envuelven aquí, reubicados sin reprogramar nada.
+    tab==='docs' && (() => {
+      const expSubTabsPermitidas = getAllowedSubTabs('docs', user);
+      const expSubTab = (expSubTabsPermitidas.includes(docsSubTab) ? docsSubTab : expSubTabsPermitidas[0]) || 'documentos';
+      const EXP_LABELS = { documentos:'Documentos', bases:'Bases', preguntas:'Preguntas' };
+      return h('div', null,
+        expSubTabsPermitidas.length > 1 && h('div', { style:{ display:'flex', gap:6, marginBottom:16, borderBottom:'1px solid var(--b1)', paddingBottom:2, overflowX:'auto' } },
+          expSubTabsPermitidas.map(st => h('button', {
+            key:st,
+            onClick:()=>setDocsSubTab && setDocsSubTab(st),
+            style:{ fontSize:12, padding:'7px 14px', borderRadius:'var(--r) var(--r) 0 0', border:'none', borderBottom: expSubTab===st?'2px solid var(--blue)':'2px solid transparent', background:'transparent', color: expSubTab===st?'var(--blue)':'var(--t2)', fontWeight: expSubTab===st?600:400, cursor:'pointer', flexShrink:0, whiteSpace:'nowrap' },
+          }, EXP_LABELS[st] || st)),
+        ),
+        // Bases -- bloque BasesPreparacion sin cambios, antes vivía en su
+        // propio tab principal ('bases'), ahora reubicado como sub-pestaña.
+        expSubTab==='bases' && h(BasesPreparacion, { project, config, onUpdate:updProject, user, logFn }),
+        // Documentos -- OC generadas + DocsTab, sin cambios.
+        expSubTab==='documentos' && h('div', null,
       // Órdenes de Compra generadas
       (project.ordenesCompra||[]).length > 0 && (() => {
         const esJefeDetalle = getPermissions(user).isAdmin;
@@ -827,36 +842,34 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
         );
       })(),
       h(DocsTab, { project, vehicles:pVehicles, companies, config, onSaveCompany, onUpdate:updProject, user, logFn }),
-    ),
-    // Fase 2A6 -- Preguntas se oculta de la navegación principal (ya no
-    // está en TODAS_LAS_PESTANAS_PROYECTO, permissions.js). project.preguntas[]
-    // NO se borra ni se migra -- el dato sigue intacto, solo deja de tener
-    // tab propio. tab nunca puede valer 'preguntas' hoy -- sanitizeProjectTab
-    // lo redirige a 'resumen' antes de llegar aquí. En el futuro, el
-    // módulo de análisis de bases / junta de aclaraciones absorberá esta
-    // funcionalidad -- por eso se deja el bloque, no se borra.
-    tab==='preguntas' && h('div', null,
-      h('div', { className:'card', style:{ marginBottom:16 } },
-        h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:10 } }, 'Preguntas y aclaraciones'),
-        h('div', { style:{ display:'flex', gap:8 } },
-          h('input', { value:pregunta, onChange:e=>setPregunta(e.target.value), placeholder:'Pregunta para la junta de aclaraciones…', style:{ flex:1 }, onKeyDown:e=>e.key==='Enter'&&(e.preventDefault(),addPregunta()) }),
-          h('button', { className:'bp', onClick:addPregunta }, '+ Agregar'),
         ),
-      ),
-      (project.preguntas||[]).length===0
-        ? h(EmptyState, { title:'Sin preguntas', description:'Registra las preguntas para la junta de aclaraciones.' })
-        : h('div', { style:{ display:'flex', flexDirection:'column', gap:12 } },
-            (project.preguntas||[]).map((q,i)=>
-              h('div', { key:q.id, className:'card' },
-                h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8 } },
-                  h('div', { style:{ fontSize:13, fontWeight:500 } }, i+1,'. ',q.text),
-                  h('span', { style:{ fontSize:11, color:'var(--t3)', flexShrink:0, marginLeft:12 } }, q.date),
-                ),
-                h('textarea', { value:q.respuesta||'', onChange:e=>updRespuesta(q.id,e.target.value), placeholder:'Respuesta de la junta…', rows:2, style:{ resize:'vertical', fontSize:12 } }),
-              )
-            )
+        // Preguntas -- bloque sin cambios, antes vivía en su propio tab
+        // principal ('preguntas'), ahora reubicado como sub-pestaña.
+        // project.preguntas[] sigue viviendo exactamente donde ya vivía.
+        expSubTab==='preguntas' && h('div', null,
+          h('div', { className:'card', style:{ marginBottom:16 } },
+            h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:10 } }, 'Preguntas y aclaraciones'),
+            h('div', { style:{ display:'flex', gap:8 } },
+              h('input', { value:pregunta, onChange:e=>setPregunta(e.target.value), placeholder:'Pregunta para la junta de aclaraciones…', style:{ flex:1 }, onKeyDown:e=>e.key==='Enter'&&(e.preventDefault(),addPregunta()) }),
+              h('button', { className:'bp', onClick:addPregunta }, '+ Agregar'),
+            ),
           ),
-    ),
+          (project.preguntas||[]).length===0
+            ? h(EmptyState, { title:'Sin preguntas', description:'Registra las preguntas para la junta de aclaraciones.' })
+            : h('div', { style:{ display:'flex', flexDirection:'column', gap:12 } },
+                (project.preguntas||[]).map((q,i)=>
+                  h('div', { key:q.id, className:'card' },
+                    h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8 } },
+                      h('div', { style:{ fontSize:13, fontWeight:500 } }, i+1,'. ',q.text),
+                      h('span', { style:{ fontSize:11, color:'var(--t3)', flexShrink:0, marginLeft:12 } }, q.date),
+                    ),
+                    h('textarea', { value:q.respuesta||'', onChange:e=>updRespuesta(q.id,e.target.value), placeholder:'Respuesta de la junta…', rows:2, style:{ resize:'vertical', fontSize:12 } }),
+                  )
+                )
+              ),
+        ),
+      );
+    })(),
     // Modal Orden de Compra
     showOC && h(OCModal, { project, companies, config, onSaveConfig, onSaveCompany, onUpdate:updProject, onClose:()=>setShowOC(false), user }),
     // Modal eliminar

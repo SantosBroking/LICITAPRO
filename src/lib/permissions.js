@@ -105,12 +105,15 @@ export function canProjectTab(tab, user) {
 // fallback genérico 'resumen'. Esto es seguro para ambos roles: dentro de
 // 'operacion', cada rol ya ve solo lo que le corresponde (empleado nunca
 // ve facturacion/flujo, sin importar por qué id viejo haya entrado).
+// Fase 2A6 (cierre): 'preguntas' y 'bases' ahora viven DENTRO de 'docs'
+// (Expediente), como sub-pestañas -- ya no caen en el fallback genérico
+// 'resumen'. Mismo criterio que 'vehiculos'/'facturacion'/'flujo' → 'operacion'.
 const LEGACY_TAB_MAP = {
   info: 'resumen',
   borrador: 'resumen',
   activity: 'resumen',
-  preguntas: 'resumen',
-  bases: 'resumen',
+  preguntas: 'docs',
+  bases: 'docs',
   vehiculos: 'operacion',
   facturacion: 'operacion',
   flujo: 'operacion',
@@ -137,14 +140,20 @@ export function sanitizeProjectTab(tab, user) {
 // Espejo de TABS (src/views/Cotizacion.js:26) para admin — NO se importa
 // directo (mismo riesgo de ciclo de imports que PROJ_TABS). Si TABS cambia
 // en Cotizacion.js, actualizar también esta lista.
+// Fase 2A6 (cierre): nuevo scope 'docs' (Expediente) -- Bases, Documentos y
+// Preguntas antes eran tabs principales sin gate de rol (PESTANAS_ADMIN_ONLY
+// nunca los incluyó); se preserva exactamente ese mismo acceso, ahora como
+// sub-pestañas: admin y empleado ven las 3 por igual.
 const SUBTABS_POR_SCOPE_ADMIN = {
   cotizacion: ['partidas', 'equipo', 'extras', 'finanzas', 'agente'],
   operacion: ['vehiculos', 'facturacion', 'flujo'],
+  docs: ['documentos', 'bases', 'preguntas'],
 };
 // Sub-pestañas de CotizacionOperativa.js (Fase 2A4) — ninguna financiera.
 const SUBTABS_POR_SCOPE_EMPLEADO = {
   cotizacion: ['resumen', 'partidas', 'equipo'],
   operacion: ['vehiculos'],
+  docs: ['documentos', 'bases', 'preguntas'],
 };
 
 export function getAllowedSubTabs(scope, user) {
@@ -160,6 +169,10 @@ export function canSubTab(scope, tab, user) {
 // genérica de la lista.
 const LEGACY_SUBTAB_MAP = {
   cotizacion: { corrida: 'finanzas', unitario: 'finanzas' },
+  // Fase 2A6 (cierre): si algo quedó guardado como sub-pestaña 'docs'
+  // (id viejo del tab principal), debe caer en 'documentos', no en la
+  // primera sub-pestaña genérica de la lista.
+  docs: { docs: 'documentos' },
 };
 export function sanitizeSubTab(scope, tab, user) {
   const permitidas = getAllowedSubTabs(scope, user);
