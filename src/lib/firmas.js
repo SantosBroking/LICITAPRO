@@ -12,6 +12,24 @@ import { uid, TODAY } from './utils.js';
 
 function ahora() { return new Date().toISOString().slice(0,16).replace('T',' '); }
 
+// Fix (diagnóstico previo, sin implementación, ya autorizado aparte): `proyecto`
+// se adjunta SOLO en memoria en src/views/Firmas.js:25 (`{...f, proyecto:p}`)
+// para renderizar/generar PDFs/notificaciones -- nunca debe sobrevivir a una
+// función de escritura. Antes, aprobar/rechazar/reenviar/subirFirmadoDoc/
+// vistoFinal/devolver hacían `{ ...doc, ... }` y arrastraban `proyecto`
+// (snapshot completo y recursivo del proyecto) hacia lo que terminaba
+// persistido en project.firmas[] vía saveProject(). Lista de EXCLUSIÓN
+// explícita, no de inclusión -- todo el resto del shape real (ver
+// nuevoDocFlujo) se preserva tal cual, sin necesidad de enumerarlo.
+// NOTA: esto previene NUEVAS escrituras -- no limpia datos históricos ya
+// contaminados (fuera de alcance, requiere su propia autorización).
+const CAMPOS_RUNTIME_NO_PERSISTIBLES = ['proyecto'];
+function sanitizeFirmaBeforePersist(doc) {
+  const limpio = { ...doc };
+  CAMPOS_RUNTIME_NO_PERSISTIBLES.forEach(campo => { delete limpio[campo]; });
+  return limpio;
+}
+
 export function nuevoDocFlujo({ tipo, titulo, folio, proyectoId, creadoPorNombre, creadoPorEmail, responsableNombre, responsableEmail, ocId, docMembretadoId, empresaId, notas }) {
   return {
     id: uid('flujo'),
@@ -42,22 +60,22 @@ export const ESTADO_INFO = {
 };
 
 export function aprobar(doc, porNombre) {
-  return { ...doc, estatus:'en_firma', historial:[...(doc.historial||[]), { accion:'aprobado', por:porNombre, fecha:ahora(), comentario:'' }] };
+  return { ...sanitizeFirmaBeforePersist(doc), estatus:'en_firma', historial:[...(doc.historial||[]), { accion:'aprobado', por:porNombre, fecha:ahora(), comentario:'' }] };
 }
 export function rechazar(doc, porNombre, comentario) {
-  return { ...doc, estatus:'rechazado', comentarioRechazo:comentario||'', historial:[...(doc.historial||[]), { accion:'rechazado', por:porNombre, fecha:ahora(), comentario:comentario||'' }] };
+  return { ...sanitizeFirmaBeforePersist(doc), estatus:'rechazado', comentarioRechazo:comentario||'', historial:[...(doc.historial||[]), { accion:'rechazado', por:porNombre, fecha:ahora(), comentario:comentario||'' }] };
 }
 export function reenviar(doc, porNombre) {
-  return { ...doc, estatus:'en_aprobacion', comentarioRechazo:'', historial:[...(doc.historial||[]), { accion:'reenviado', por:porNombre, fecha:ahora(), comentario:'' }] };
+  return { ...sanitizeFirmaBeforePersist(doc), estatus:'en_aprobacion', comentarioRechazo:'', historial:[...(doc.historial||[]), { accion:'reenviado', por:porNombre, fecha:ahora(), comentario:'' }] };
 }
 export function subirFirmadoDoc(doc, archivo, porNombre) {
-  return { ...doc, estatus:'en_visto', archivoFirmado:{ ...archivo, subidoPor:porNombre, fecha:TODAY() }, historial:[...(doc.historial||[]), { accion:'firmado', por:porNombre, fecha:ahora(), comentario:'' }] };
+  return { ...sanitizeFirmaBeforePersist(doc), estatus:'en_visto', archivoFirmado:{ ...archivo, subidoPor:porNombre, fecha:TODAY() }, historial:[...(doc.historial||[]), { accion:'firmado', por:porNombre, fecha:ahora(), comentario:'' }] };
 }
 export function vistoFinal(doc, porNombre) {
-  return { ...doc, estatus:'completado', historial:[...(doc.historial||[]), { accion:'visto_final', por:porNombre, fecha:ahora(), comentario:'' }] };
+  return { ...sanitizeFirmaBeforePersist(doc), estatus:'completado', historial:[...(doc.historial||[]), { accion:'visto_final', por:porNombre, fecha:ahora(), comentario:'' }] };
 }
 export function devolver(doc, porNombre, comentario) {
-  return { ...doc, estatus:'en_firma', historial:[...(doc.historial||[]), { accion:'devuelto', por:porNombre, fecha:ahora(), comentario:comentario||'' }] };
+  return { ...sanitizeFirmaBeforePersist(doc), estatus:'en_firma', historial:[...(doc.historial||[]), { accion:'devuelto', por:porNombre, fecha:ahora(), comentario:comentario||'' }] };
 }
 
 function esc(s) { return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
