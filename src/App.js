@@ -122,11 +122,11 @@ export default function App() {
   const userName = user?.name || user?.email?.split('@')[0] || 'Usuario';
 
   const reloadData = async () => {
-    const uid = getUID();
     try {
-      // Fase 2E2A -- SOLO admin usa el endpoint nuevo. Empleado sigue
-      // exactamente igual que hoy (dbLoad directo), sin ningún cambio.
-      const d = user?.role === 'admin' ? await dbLoadViaWorkspaceEndpoint() : await dbLoad(uid);
+      // Fase 2E2B -- ambos roles usan el endpoint. Ya no depende de 'user'
+      // para decidir la ruta (antes solo admin la usaba); dbLoad() de abajo
+      // queda como función legacy/backstop, sin usarse aquí.
+      const d = await dbLoadViaWorkspaceEndpoint();
       console.log('reloadData result:', {projects: d.projects?.length, companies: d.companies?.length});
       setProjects(d.projects || []);
       setVehicles(d.vehicles || []);
@@ -139,16 +139,17 @@ export default function App() {
   const loadData = useCallback(async (u) => {
     setProjectsReady(false); // antes de cargar para esta sesión — mientras esto sea false, nunca se restaura ni se guarda navegación de proyecto
     try {
-      // Fase 2E2A -- SOLO admin usa /api/get-workspace-data. Empleado sigue
-      // exactamente el mismo camino de siempre (dbLoad directo) -- no se
-      // toca nada para empleado hasta que exista 2E3 (escritura server-side
-      // con merge seguro). Sin fallback silencioso a propósito: si el
-      // endpoint falla para admin, se reporta con alert() además de
-      // console.error, para que sea detectable de inmediato en preview --
-      // nunca se recurre a dbLoad() en silencio como respaldo.
-      const d = u.role === 'admin'
-        ? await dbLoadViaWorkspaceEndpoint()
-        : await dbLoad(u.workspaceId || u.id);
+      // Fase 2E2B -- AMBOS roles usan /api/get-workspace-data. Ya se
+      // resolvió el riesgo de escritura (Fase 2E3: config/companies/
+      // projects/vehicles guardan por endpoint server-side con merge
+      // contra la base real), así que ya no hay riesgo de que un empleado
+      // guarde un objeto sanitizado y borre datos privados. dbLoad() de
+      // abajo queda como función legacy/backstop -- ya no se usa aquí para
+      // ningún rol. Sin fallback silencioso a propósito: si el endpoint
+      // falla, se reporta con alert() además de console.error para AMBOS
+      // roles, para que sea detectable de inmediato en preview -- nunca se
+      // recurre a dbLoad() en silencio como respaldo.
+      const d = await dbLoadViaWorkspaceEndpoint();
         setProjects(d.projects || []);
         setProjectsReady(true); // se sabe con certeza: cargó (aunque venga vacío, projectsReady=true + projects=[] significa "sí cargó y no hay proyectos")
         setVehicles(d.vehicles || []);
@@ -175,11 +176,9 @@ export default function App() {
         }
     } catch(e) {
       console.error('Error cargando datos:', e);
-      if (u.role === 'admin') {
-        // Fase 2E2A -- reporte explícito, no silencioso, solo para admin
-        // (para detectar de inmediato en preview si el endpoint falla).
-        alert('Error al cargar datos vía /api/get-workspace-data: ' + e.message);
-      }
+      // Fase 2E2B -- reporte explícito, no silencioso, para AMBOS roles
+      // (antes solo para admin, cuando empleado seguía en dbLoad() directo).
+      alert('Error al cargar datos vía /api/get-workspace-data: ' + e.message);
     }
   }, []);
 
