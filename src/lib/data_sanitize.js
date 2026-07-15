@@ -228,22 +228,30 @@ export function sanitizeCompaniesForRole(companies, user) {
   return (companies || []).map(c => sanitizeCompanyForRole(c, user));
 }
 
-// Fase 2E3B — ESCRITURA server-side de empresa. A diferencia de
-// projects/vehicles (muchos campos restringidos, allowlist explícita), aquí
-// solo 2 campos están restringidos -- se usa un DENYLIST simétrico al de
-// lectura (COMPANY_CAMPOS_RESTRINGIDOS, ya declarado arriba): todo lo que
-// el formulario de empresa (CompanyProfile, baseDocs, reformas) ya permite
-// editar hoy sigue editable para empleado, excepto objetoSocial y
-// documentosMembretados, que SIEMPRE parten de originalCompany -- sin
-// importar si incoming los omite, los manda null, vacíos, o con datos falsos.
+// Fase 2E3B (corrección) — ESCRITURA server-side de empresa. ALLOWLIST
+// explícita, no denylist: si en el futuro aparece un campo interno nuevo en
+// companies, con denylist el empleado podría modificarlo sin que nadie lo
+// note; con allowlist, cualquier campo no contemplado aquí queda preservado
+// desde originalCompany por default, sin excepción. objetoSocial y
+// documentosMembretados NO están en esta lista a propósito -- igual que
+// cualquier campo futuro no incluido, siempre se preservan desde
+// originalCompany, sin importar qué mande incoming.
+const COMPANY_EMPLEADO_EDITABLE_FIELDS = [
+  'id', 'name', 'nombre', 'razonSocial', 'nombreComercial', 'rfc', 'regimen',
+  'address', 'domicilio', 'cp', 'ciudad', 'estado', 'situacion',
+  'representanteLegal', 'cargoRepresentante', 'correosNotificacion',
+  'correoContador', 'telefono', 'email', 'notario', 'notaria', 'escritura',
+  'fechaEscritura', 'logo', 'color', 'activa', 'tipo', 'socios', 'baseDocs',
+  'reformas',
+];
+
 export function sanitizeCompanyUpdateForRole(originalCompany, incomingCompany, user) {
   if (getPermissions(user).isAdmin) return incomingCompany; // admin: sin cambios, nunca se sanea
 
   const base = originalCompany ? { ...originalCompany } : { id: incomingCompany && incomingCompany.id };
   if (incomingCompany) {
-    Object.keys(incomingCompany).forEach(campo => {
-      if (COMPANY_CAMPOS_RESTRINGIDOS.includes(campo)) return; // nunca se acepta del cliente, cualquiera que sea el valor
-      base[campo] = incomingCompany[campo];
+    COMPANY_EMPLEADO_EDITABLE_FIELDS.forEach(campo => {
+      if (Object.prototype.hasOwnProperty.call(incomingCompany, campo)) base[campo] = incomingCompany[campo];
     });
   }
   return base;
