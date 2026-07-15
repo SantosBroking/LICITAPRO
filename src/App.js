@@ -1,7 +1,7 @@
 // App.js — Estado global, navegación y CRUD
 import { h, useState, useEffect, useRef, useCallback } from './lib/core.js';
 import { DEFAULT_CONFIG } from './lib/constants.js';
-import { sb, authSb, signOut, buildAppUser, WORKSPACE_ID, dbLoad, dbLoadViaWorkspaceEndpoint, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveConfigViaEndpoint, saveCompanyViaEndpoint, saveProjectViaEndpoint, saveVehicleViaEndpoint, saveAuditLog, saveProjectFinancials } from './lib/supabase.js';
+import { sb, authSb, signOut, buildAppUser, WORKSPACE_ID, dbLoadViaWorkspaceEndpoint, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveConfigViaEndpoint, saveCompanyViaEndpoint, saveProjectViaEndpoint, saveVehicleViaEndpoint, saveAuditLog, saveProjectFinancials } from './lib/supabase.js';
 import { calcCotizacion } from './lib/calc.js'; // Fase 0C — solo se USA, calc.js no se modifica
 import { getPermissions, canView, sanitizeView, canProjectTab, sanitizeProjectTab, sanitizeSubTab } from './lib/permissions.js'; // Fase 1C — permisos centralizados
 import { sanitizeProjectsForRole, sanitizeVehiclesForRole, sanitizeProjectUpdateForRole, sanitizeVehicleUpdateForRole } from './lib/data_sanitize.js'; // Fase 2A2 — sanitización React profunda
@@ -124,7 +124,7 @@ export default function App() {
   const reloadData = async () => {
     try {
       // Fase 2E2B -- ambos roles usan el endpoint. Ya no depende de 'user'
-      // para decidir la ruta (antes solo admin la usaba); dbLoad() de abajo
+      // para decidir la ruta (antes solo admin la usaba); dbLoad (la función legacy, sin paréntesis aquí a propósito) de abajo
       // queda como función legacy/backstop, sin usarse aquí.
       const d = await dbLoadViaWorkspaceEndpoint();
       console.log('reloadData result:', {projects: d.projects?.length, companies: d.companies?.length});
@@ -143,12 +143,12 @@ export default function App() {
       // resolvió el riesgo de escritura (Fase 2E3: config/companies/
       // projects/vehicles guardan por endpoint server-side con merge
       // contra la base real), así que ya no hay riesgo de que un empleado
-      // guarde un objeto sanitizado y borre datos privados. dbLoad() de
+      // guarde un objeto sanitizado y borre datos privados. dbLoad (función legacy) de
       // abajo queda como función legacy/backstop -- ya no se usa aquí para
       // ningún rol. Sin fallback silencioso a propósito: si el endpoint
       // falla, se reporta con alert() además de console.error para AMBOS
       // roles, para que sea detectable de inmediato en preview -- nunca se
-      // recurre a dbLoad() en silencio como respaldo.
+      // recurre a dbLoad en silencio como respaldo.
       const d = await dbLoadViaWorkspaceEndpoint();
         setProjects(d.projects || []);
         setProjectsReady(true); // se sabe con certeza: cargó (aunque venga vacío, projectsReady=true + projects=[] significa "sí cargó y no hay proyectos")
@@ -177,7 +177,7 @@ export default function App() {
     } catch(e) {
       console.error('Error cargando datos:', e);
       // Fase 2E2B -- reporte explícito, no silencioso, para AMBOS roles
-      // (antes solo para admin, cuando empleado seguía en dbLoad() directo).
+      // (antes solo para admin, cuando empleado seguía en dbLoad directo).
       alert('Error al cargar datos vía /api/get-workspace-data: ' + e.message);
     }
   }, []);
@@ -458,7 +458,11 @@ export default function App() {
     } catch(e) {
       console.error('Error al eliminar proyecto:', e);
       try {
-        const d = await dbLoad(getUID());
+        // Fase 2E2B (corrección) -- el fallback de recarga tras un error de
+        // delete también debe usar el endpoint sanitizado, no dbLoad
+        // crudo. Esto NO cambia la lógica de delete en sí, solo cómo se
+        // recarga el estado después de un fallo.
+        const d = await dbLoadViaWorkspaceEndpoint();
         setProjects(d.projects || []);
         setVehicles(d.vehicles || []);
       } catch(_) {}
