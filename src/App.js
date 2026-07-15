@@ -1,7 +1,7 @@
 // App.js — Estado global, navegación y CRUD
 import { h, useState, useEffect, useRef, useCallback } from './lib/core.js';
 import { DEFAULT_CONFIG } from './lib/constants.js';
-import { sb, authSb, signOut, buildAppUser, WORKSPACE_ID, dbLoad, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveAuditLog, saveProjectFinancials } from './lib/supabase.js';
+import { sb, authSb, signOut, buildAppUser, WORKSPACE_ID, dbLoad, dbLoadViaWorkspaceEndpoint, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveAuditLog, saveProjectFinancials } from './lib/supabase.js';
 import { calcCotizacion } from './lib/calc.js'; // Fase 0C — solo se USA, calc.js no se modifica
 import { getPermissions, canView, sanitizeView, canProjectTab, sanitizeProjectTab, sanitizeSubTab } from './lib/permissions.js'; // Fase 1C — permisos centralizados
 import { sanitizeProjectsForRole, sanitizeVehiclesForRole, sanitizeProjectUpdateForRole, sanitizeVehicleUpdateForRole } from './lib/data_sanitize.js'; // Fase 2A2 — sanitización React profunda
@@ -124,7 +124,9 @@ export default function App() {
   const reloadData = async () => {
     const uid = getUID();
     try {
-      const d = await dbLoad(uid);
+      // Fase 2E2A -- SOLO admin usa el endpoint nuevo. Empleado sigue
+      // exactamente igual que hoy (dbLoad directo), sin ningún cambio.
+      const d = user?.role === 'admin' ? await dbLoadViaWorkspaceEndpoint() : await dbLoad(uid);
       console.log('reloadData result:', {projects: d.projects?.length, companies: d.companies?.length});
       setProjects(d.projects || []);
       setVehicles(d.vehicles || []);
@@ -137,7 +139,16 @@ export default function App() {
   const loadData = useCallback(async (u) => {
     setProjectsReady(false); // antes de cargar para esta sesión — mientras esto sea false, nunca se restaura ni se guarda navegación de proyecto
     try {
-      const d = await dbLoad(u.workspaceId || u.id);
+      // Fase 2E2A -- SOLO admin usa /api/get-workspace-data. Empleado sigue
+      // exactamente el mismo camino de siempre (dbLoad directo) -- no se
+      // toca nada para empleado hasta que exista 2E3 (escritura server-side
+      // con merge seguro). Sin fallback silencioso a propósito: si el
+      // endpoint falla para admin, se reporta con alert() además de
+      // console.error, para que sea detectable de inmediato en preview --
+      // nunca se recurre a dbLoad() en silencio como respaldo.
+      const d = u.role === 'admin'
+        ? await dbLoadViaWorkspaceEndpoint()
+        : await dbLoad(u.workspaceId || u.id);
         setProjects(d.projects || []);
         setProjectsReady(true); // se sabe con certeza: cargó (aunque venga vacío, projectsReady=true + projects=[] significa "sí cargó y no hay proyectos")
         setVehicles(d.vehicles || []);
@@ -162,7 +173,14 @@ export default function App() {
             }
           }
         }
-    } catch(e) { console.error('Error cargando datos:', e); }
+    } catch(e) {
+      console.error('Error cargando datos:', e);
+      if (u.role === 'admin') {
+        // Fase 2E2A -- reporte explícito, no silencioso, solo para admin
+        // (para detectar de inmediato en preview si el endpoint falla).
+        alert('Error al cargar datos vía /api/get-workspace-data: ' + e.message);
+      }
+    }
   }, []);
 
   useEffect(() => {

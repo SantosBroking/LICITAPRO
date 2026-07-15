@@ -88,6 +88,49 @@ export async function dbLoad(userId) {
   };
 }
 
+// Fase 2E2A — lectura vía /api/get-workspace-data, SOLO para admin (el
+// llamador en App.js decide el rol; esta función no valida rol, solo llama
+// al endpoint con la sesión real). dbLoad() de arriba NO se toca -- sigue
+// siendo el único camino de lectura para empleado hasta que exista 2E3
+// (escritura server-side con merge seguro contra la base real).
+//
+// Sin fallback silencioso a propósito: si el endpoint falla, esta función
+// LANZA el error tal cual (con mensaje claro) -- el llamador decide qué
+// hacer, pero nunca debe recurrir a dbLoad() en silencio, porque eso
+// ocultaría un fallo real del endpoint durante esta prueba controlada.
+export async function dbLoadViaWorkspaceEndpoint() {
+  const { data: sessionData, error: sessionError } = await sb.auth.getSession();
+  if (sessionError) throw new Error('No se pudo obtener la sesión real: ' + sessionError.message);
+  const token = sessionData?.session?.access_token;
+  if (!token) throw new Error('No hay sesión activa de Supabase Auth -- no se puede llamar al endpoint.');
+
+  let res;
+  try {
+    res = await fetch('/api/get-workspace-data', { headers: { Authorization: `Bearer ${token}` } });
+  } catch (e) {
+    throw new Error('No se pudo contactar /api/get-workspace-data: ' + e.message);
+  }
+  if (!res.ok) {
+    let detalle = '';
+    try { const body = await res.json(); detalle = body?.error || ''; } catch(_e) {}
+    throw new Error(`/api/get-workspace-data respondió HTTP ${res.status}` + (detalle ? ` -- ${detalle}` : ''));
+  }
+
+  let json;
+  try { json = await res.json(); } catch (e) { throw new Error('Respuesta de /api/get-workspace-data no es JSON válido: ' + e.message); }
+  if (!json.ok) throw new Error('/api/get-workspace-data respondió ok:false -- ' + (json.error || 'sin detalle'));
+
+  const data = json.data || {};
+  // Mapeo exacto del shape nuevo al shape viejo que ya consume App.js.
+  return {
+    projects:  data.projects  || [],
+    vehicles:  data.vehicles  || [],
+    companies: data.companies || [],
+    config:    data.config    || null,
+    audit:     data.auditLog  || [],
+  };
+}
+
 export async function saveProject(project, userId) {
   if (!project.id || !userId) return;
   const { error } = await sb.from('projects').upsert({
