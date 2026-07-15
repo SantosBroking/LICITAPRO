@@ -222,6 +222,61 @@ export async function saveConfigViaEndpoint(config) {
   return json.config;
 }
 
+// Fase 2E3B-C-D — mismo patrón exacto que saveConfigViaEndpoint, extraído
+// aquí para no repetir la lógica de sesión/POST/validación 3 veces. Sin
+// fallback silencioso: cualquier fallo se lanza tal cual.
+async function postJsonWithSession(path, body) {
+  const { data: sessionData, error: sessionError } = await sb.auth.getSession();
+  if (sessionError) throw new Error('No se pudo obtener la sesión real: ' + sessionError.message);
+  const token = sessionData?.session?.access_token;
+  if (!token) throw new Error(`No hay sesión activa de Supabase Auth -- no se puede llamar a ${path}.`);
+
+  let res;
+  try {
+    res = await fetch(path, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    throw new Error(`No se pudo contactar ${path}: ` + e.message);
+  }
+  if (!res.ok) {
+    let detalle = '';
+    try { const errBody = await res.json(); detalle = errBody?.error || ''; } catch(_e) {}
+    throw new Error(`${path} respondió HTTP ${res.status}` + (detalle ? ` -- ${detalle}` : ''));
+  }
+
+  let json;
+  try { json = await res.json(); } catch (e) { throw new Error(`Respuesta de ${path} no es JSON válido: ` + e.message); }
+  if (!json.ok) throw new Error(`${path} respondió ok:false -- ` + (json.error || 'sin detalle'));
+  return json;
+}
+
+// Fase 2E3B — guardado de empresa vía endpoint server-side
+// (api/save-company.js), con merge seguro contra la base real.
+// saveCompany() de arriba NO se toca, sigue existiendo.
+export async function saveCompanyViaEndpoint(company) {
+  const json = await postJsonWithSession('/api/save-company', company);
+  return json.company;
+}
+
+// Fase 2E3C — guardado de proyecto vía endpoint server-side
+// (api/save-project.js), con merge seguro contra la base real.
+// saveProject() de arriba NO se toca, sigue existiendo.
+export async function saveProjectViaEndpoint(project) {
+  const json = await postJsonWithSession('/api/save-project', project);
+  return json.project;
+}
+
+// Fase 2E3D — guardado de vehículo vía endpoint server-side
+// (api/save-vehicle.js), con merge seguro contra la base real.
+// saveVehicle() de arriba NO se toca, sigue existiendo.
+export async function saveVehicleViaEndpoint(vehicle) {
+  const json = await postJsonWithSession('/api/save-vehicle', vehicle);
+  return json.vehicle;
+}
+
 export async function saveAuditLog(entry, userId) {
   if (!userId) return;
   await sb.from('audit_log').insert({ id: entry.id, user_id: userId, data: entry }).catch(()=>{});

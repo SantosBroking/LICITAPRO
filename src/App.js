@@ -1,7 +1,7 @@
 // App.js — Estado global, navegación y CRUD
 import { h, useState, useEffect, useRef, useCallback } from './lib/core.js';
 import { DEFAULT_CONFIG } from './lib/constants.js';
-import { sb, authSb, signOut, buildAppUser, WORKSPACE_ID, dbLoad, dbLoadViaWorkspaceEndpoint, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveConfigViaEndpoint, saveAuditLog, saveProjectFinancials } from './lib/supabase.js';
+import { sb, authSb, signOut, buildAppUser, WORKSPACE_ID, dbLoad, dbLoadViaWorkspaceEndpoint, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveConfigViaEndpoint, saveCompanyViaEndpoint, saveProjectViaEndpoint, saveVehicleViaEndpoint, saveAuditLog, saveProjectFinancials } from './lib/supabase.js';
 import { calcCotizacion } from './lib/calc.js'; // Fase 0C — solo se USA, calc.js no se modifica
 import { getPermissions, canView, sanitizeView, canProjectTab, sanitizeProjectTab, sanitizeSubTab } from './lib/permissions.js'; // Fase 1C — permisos centralizados
 import { sanitizeProjectsForRole, sanitizeVehiclesForRole, sanitizeProjectUpdateForRole, sanitizeVehicleUpdateForRole } from './lib/data_sanitize.js'; // Fase 2A2 — sanitización React profunda
@@ -412,7 +412,18 @@ export default function App() {
     // reales. Esto no es un caso "a veces seguro" — desde esta vía nunca lo es.
     setProjects(prev => { const ex=prev.find(x=>x.id===paraGuardar.id); return ex?prev.map(x=>x.id===paraGuardar.id?paraGuardar:x):[paraGuardar,...prev]; });
     if (navigate) nav('project_detail', paraGuardar.id);
-    try { await saveProject(paraGuardar, getUID()); await maybeSaveFinancials(paraGuardar); log(user,'guardó','proyecto',paraGuardar.id,paraGuardar.name); } catch(e){ console.error(e); }
+    try {
+      // Fase 2E3C -- se manda paraGuardar (ya saneado en cliente contra el
+      // 'original' local, igual que antes) al endpoint server-side, que
+      // vuelve a sanear contra su PROPIA lectura fresca de la base real
+      // (defensa en profundidad). El estado local se reconcilia con la
+      // respuesta autoritativa del servidor -- si hubiera cualquier
+      // diferencia, gana el servidor.
+      const guardado = await saveProjectViaEndpoint(paraGuardar);
+      setProjects(prev => prev.map(x=>x.id===guardado.id?guardado:x));
+      await maybeSaveFinancials(guardado);
+      log(user,'guardó','proyecto',guardado.id,guardado.name);
+    } catch(e){ console.error('[2E3C] Error guardando proyecto vía /api/save-project:', e); }
   }, [user, nav, log, projects]);
 
   const upProject = useCallback((updated) => {
@@ -423,8 +434,15 @@ export default function App() {
     if (_timer.current) clearTimeout(_timer.current);
     _timer.current = setTimeout(async () => {
       const toSave = _pending.current;
-      const uid = getUID();
-      if (toSave && uid) { try { await saveProject(toSave, uid); await maybeSaveFinancials(toSave); } catch(e){ console.error(e); } }
+      if (!toSave) return;
+      // Fase 2E3C -- mismo razonamiento que handleSaveProject: el servidor
+      // vuelve a sanear con su propia lectura fresca, y el estado local se
+      // reconcilia con su respuesta autoritativa.
+      try {
+        const guardado = await saveProjectViaEndpoint(toSave);
+        setProjects(prev => prev.map(p => p.id===guardado.id ? guardado : p));
+        await maybeSaveFinancials(guardado);
+      } catch(e){ console.error('[2E3C] Error guardando proyecto (debounced) vía /api/save-project:', e); }
     }, 800);
   }, [user, projects]);
 
@@ -453,7 +471,12 @@ export default function App() {
     const original = vehicles.find(x=>x.id===v.id);
     const paraGuardar = sanitizeVehicleUpdateForRole(original, v, user); // Fase 2A2
     setVehicles(prev => { const ex=prev.find(x=>x.id===paraGuardar.id); return ex?prev.map(x=>x.id===paraGuardar.id?paraGuardar:x):[...prev,paraGuardar]; });
-    try { await saveVehicle(paraGuardar, getUID()); } catch(e){ console.error(e); }
+    // Fase 2E3D -- mismo patrón que projects: servidor vuelve a sanear con
+    // su propia lectura fresca, estado local se reconcilia con su respuesta.
+    try {
+      const guardado = await saveVehicleViaEndpoint(paraGuardar);
+      setVehicles(prev => prev.map(x=>x.id===guardado.id?guardado:x));
+    } catch(e){ console.error('[2E3D] Error guardando vehículo vía /api/save-vehicle:', e); }
   }, [user, vehicles]);
 
   const handleDeleteVehicle = useCallback(async (id) => {
@@ -512,7 +535,7 @@ export default function App() {
   const currentProject = projects.find(p=>p.id===effectiveProjId);
   const visibleCurrentProject = visibleProjects.find(p=>p.id===effectiveProjId);
   const projDetailView = currentProject
-    ? h(ProjectDetail, { project: isAdmin?currentProject:visibleCurrentProject, vehicles: isAdmin?vehicles:visibleVehicles, companies, config, onSaveConfig:handleSaveConfig, onSaveCompany:async c=>{ const ex=companies.find(x=>x.id===c.id||x.rfc===c.rfc); setCompanies(ex?companies.map(x=>(x.id===c.id||x.rfc===c.rfc)?{...x,...c}:x):[...companies,c]); try{ await saveCompany(c, getUID()); log(user, ex?'actualizó':'creó', 'empresa', c.id, c.name); }catch(e){ console.error('Error guardando empresa:', e); } }, onUpdate:upProject, onSave:handleSaveProject, onDelete:handleDeleteProject, onNav:nav, user, logFn:log, activeTab:effectiveProjTab, setActiveTab:setProjTab, cotSubTab:effectiveSubTabs.cotizacion, setCotSubTab:(val)=>setSubTab('cotizacion', val), operacionSubTab:effectiveSubTabs.operacion, setOperacionSubTab:(val)=>setSubTab('operacion', val), docsSubTab:effectiveSubTabs.docs, setDocsSubTab:(val)=>setSubTab('docs', val) })
+    ? h(ProjectDetail, { project: isAdmin?currentProject:visibleCurrentProject, vehicles: isAdmin?vehicles:visibleVehicles, companies, config, onSaveConfig:handleSaveConfig, onSaveCompany:async c=>{ const ex=companies.find(x=>x.id===c.id||x.rfc===c.rfc); setCompanies(ex?companies.map(x=>(x.id===c.id||x.rfc===c.rfc)?{...x,...c}:x):[...companies,c]); try{ const guardada = await saveCompanyViaEndpoint(c); setCompanies(prev => prev.map(x=>x.id===guardada.id?guardada:x)); log(user, ex?'actualizó':'creó', 'empresa', c.id, c.name); }catch(e){ console.error('[2E3B] Error guardando empresa vía /api/save-company:', e); } }, onUpdate:upProject, onSave:handleSaveProject, onDelete:handleDeleteProject, onNav:nav, user, logFn:log, activeTab:effectiveProjTab, setActiveTab:setProjTab, cotSubTab:effectiveSubTabs.cotizacion, setCotSubTab:(val)=>setSubTab('cotizacion', val), operacionSubTab:effectiveSubTabs.operacion, setOperacionSubTab:(val)=>setSubTab('operacion', val), docsSubTab:effectiveSubTabs.docs, setDocsSubTab:(val)=>setSubTab('docs', val) })
     : h('div', { className:'empty' }, h('h3', null, 'Proyecto no encontrado'), h('button', { onClick:()=>nav('projects') }, '← Volver'));
 
   const content = ({
@@ -520,7 +543,7 @@ export default function App() {
     projects:       h(ProjectsList,  { projects: isAdmin?projects:visibleProjects, vehicles: isAdmin?vehicles:visibleVehicles, onNav:nav, onUpdate:p=>handleSaveProject(p,false), user }),
     project_new:    h(ProjectForm,   { companies, config, user, onSaveConfig:handleSaveConfig, onSave:handleSaveProject, onCancel:()=>nav('projects') }),
     project_detail: projDetailView,
-    companies:      h(Companies,     { companies, setCompanies, projects, config, appConfig:config, onUpdateProject:(p)=>handleSaveProject(p,false), onSave:async c=>{ const ex=companies.find(x=>x.id===c.id); setCompanies(ex?companies.map(x=>x.id===c.id?c:x):[...companies,c]); try{ await saveCompany(c, getUID()); log(user, ex?'actualizó':'creó', 'empresa', c.id, c.name); }catch(e){ console.error('Error guardando empresa:', e); } }, user, logFn:log }),
+    companies:      h(Companies,     { companies, setCompanies, projects, config, appConfig:config, onUpdateProject:(p)=>handleSaveProject(p,false), onSave:async c=>{ const ex=companies.find(x=>x.id===c.id); setCompanies(ex?companies.map(x=>x.id===c.id?c:x):[...companies,c]); try{ const guardada = await saveCompanyViaEndpoint(c); setCompanies(prev => prev.map(x=>x.id===guardada.id?guardada:x)); log(user, ex?'actualizó':'creó', 'empresa', c.id, c.name); }catch(e){ console.error('[2E3B] Error guardando empresa vía /api/save-company:', e); } }, user, logFn:log }),
     catalog:        h(CatalogView, { config, onSaveConfig:handleSaveConfig, user }),
     firmas:         h(FirmasView,    { projects: isAdmin?projects:visibleProjects, companies, user, onUpdateProject:(p)=>handleSaveProject(p,false), onNav:nav }),
     reports:        h(Reports,       { projects, vehicles, companies, audit }),

@@ -228,6 +228,27 @@ export function sanitizeCompaniesForRole(companies, user) {
   return (companies || []).map(c => sanitizeCompanyForRole(c, user));
 }
 
+// Fase 2E3B — ESCRITURA server-side de empresa. A diferencia de
+// projects/vehicles (muchos campos restringidos, allowlist explícita), aquí
+// solo 2 campos están restringidos -- se usa un DENYLIST simétrico al de
+// lectura (COMPANY_CAMPOS_RESTRINGIDOS, ya declarado arriba): todo lo que
+// el formulario de empresa (CompanyProfile, baseDocs, reformas) ya permite
+// editar hoy sigue editable para empleado, excepto objetoSocial y
+// documentosMembretados, que SIEMPRE parten de originalCompany -- sin
+// importar si incoming los omite, los manda null, vacíos, o con datos falsos.
+export function sanitizeCompanyUpdateForRole(originalCompany, incomingCompany, user) {
+  if (getPermissions(user).isAdmin) return incomingCompany; // admin: sin cambios, nunca se sanea
+
+  const base = originalCompany ? { ...originalCompany } : { id: incomingCompany && incomingCompany.id };
+  if (incomingCompany) {
+    Object.keys(incomingCompany).forEach(campo => {
+      if (COMPANY_CAMPOS_RESTRINGIDOS.includes(campo)) return; // nunca se acepta del cliente, cualquiera que sea el valor
+      base[campo] = incomingCompany[campo];
+    });
+  }
+  return base;
+}
+
 // Config — shape real verificado en src/lib/constants.js (DEFAULT_CONFIG:
 // groupName, currency, checklistTemplate, customStatuses, customProductTypes)
 // más `customProducts` (catálogo, agregado dinámicamente) y `ocSettings`
