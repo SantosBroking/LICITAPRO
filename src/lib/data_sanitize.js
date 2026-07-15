@@ -248,6 +248,40 @@ export function sanitizeConfigForRole(config, user) {
   return limpio;
 }
 
+// Fase 2E3A — ESCRITURA server-side de config. Mismo criterio de diseño que
+// sanitizeProjectUpdateForRole/sanitizeVehicleUpdateForRole: ALLOWLIST
+// explícita de lo poco que empleado puede tocar (exactamente lo que
+// Catalog.js usa hoy -- confirmado con grep, nada inventado), y todo lo
+// demás SIEMPRE parte de `originalConfig` -- que en el endpoint debe venir
+// de un SELECT fresco en el servidor, nunca del estado del navegador.
+// `Settings.js` (donde se edita groupName/currency/checklistTemplate/
+// customStatuses/customProductTypes/ocSettings) ya es una vista admin-only
+// (VISTAS_EMPLEADO no incluye 'settings') -- empleado nunca necesita editar
+// esos campos, por eso no están en la allowlist.
+const CONFIG_EMPLEADO_EDITABLE_FIELDS = ['customProducts', 'hiddenProducts'];
+
+export function sanitizeConfigUpdateForRole(originalConfig, incomingConfig, user) {
+  if (getPermissions(user).isAdmin) return incomingConfig; // admin: sin cambios, nunca se sanea
+
+  // Base SIEMPRE parte del original real -- si no existiera aún (workspace
+  // nuevo sin config guardada), la base es {} y los campos restringidos
+  // simplemente no existen todavía (nunca inventados desde incoming).
+  const base = originalConfig ? { ...originalConfig } : {};
+
+  CONFIG_EMPLEADO_EDITABLE_FIELDS.forEach(campo => {
+    if (incomingConfig && Object.prototype.hasOwnProperty.call(incomingConfig, campo)) {
+      base[campo] = incomingConfig[campo];
+    }
+  });
+
+  // Todo lo demás (ocSettings, checklistTemplate, customStatuses,
+  // customProductTypes, notif, groupName, currency, y cualquier campo
+  // futuro no contemplado) ya quedó preservado en `base` por el spread de
+  // arriba -- se ignora explícitamente cualquier intento de tocarlo desde
+  // incoming, sea que lo omita, lo mande null, o lo mande con datos falsos.
+  return base;
+}
+
 // ── Defensa de segunda capa — captura campos futuros que las funciones
 // explícitas de arriba no contemplen todavía. Se aplica DESPUÉS de la
 // sanitización explícita, nunca en su lugar (lo explícito es más preciso y

@@ -188,6 +188,40 @@ export async function saveConfig(config, userId) {
   if (error) throw error;
 }
 
+// Fase 2E3A — guardado de config vía endpoint server-side (api/save-config.js),
+// con merge seguro contra la base real. saveConfig() de arriba NO se toca --
+// sigue existiendo, pero App.js deja de llamarla para config a partir de
+// esta fase. Sin fallback silencioso a propósito: cualquier fallo se lanza
+// tal cual, nunca cae a saveConfig() en silencio.
+export async function saveConfigViaEndpoint(config) {
+  const { data: sessionData, error: sessionError } = await sb.auth.getSession();
+  if (sessionError) throw new Error('No se pudo obtener la sesión real: ' + sessionError.message);
+  const token = sessionData?.session?.access_token;
+  if (!token) throw new Error('No hay sesión activa de Supabase Auth -- no se puede guardar la configuración.');
+
+  let res;
+  try {
+    res = await fetch('/api/save-config', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+  } catch (e) {
+    throw new Error('No se pudo contactar /api/save-config: ' + e.message);
+  }
+  if (!res.ok) {
+    let detalle = '';
+    try { const body = await res.json(); detalle = body?.error || ''; } catch(_e) {}
+    throw new Error(`/api/save-config respondió HTTP ${res.status}` + (detalle ? ` -- ${detalle}` : ''));
+  }
+
+  let json;
+  try { json = await res.json(); } catch (e) { throw new Error('Respuesta de /api/save-config no es JSON válido: ' + e.message); }
+  if (!json.ok) throw new Error('/api/save-config respondió ok:false -- ' + (json.error || 'sin detalle'));
+
+  return json.config;
+}
+
 export async function saveAuditLog(entry, userId) {
   if (!userId) return;
   await sb.from('audit_log').insert({ id: entry.id, user_id: userId, data: entry }).catch(()=>{});

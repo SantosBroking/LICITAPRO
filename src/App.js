@@ -1,7 +1,7 @@
 // App.js — Estado global, navegación y CRUD
 import { h, useState, useEffect, useRef, useCallback } from './lib/core.js';
 import { DEFAULT_CONFIG } from './lib/constants.js';
-import { sb, authSb, signOut, buildAppUser, WORKSPACE_ID, dbLoad, dbLoadViaWorkspaceEndpoint, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveAuditLog, saveProjectFinancials } from './lib/supabase.js';
+import { sb, authSb, signOut, buildAppUser, WORKSPACE_ID, dbLoad, dbLoadViaWorkspaceEndpoint, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveConfigViaEndpoint, saveAuditLog, saveProjectFinancials } from './lib/supabase.js';
 import { calcCotizacion } from './lib/calc.js'; // Fase 0C — solo se USA, calc.js no se modifica
 import { getPermissions, canView, sanitizeView, canProjectTab, sanitizeProjectTab, sanitizeSubTab } from './lib/permissions.js'; // Fase 1C — permisos centralizados
 import { sanitizeProjectsForRole, sanitizeVehiclesForRole, sanitizeProjectUpdateForRole, sanitizeVehicleUpdateForRole } from './lib/data_sanitize.js'; // Fase 2A2 — sanitización React profunda
@@ -462,8 +462,20 @@ export default function App() {
   }, [user]);
 
   const handleSaveConfig = useCallback(async (cfg) => {
-    setConfig(cfg); window._lpConfig = cfg;
-    try { await saveConfig(cfg, getUID()); } catch(e){ console.error(e); throw e; }
+    // Fase 2E3A -- config ahora se guarda vía endpoint server-side, con
+    // merge seguro contra la base real (aplica para AMBOS roles, es
+    // justamente el objetivo de esta fase). Ya no se hace setConfig(cfg)
+    // optimista con lo que mande el cliente -- se espera la respuesta del
+    // servidor (que ya viene mergeada correctamente) y se usa esa, para
+    // nunca mostrar en memoria una versión de config incompleta.
+    try {
+      const guardado = await saveConfigViaEndpoint(cfg);
+      setConfig(guardado); window._lpConfig = guardado;
+    } catch(e) {
+      console.error('[2E3A] Error guardando config vía /api/save-config:', e);
+      alert('Error al guardar configuración: ' + e.message);
+      throw e;
+    }
   }, [user]);
 
   if (loading)
