@@ -24,37 +24,63 @@ import { getPermissions } from './permissions.js';
 // ════════════════════════════════════════════════════════════════════
 
 // Shape real verificado en src/views/Cotizacion.js:50-63 — nada inventado.
-// Campos financieros a nivel cotización (estrategia de IVA selectivo,
-// modo de pricing, condiciones que pueden contener términos de pago/DPP):
-const COTIZACION_CAMPOS_FINANCIEROS = [
+// Fase 2F1A: separados en dos categorías reales, no una sola bolsa
+// "financiero" — 'empleado' hoy es personal administrativo/operativo
+// interno, no un vendedor externo (redefinición explícita de Santiago).
+//
+// ESTRATÉGICOS: la ESTRATEGIA de margen/utilidad en sí (cuánto se quiere
+// ganar, cómo). Sigue admin-only sin excepción.
+const COTIZACION_CAMPOS_ESTRATEGICOS = [
   'condicionesComerciales', 'condicionesLista',
   'pctIvaSat', 'pctIvaUtil', 'ivaSelectivo', 'soloEquipo', 'modoEquipo', 'margenEquipo',
   'montoGanar', 'retornos', 'fianzas',
 ];
-// Partida — shape real Cotizacion.js:46 (makeP). NO tiene 'notas'/
-// 'descripcion'/'especificaciones' en el shape real — no se inventan.
-const PARTIDA_CAMPOS_FINANCIEROS = ['precioLista', 'costoMSMS', 'modoPrecio', 'techo', 'utilidadDeseada', 'utilidadPct'];
-// Equipo — shape real Cotizacion.js:103. costoConIVA es el monto; llevaIVA/
-// est/fechaCosto son metadata atada a ESE costo (afecta su cálculo o
-// describe cuándo/cómo se capturó) — sin el costo visible no aportan nada
-// operativo real, se agrupan aquí en vez de crear una excepción artificial.
-const EQUIPO_CAMPOS_FINANCIEROS = ['costoConIVA', 'llevaIVA', 'est', 'fechaCosto'];
+// Partida — shape real Cotizacion.js:46 (makeP).
+// COSTO_PROVEEDOR: costo de origen (lo que paga MSMS) -- ahora visible/
+// editable para 'empleado' operativo (Fase 2F1A). precioLista se incluye
+// aquí como precio base de referencia del catálogo, no una utilidad
+// calculada -- si Santiago prefiere tratarlo distinto, es un ajuste de una
+// línea aquí.
+const PARTIDA_CAMPOS_COSTO_PROVEEDOR = ['costoMSMS', 'precioLista'];
+// ESTRATEGICOS: la estrategia de precio de venta OFICIAL (cómo se calcula
+// el margen) -- sigue admin-only. 'precioPropuesto' (Fase 2F1A, campo nuevo,
+// ver PARTIDA_CAMPOS_PRECIO_PROPUESTO) es un borrador operativo separado,
+// no reemplaza a estos.
+const PARTIDA_CAMPOS_ESTRATEGICOS = ['modoPrecio', 'techo', 'utilidadDeseada', 'utilidadPct'];
+// Fase 2F1A: precio de venta PROPUESTO/borrador -- campo nuevo, puramente
+// operativo, nunca alimenta calc.js ni el cálculo oficial de utilidad/margen
+// (Hallazgo B del diagnóstico: mostrar costo Y precio de venta permite
+// inferir margen por resta -- aceptado explícitamente por Santiago, con el
+// borrador/propuesto como mitigación: lo que el operativo ve NO es
+// necesariamente el precio oficial final).
+const PARTIDA_CAMPOS_PRECIO_PROPUESTO = ['precioPropuesto'];
+// Equipo — shape real Cotizacion.js:103. Con la redefinición de rol, TODO
+// este grupo pasa a ser "costo proveedor" -- costoConIVA es el costo en sí,
+// llevaIVA/est/fechaCosto son metadata atada a ESE costo. Ya no queda ningún
+// campo "estratégico" a nivel de equipo individual (el estratégico real,
+// margenEquipo/modoEquipo, vive a nivel cotización, arriba).
+const EQUIPO_CAMPOS_COSTO_PROVEEDOR = ['costoConIVA', 'llevaIVA', 'est', 'fechaCosto'];
+const EQUIPO_CAMPOS_PRECIO_PROPUESTO = ['precioPropuesto'];
 
 export function sanitizeCotizacionForRole(cotizacion, user) {
   if (getPermissions(user).verCostosInternos) return cotizacion; // admin: sin cambios, mismo objeto
   if (!cotizacion) return cotizacion;
+  const perms = getPermissions(user);
 
   const limpia = { ...cotizacion };
-  COTIZACION_CAMPOS_FINANCIEROS.forEach(campo => { delete limpia[campo]; });
+  COTIZACION_CAMPOS_ESTRATEGICOS.forEach(campo => { delete limpia[campo]; });
 
   limpia.partidas = (cotizacion.partidas || []).map(p => {
     const pLimpia = { ...p };
-    PARTIDA_CAMPOS_FINANCIEROS.forEach(campo => { delete pLimpia[campo]; });
+    PARTIDA_CAMPOS_ESTRATEGICOS.forEach(campo => { delete pLimpia[campo]; });
+    if (!perms.verCostosProveedor) PARTIDA_CAMPOS_COSTO_PROVEEDOR.forEach(campo => { delete pLimpia[campo]; });
+    if (!perms.verPreciosVentaPropuestos) PARTIDA_CAMPOS_PRECIO_PROPUESTO.forEach(campo => { delete pLimpia[campo]; });
     return pLimpia;
   });
   limpia.equipo = (cotizacion.equipo || []).map(e => {
     const eLimpio = { ...e };
-    EQUIPO_CAMPOS_FINANCIEROS.forEach(campo => { delete eLimpio[campo]; });
+    if (!perms.verCostosProveedor) EQUIPO_CAMPOS_COSTO_PROVEEDOR.forEach(campo => { delete eLimpio[campo]; });
+    if (!perms.verPreciosVentaPropuestos) EQUIPO_CAMPOS_PRECIO_PROPUESTO.forEach(campo => { delete eLimpio[campo]; });
     return eLimpio;
   });
 
@@ -83,9 +109,11 @@ export function sanitizeDocsForRole(docs, user) {
 //     condiciones: [{ id, label, value }] }
 // `condiciones` son términos comerciales (forma de pago, anticipo, garantía,
 // penalización, facturación...) -- mismo tipo de dato que
-// COTIZACION_CAMPOS_FINANCIEROS a nivel cotización (condicionesComerciales/
-// condicionesLista ya se tratan como financieras ahí); mismo criterio aquí,
-// se excluye el array completo para empleado.
+// COTIZACION_CAMPOS_ESTRATEGICOS a nivel cotización (condicionesComerciales/
+// condicionesLista ya se tratan como estratégicas ahí, no como costo); mismo
+// criterio aquí, se excluye el array completo para empleado. NOTA (Fase 2F1A):
+// `precioUnit` (=costoMSMS de la OC) queda fuera de alcance de esta fase --
+// Órdenes de Compra/documentos de proyecto se revisan en 2F2, no aquí.
 const OC_CAMPOS_FINANCIEROS = ['condiciones'];
 const OC_PARTIDA_CAMPOS_FINANCIEROS = ['precioUnit'];
 
@@ -315,27 +343,51 @@ export function sanitizeConfigUpdateForRole(originalConfig, incomingConfig, user
 // explícitas de arriba no contemplen todavía. Se aplica DESPUÉS de la
 // sanitización explícita, nunca en su lugar (lo explícito es más preciso y
 // auditable; esto es un cinturón de seguridad extra). ──
-const PATRONES_SENSIBLES = [
-  /costo/i, /cost/i, /utilidad/i, /margen/i, /margin/i, /profit/i,
+// Fase 2F1A: separados en dos listas -- ya no una sola bolsa aplicada por
+// igual a cualquier no-admin. 'empleado' (operativo) SÍ debe conservar
+// costo/factura/precio -- solo lo verdaderamente estratégico se le sigue
+// quitando aquí como segunda capa.
+const PATRONES_ESTRATEGICOS = [
+  /utilidad/i, /margen/i, /margin/i, /profit/i,
   /retorno/i, /fianza/i, /comision/i, /\bdpp\b/i, /financ/i, /tasa/i,
-  /interes/i, /factura/i, /invoice/i, /\bpago\b/i, /payment/i,
-  /precioUnitario/i, /precioTotal/i,
+  /interes/i, /\bpago\b/i, /payment/i,
+];
+// Patrones de costo/factura -- YA NO se aplican a 'empleado' (operativo)
+// desde Fase 2F1A. Se dejan preparados para un futuro rol sin acceso a
+// costos (ej. 'vendedor', mencionado por Santiago pero no implementado
+// todavía) -- agregar ese rol no requeriría rediseñar esta función, solo
+// ajustar patronesParaRol() de abajo.
+const PATRONES_COSTO = [
+  /costo/i, /cost/i, /factura/i, /invoice/i, /precioUnitario/i, /precioTotal/i,
 ];
 // Excepción explícita: montoEstimado ya es público (confirmado en fases
 // anteriores — visible en 5 lugares distintos para empleado). No calza
 // ningún patrón de todos modos; se deja explícito por claridad, no porque
 // haga falta. fechaCosto NO se agrega como excepción a propósito — ya se
-// excluye de raíz en sanitizeCotizacionForRole (EQUIPO_CAMPOS_FINANCIEROS).
+// excluye de raíz en sanitizeCotizacionForRole cuando aplica (empleado sin
+// verCostosProveedor).
 const EXCEPCIONES_DEFAULT = ['montoEstimado'];
 
-export function removeSensitiveKeysDeep(obj, exceptions = EXCEPCIONES_DEFAULT) {
-  if (Array.isArray(obj)) return obj.map(item => removeSensitiveKeysDeep(item, exceptions));
+// Fase 2F1A: qué lista de patrones aplica según el nivel real de acceso del
+// usuario -- admin no pierde nada; 'empleado' (operativo, verCostosProveedor
+// true) solo pierde lo estratégico; un futuro rol sin verCostosProveedor
+// perdería también costo/factura/precio unitario.
+function patronesParaRol(user) {
+  const perms = getPermissions(user);
+  if (perms.verCostosInternos) return [];
+  if (perms.verCostosProveedor) return PATRONES_ESTRATEGICOS;
+  return [...PATRONES_ESTRATEGICOS, ...PATRONES_COSTO];
+}
+
+export function removeSensitiveKeysDeep(obj, user, exceptions = EXCEPCIONES_DEFAULT) {
+  const patrones = patronesParaRol(user);
+  if (Array.isArray(obj)) return obj.map(item => removeSensitiveKeysDeep(item, user, exceptions));
   if (obj && typeof obj === 'object') {
     const resultado = {};
     Object.keys(obj).forEach(key => {
       if (exceptions.includes(key)) { resultado[key] = obj[key]; return; }
-      if (PATRONES_SENSIBLES.some(p => p.test(key))) return; // se omite por completo
-      resultado[key] = removeSensitiveKeysDeep(obj[key], exceptions);
+      if (patrones.some(p => p.test(key))) return; // se omite por completo
+      resultado[key] = removeSensitiveKeysDeep(obj[key], user, exceptions);
     });
     return resultado;
   }
@@ -377,17 +429,38 @@ function copiarSoloPermitidos(origen, permitidos, base) {
   return resultado;
 }
 
-function construirPartidaOperativa(pEmpleado, pOriginal) {
-  const nueva = copiarSoloPermitidos(pEmpleado, PARTIDA_OPERATIONAL_FIELDS, pOriginal ? copiarSoloPermitidos(pOriginal, PARTIDA_OPERATIONAL_FIELDS) : {});
-  // Financieros: SIEMPRE del original, nunca de pEmpleado. Si pOriginal no
+// Fase 2F1A: ahora depende del nivel real de acceso del usuario, no de un
+// único booleano admin/no-admin. Si tiene verCostosProveedor (empleado
+// operativo, hoy cualquier rol autenticado), también puede escribir costo
+// de origen/proveedor y su propio precio propuesto -- lo estratégico
+// (PARTIDA_CAMPOS_ESTRATEGICOS) SIEMPRE viene del original, nunca del
+// empleado, sin importar su nivel de acceso.
+function construirPartidaOperativa(pEmpleado, pOriginal, user) {
+  const perms = getPermissions(user);
+  const permitidos = [
+    ...PARTIDA_OPERATIONAL_FIELDS,
+    ...(perms.verCostosProveedor ? PARTIDA_CAMPOS_COSTO_PROVEEDOR : []),
+    ...(perms.verPreciosVentaPropuestos ? PARTIDA_CAMPOS_PRECIO_PROPUESTO : []),
+  ];
+  const nueva = copiarSoloPermitidos(pEmpleado, permitidos, pOriginal ? copiarSoloPermitidos(pOriginal, permitidos) : {});
+  // Estratégicos: SIEMPRE del original, nunca de pEmpleado. Si pOriginal no
   // existe (partida nueva), quedan ausentes — nunca inventados ni aceptados.
-  PARTIDA_CAMPOS_FINANCIEROS.forEach(campo => { if (pOriginal) nueva[campo] = pOriginal[campo]; });
+  PARTIDA_CAMPOS_ESTRATEGICOS.forEach(campo => { if (pOriginal) nueva[campo] = pOriginal[campo]; });
+  // Costo proveedor: si el usuario NO tiene verCostosProveedor (futuro rol
+  // sin costos), se preserva del original en vez de perderse.
+  if (!perms.verCostosProveedor) PARTIDA_CAMPOS_COSTO_PROVEEDOR.forEach(campo => { if (pOriginal) nueva[campo] = pOriginal[campo]; });
   return nueva;
 }
 
-function construirEquipoOperativo(eEmpleado, eOriginal) {
-  const nuevo = copiarSoloPermitidos(eEmpleado, EQUIPO_OPERATIONAL_FIELDS, eOriginal ? copiarSoloPermitidos(eOriginal, EQUIPO_OPERATIONAL_FIELDS) : {});
-  EQUIPO_CAMPOS_FINANCIEROS.forEach(campo => { if (eOriginal) nuevo[campo] = eOriginal[campo]; });
+function construirEquipoOperativo(eEmpleado, eOriginal, user) {
+  const perms = getPermissions(user);
+  const permitidos = [
+    ...EQUIPO_OPERATIONAL_FIELDS,
+    ...(perms.verCostosProveedor ? EQUIPO_CAMPOS_COSTO_PROVEEDOR : []),
+    ...(perms.verPreciosVentaPropuestos ? EQUIPO_CAMPOS_PRECIO_PROPUESTO : []),
+  ];
+  const nuevo = copiarSoloPermitidos(eEmpleado, permitidos, eOriginal ? copiarSoloPermitidos(eOriginal, permitidos) : {});
+  if (!perms.verCostosProveedor) EQUIPO_CAMPOS_COSTO_PROVEEDOR.forEach(campo => { if (eOriginal) nuevo[campo] = eOriginal[campo]; });
   return nuevo;
 }
 
@@ -462,20 +535,20 @@ export function sanitizeProjectUpdateForRole(originalProject, incomingProject, u
     // equipo.precioTotal, lo que sea) simplemente nunca se copia, porque no
     // está en ninguna lista.
     const nuevaCot = copiarSoloPermitidos(cotEntrante, COTIZACION_OPERATIONAL_FIELDS, copiarSoloPermitidos(cotOriginal, COTIZACION_OPERATIONAL_FIELDS));
-    // Financieros de nivel cotización: siempre del original, nunca aceptados del empleado.
-    COTIZACION_CAMPOS_FINANCIEROS.forEach(campo => { nuevaCot[campo] = cotOriginal[campo]; });
+    // Estratégicos de nivel cotización: siempre del original, nunca aceptados del empleado.
+    COTIZACION_CAMPOS_ESTRATEGICOS.forEach(campo => { nuevaCot[campo] = cotOriginal[campo]; });
 
     const idsPartidasEntrantes = new Set((cotEntrante.partidas || []).map(p => p.id));
     const partidasPreservadas = (cotOriginal.partidas || []).filter(p => !idsPartidasEntrantes.has(p.id));
     const partidasNuevas = (cotEntrante.partidas || []).map(pEmpleado =>
-      construirPartidaOperativa(pEmpleado, (cotOriginal.partidas || []).find(p => p.id === pEmpleado.id))
+      construirPartidaOperativa(pEmpleado, (cotOriginal.partidas || []).find(p => p.id === pEmpleado.id), user)
     );
     nuevaCot.partidas = [...partidasPreservadas, ...partidasNuevas];
 
     const idsEquipoEntrantes = new Set((cotEntrante.equipo || []).map(e => e.id));
     const equipoPreservado = (cotOriginal.equipo || []).filter(e => !idsEquipoEntrantes.has(e.id));
     const equipoNuevo = (cotEntrante.equipo || []).map(eEmpleado =>
-      construirEquipoOperativo(eEmpleado, (cotOriginal.equipo || []).find(e => e.id === eEmpleado.id))
+      construirEquipoOperativo(eEmpleado, (cotOriginal.equipo || []).find(e => e.id === eEmpleado.id), user)
     );
     nuevaCot.equipo = [...equipoPreservado, ...equipoNuevo];
 

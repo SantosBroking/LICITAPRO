@@ -22,18 +22,25 @@
 
 import { h, useState } from '../lib/core.js';
 import { Metric, StorageImg, NumInput } from '../ui/primitives.js';
+import { CATALOG_PRODUCTS } from '../lib/catalog.js';
+import { TODAY } from '../lib/utils.js';
 
 const SUBTABS = ['resumen', 'partidas', 'equipo'];
 const SUBTAB_LABELS = { resumen: 'Resumen', partidas: 'Partidas', equipo: 'Equipo' };
 
-// Partida nueva — SOLO campos operativos, ninguno reservado (comparar con
-// el equivalente en Cotizacion.js, que sí incluye datos internos).
-const makePartidaOperativa = (id) => ({ id, activo:false, tipo:'', marca:'', modelo:'', ano:new Date().getFullYear(), version:'', color:'', cantidad:0, vehiculoId:null, foto:'' });
+// Partida nueva — Fase 2F1A: se agrega costoMSMS/precioLista (costo de
+// origen/proveedor, ahora visible/editable para empleado operativo) y
+// precioPropuesto (precio de venta PROPUESTO/borrador, nuevo campo, nunca
+// alimenta calc.js ni el cálculo oficial de utilidad/margen -- ver
+// PARTIDA_CAMPOS_ESTRATEGICOS en data_sanitize.js, que sigue admin-only).
+const makePartidaOperativa = (id) => ({ id, activo:false, tipo:'', marca:'', modelo:'', ano:new Date().getFullYear(), version:'', color:'', cantidad:0, vehiculoId:null, foto:'', costoMSMS:0, precioLista:0, precioPropuesto:0 });
 
 export default function CotizacionOperativa({ project, onUpdate, activeTab, setActiveTab }) {
   const [_localTab, _setLocalTab] = useState(activeTab || 'resumen');
   const tab = activeTab || _localTab;
   const setTab = (t) => { _setLocalTab(t); if (setActiveTab) setActiveTab(t); };
+  const [showCat, setShowCat] = useState(false);
+  const [catSel, setCatSel] = useState(null);
 
   const cot = project.cotizacion || {};
   const partidas = cot.partidas || [];
@@ -44,6 +51,39 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
   const updCot = (newCot) => { onUpdate({ ...project, cotizacion: newCot }); };
 
   const updPartida = (id, k, v) => updCot({ ...cot, partidas: partidas.map(p => p.id===id ? {...p,[k]:v} : p) });
+
+  // Fase 2F1A: catálogo de EQUIPO disponible para agregar -- mismo criterio
+  // de construcción que Cotizacion.js (base + personalizados del config,
+  // sin ocultos, sin vehículos), solo lectura, no se modifica el catálogo
+  // desde aquí (crear/editar productos sigue siendo exclusivo de Catalog.js,
+  // admin-only, sin cambios).
+  const hiddenProds = window._lpConfig?.hiddenProducts || [];
+  const customProds = (window._lpConfig?.customProducts || []).filter(x => !x.esVehiculo);
+  const overridesEquipo = {};
+  customProds.forEach(p => { if (CATALOG_PRODUCTS.find(x=>x.id===p.id)) overridesEquipo[p.id]=p; });
+  const catalogEquipoDisponible = [
+    ...CATALOG_PRODUCTS.filter(p=>!hiddenProds.includes(p.id)).map(p=>overridesEquipo[p.id]||p),
+    ...customProds.filter(p=>!CATALOG_PRODUCTS.find(x=>x.id===p.id)),
+  ];
+  const catsEquipo = [...new Set(catalogEquipoDisponible.map(p=>p.cat))];
+  const catSelActual = catSel || catsEquipo[0] || null;
+
+  // Proveedor no se persiste en el equipo de la cotización (mismo shape que
+  // Cotizacion.js/admin) -- se busca en vivo contra el catálogo por
+  // productoId, solo para mostrarlo aquí. No cambia el shape guardado.
+  const provDeProducto = (productoId) => catalogEquipoDisponible.find(p=>p.id===productoId)?.prov || '—';
+
+  const addEquipoDesdeCatalogo = (prod) => {
+    if (equipo.some(e=>e.productoId===prod.id)) return;
+    updCot({ ...cot, equipo:[...equipo, {
+      id:'EQ'+Date.now(), productoId:prod.id, nombre:prod.nom, cat:prod.cat,
+      marca:'', modelo:'', unidad:'pz', usar:true, vis:prod.vis,
+      costoConIVA:prod.price||0, llevaIVA:prod.cat!=='08 Mano de obra',
+      cnts:new Array(partidas.length).fill(0), est:'Estimado', fechaCosto:TODAY(), notas:'',
+      precioPropuesto:0,
+    }] });
+  };
+  const removeEquipoDesdeCatalogo = (eid) => updCot({ ...cot, equipo: equipo.filter(e=>e.id!==eid) });
 
   // Agregar SÍ es seguro (confirmado en Fase 2A2: una partida nueva se
   // guarda sin ningún dato reservado, nunca inventado). Quitar NO se
@@ -146,30 +186,62 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
             h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Color'), h('input', { value:p.color||'', onChange:e=>updPartida(p.id,'color',e.target.value), style:{ fontSize:12 }, placeholder:'Ej: Blanco' })),
             h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Cantidad'), h(NumInput, { value:p.cantidad, onChange:v=>updPartida(p.id,'cantidad',v), style:{ fontSize:13, padding:'6px 8px', fontWeight:500 } })),
           ),
+          // Fase 2F1A: costo de origen/proveedor y precio de venta propuesto
+          // -- visibles/editables para empleado operativo. Nunca se muestra
+          // ni se calcula margen/utilidad aquí.
+          h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))', gap:8, marginTop:4, paddingTop:10, borderTop:'.5px dashed var(--b3)' } },
+            h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Costo de origen (proveedor)'), h(NumInput, { value:p.costoMSMS||0, onChange:v=>updPartida(p.id,'costoMSMS',v), style:{ fontSize:12 } })),
+            h('div', null, h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, 'Precio de lista (catálogo)'), h(NumInput, { value:p.precioLista||0, onChange:v=>updPartida(p.id,'precioLista',v), style:{ fontSize:12 } })),
+            h('div', null, h('div', { style:{ fontSize:10, color:'var(--blue)', marginBottom:2, fontWeight:600 } }, 'Precio de venta propuesto'), h(NumInput, { value:p.precioPropuesto||0, onChange:v=>updPartida(p.id,'precioPropuesto',v), style:{ fontSize:12, fontWeight:500 } })),
+          ),
         ),
       )),
     ),
 
-    // ══ Equipo operativo — edición de existentes. Agregar equipo nuevo
-    // desde catálogo queda pendiente para un commit posterior: requiere
-    // replicar con cuidado el selector de catálogo dentro de este flujo
-    // (distinto del selector general de Catalog.js ya corregido en el
-    // Commit 1) para confirmar que tampoco expone datos reservados ahí. No se
-    // implementa a medias. ══
+    // ══ Equipo operativo — Fase 2F1A: ya permite agregar equipo nuevo
+    // desde catálogo (antes solo se podían editar existentes). Muestra
+    // proveedor (búsqueda en vivo contra el catálogo, no se persiste en el
+    // equipo) y costo proveedor (costoConIVA, ya persistido) — nunca
+    // margen/utilidad, que siguen sin existir en este componente. ══
     tab==='equipo' && h('div', null,
+      h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 } },
+        h('div', { style:{ fontSize:12, color:'var(--t2)' } }, 'Equipo capturado en esta cotización'),
+        h('button', { onClick:()=>setShowCat(!showCat), style:{ fontSize:12, color:'var(--blue)', border:'.5px solid var(--blue)44', padding:'5px 12px', borderRadius:'var(--r)', background:'transparent', cursor:'pointer' } }, showCat?'Ocultar catálogo':'+ Agregar equipo del catálogo'),
+      ),
+      showCat && h('div', { className:'card', style:{ marginBottom:12 } },
+        h('div', { style:{ fontSize:13, fontWeight:500, marginBottom:8 } }, 'Catálogo — clic en + para agregar'),
+        h('div', { style:{ display:'flex', gap:5, flexWrap:'wrap', marginBottom:8 } },
+          catsEquipo.map(c=>h('button',{key:c,style:{fontSize:11,padding:'4px 10px',background:catSelActual===c?'var(--t1)':'transparent',color:catSelActual===c?'var(--bg1)':'var(--t2)',border:'.5px solid var(--b2)',borderRadius:'var(--r)',cursor:'pointer'},onClick:()=>setCatSel(c)},c)),
+        ),
+        h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))', gap:6 } },
+          catalogEquipoDisponible.filter(p=>p.cat===catSelActual).map(prod=>{
+            const ya = equipo.some(e=>e.productoId===prod.id);
+            return h('div', { key:prod.id, style:{ padding:'7px 10px', background:ya?'#E1F5EE':'var(--bg2)', borderRadius:'var(--r)', border:'.5px solid var(--b3)', display:'flex', justifyContent:'space-between', alignItems:'center', gap:6 } },
+              h('div', { style:{ minWidth:0 } },
+                h('div', { style:{ fontSize:12, fontWeight:ya?500:400, color:ya?'#085041':'var(--t1)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, prod.nom),
+                h('div', { style:{ fontSize:10, color:'var(--t2)' } }, (prod.prov||'—'), prod.price ? ' · $'+Number(prod.price).toLocaleString('es-MX') : ''),
+              ),
+              h('button', { onClick:()=>ya?removeEquipoDesdeCatalogo(equipo.find(e=>e.productoId===prod.id)?.id):addEquipoDesdeCatalogo(prod), style:{ fontSize:12, padding:'3px 8px', flexShrink:0, color:ya?'#085041':'var(--t1)', fontWeight:ya?500:400, border:'none', background:'transparent', cursor:'pointer' } }, ya?'✓':'+'),
+            );
+          }),
+        ),
+      ),
       equipo.length===0 && h('div', { className:'empty' }, h('p', null, 'Sin equipo capturado todavía.')),
       equipo.length > 0 && h('div', { style:{ overflowX:'auto' } },
         h('table', { style:{ width:'100%', borderCollapse:'collapse', fontSize:12 } },
           h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b3)' } },
-            ['Nombre','Marca/Modelo/Unidad','Usar','Notas'].map(hd=>h('td',{key:hd,style:{padding:'6px 4px',color:'var(--t2)',fontSize:11}},hd))
+            ['Nombre','Proveedor','Marca/Modelo/Unidad','Costo proveedor','Precio propuesto','Usar','Notas'].map(hd=>h('td',{key:hd,style:{padding:'6px 4px',color:'var(--t2)',fontSize:11}},hd))
           )),
           h('tbody', null, equipo.map(e => h('tr', { key:e.id, style:{ borderBottom:'.5px solid var(--b3)' } },
             h('td', { style:{ padding:'6px 4px', fontWeight:500 } }, e.nombre),
+            h('td', { style:{ padding:'6px 4px', fontSize:11, color:'var(--t2)' } }, provDeProducto(e.productoId)),
             h('td', { style:{ padding:'6px 4px' } },
               h('input', { value:e.marca||'', onChange:ev=>updEquipo(e.id,'marca',ev.target.value), placeholder:'Marca', style:{ fontSize:10, padding:'2px 5px', width:70, border:'1px solid var(--b2)', borderRadius:5, marginRight:4 } }),
               h('input', { value:e.modelo||'', onChange:ev=>updEquipo(e.id,'modelo',ev.target.value), placeholder:'Modelo', style:{ fontSize:10, padding:'2px 5px', width:70, border:'1px solid var(--b2)', borderRadius:5, marginRight:4 } }),
               h('input', { value:e.unidad||'pz', onChange:ev=>updEquipo(e.id,'unidad',ev.target.value), placeholder:'Unidad', style:{ fontSize:10, padding:'2px 5px', width:40, border:'1px solid var(--b2)', borderRadius:5 } }),
             ),
+            h('td', { style:{ padding:'6px 4px' } }, h(NumInput, { value:e.costoConIVA||0, onChange:v=>updEquipo(e.id,'costoConIVA',v), style:{ width:80, fontSize:11, padding:'3px 5px' } })),
+            h('td', { style:{ padding:'6px 4px' } }, h(NumInput, { value:e.precioPropuesto||0, onChange:v=>updEquipo(e.id,'precioPropuesto',v), style:{ width:80, fontSize:11, padding:'3px 5px', fontWeight:500 } })),
             h('td', { style:{ padding:'6px 4px', textAlign:'center' } }, h('input', { type:'checkbox', checked:e.usar, onChange:ev=>updEquipo(e.id,'usar',ev.target.checked), style:{ width:14, height:14, accentColor:'var(--blue)' } })),
             h('td', { style:{ padding:'6px 4px' } }, h('input', { value:e.notas||'', onChange:ev=>updEquipo(e.id,'notas',ev.target.value), placeholder:'Notas', style:{ fontSize:11, padding:'3px 6px', width:'100%' } })),
           ))),

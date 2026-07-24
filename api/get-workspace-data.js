@@ -137,8 +137,11 @@ module.exports = async function handler(req, res) {
         // no solo aquí. removeSensitiveKeysDeep se mantiene como defensa de
         // SEGUNDA capa (para campos futuros que la sanitización explícita
         // no contemple todavía), no como el único lugar que lo resuelve.
-        projects: projects.map(p => removeSensitiveKeysDeep(sanitizeProjectForRole(p, appUser))),
-        vehicles: vehicles.map(v => removeSensitiveKeysDeep(sanitizeVehicleForRole(v, appUser))),
+        // Fase 2F1A: removeSensitiveKeysDeep ahora recibe appUser -- ya no
+        // borra por igual a cualquier no-admin; 'empleado' (operativo)
+        // conserva costo/factura/precio, solo pierde lo estratégico.
+        projects: projects.map(p => removeSensitiveKeysDeep(sanitizeProjectForRole(p, appUser), appUser)),
+        vehicles: vehicles.map(v => removeSensitiveKeysDeep(sanitizeVehicleForRole(v, appUser), appUser)),
         companies: sanitizeCompaniesForRole(companies, appUser),
         config: sanitizeConfigForRole(config, appUser),
         auditLog: [],

@@ -52,6 +52,24 @@ export function getPermissions(user) {
 
     editarVehiculosFinancieros: isAdmin,
     descargarFacturasVehiculo: isAdmin,  // alias de verFacturasVehiculo — no hay hoy una vía de descarga distinta de "ver" que amerite valor propio
+
+    // ── Fase 2F1A: Cotización operativa ampliada ──
+    // Redefinición de alcance: 'empleado' hoy es personal administrativo/
+    // operativo interno (no un vendedor externo) — SÍ debe ver y capturar
+    // costos de proveedor/origen (costoMSMS, precioLista, costoConIVA de
+    // equipo) y un precio de venta PROPUESTO/borrador (no el oficial). Sigue
+    // sin ver utilidad/margen/montoGanar/retornos/fianzas/flujo/corrida
+    // financiera -- esos permisos (verMargenUtilidad, verRetornosEstrategicos,
+    // verCorridaFinanciera, verUnitarioFinanciero, arriba) NO cambian.
+    // `verCostosInternos` tampoco cambia de significado (sigue == isAdmin,
+    // lo usan Catalog.js/Firmas.js/Projects.js para fines distintos a este) --
+    // estos son permisos NUEVOS y adicionales, no un reemplazo.
+    verCostosProveedor: !!role,
+    editarCostosProveedor: !!role,
+    verPreciosVentaPropuestos: !!role,
+    editarPreciosVentaPropuestos: !!role,
+    verUtilidadMargen: isAdmin,
+    verFlujoFinanciero: isAdmin,
   };
 }
 
