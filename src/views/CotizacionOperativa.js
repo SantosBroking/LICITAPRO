@@ -21,14 +21,14 @@
 // alguna vez cambiara ese contrato.
 
 import { h, useState } from '../lib/core.js';
-import { Metric, StorageImg, NumInput } from '../ui/primitives.js';
+import { StorageImg, NumInput } from '../ui/primitives.js';
 import { CATALOG_PRODUCTS } from '../lib/catalog.js';
 import { TODAY } from '../lib/utils.js';
 
-// Microfix (limpieza UI): 'resumen' ya no es una sub-pestaña -- se volvió
-// una franja informativa siempre visible arriba de Partidas/Equipo (evita
-// el "Resumen" duplicado con el tab principal del proyecto, que ya existe
-// como PROJ_TABS en Projects.js).
+// Microfix (limpieza UI): 'resumen' ya no es una sub-pestaña ni una franja
+// informativa aparte -- se eliminó por completo (repetía el encabezado del
+// proyecto ya visible arriba, en Projects.js). Cotización Operativa muestra
+// solo tabs → Partidas/Equipo → contenido, sin resumen propio.
 const SUBTABS = ['partidas', 'equipo'];
 const SUBTAB_LABELS = { partidas: 'Partidas', equipo: 'Equipo' };
 
@@ -125,20 +125,26 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
     cnts[pi] = Number(v)||0;
     return { ...e, cnts };
   })});
+  // "Todas" — aplica ese equipo a TODAS las partidas existentes: cantidad
+  // mínima 1 donde esté en 0/vacío, sin bajar ninguna que ya tuviera más de
+  // 1. Solo toca `cnts` -- nunca costoConIVA/precioPropuesto/proveedor ni
+  // ningún otro campo del equipo. El índice usa el mismo criterio de
+  // numeración (P-número - 1) que ya usa updCnts/la tabla de abajo, para
+  // que quede alineado con TODAS las partidas (activas o no), no solo las
+  // filtradas visualmente.
+  const aplicarEquipoATodasLasPartidas = (eid) => updCot({ ...cot, equipo: equipo.map(e => {
+    if (e.id!==eid) return e;
+    const cnts = [...(e.cnts||new Array(partidas.length).fill(0))];
+    partidas.forEach(p => {
+      const pi = parseInt((p.id||'').replace('P',''), 10) - 1;
+      if (isNaN(pi) || pi < 0) return;
+      const actual = cnts[pi] || 0;
+      cnts[pi] = actual > 1 ? actual : 1;
+    });
+    return { ...e, cnts };
+  })});
 
   return h('div', null,
-    // ══ Franja informativa de contexto — SIEMPRE visible arriba de
-    // Partidas/Equipo, no es una sub-pestaña (microfix de limpieza UI). ══
-    h('div', { className:'card', style:{ marginBottom:16, display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))', gap:10, padding:'12px 14px' } },
-      h(Metric, { label:'Proyecto', value:project.name || '—' }),
-      h(Metric, { label:'Cliente / Dependencia', value:project.dependencia || '—' }),
-      h(Metric, { label:'Estatus', value:project.status || '—' }),
-      h(Metric, { label:'Responsable', value:project.responsable || '—' }),
-      h(Metric, { label:'Monto estimado', value: project.montoEstimado ? ('$'+Number(project.montoEstimado).toLocaleString('es-MX')) : '—' }),
-      h(Metric, { label:'Folio de cotización', value: cot.folio || '—' }),
-      h(Metric, { label:'Fecha de cotización', value: cot.fechaCotizacion || '—' }),
-    ),
-
     h('div', { style:{ display:'flex', gap:0, marginBottom:20, borderBottom:'1px solid var(--b1)', overflowX:'auto' } },
       SUBTABS.map(t => h('button', { key:t, className:'tab'+(tab===t?' active':''), onClick:()=>setTab(t), style:{ flexShrink:0, whiteSpace:'nowrap' } }, SUBTAB_LABELS[t]))
     ),
@@ -256,10 +262,15 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
           h('table', { style:{ width:'100%', borderCollapse:'collapse', fontSize:11 } },
             h('thead', null, h('tr', null,
               h('td', { style:{ padding:'4px' } }, 'Equipo'),
+              h('td', { style:{ padding:'4px' } }, ''),
               partidas.filter(p=>p.activo).map(p=>h('td',{key:p.id,style:{padding:'4px',textAlign:'center'}},p.id)),
             )),
             h('tbody', null, equipo.map(e => h('tr', { key:e.id },
               h('td', { style:{ padding:'4px' } }, e.nombre),
+              h('td', { style:{ padding:'4px' } },
+                h('button', { onClick:()=>aplicarEquipoATodasLasPartidas(e.id), title:'Poner cantidad 1 en todas las partidas que estén en 0, sin bajar las que ya tengan más',
+                  style:{ fontSize:10, padding:'3px 8px', border:'.5px solid var(--blue)', color:'var(--blue)', background:'transparent', borderRadius:'var(--r)', cursor:'pointer', whiteSpace:'nowrap' } }, 'Todas'),
+              ),
               partidas.filter(p=>p.activo).map(p => {
                 const pi = parseInt((p.id||'').replace('P',''))-1;
                 return h('td', { key:p.id, style:{ padding:'4px', textAlign:'center' } },
