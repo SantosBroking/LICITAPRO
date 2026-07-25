@@ -208,15 +208,20 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
       )),
     ),
 
-    // ══ Equipo operativo — Fase 2F1A: ya permite agregar equipo nuevo
-    // desde catálogo (antes solo se podían editar existentes). Muestra
-    // proveedor (búsqueda en vivo contra el catálogo, no se persiste en el
-    // equipo) y costo proveedor (costoConIVA, ya persistido) — nunca
-    // margen/utilidad, que siguen sin existir en este componente. ══
+    // ══ Equipo operativo — Fase 2F1A + microfix de layout: misma
+    // estructura visual que Cotizacion.js/admin (tabla única: Usar | Todas |
+    // Producto | Costo | Precio | cantidades por partida | IVA | Estatus |
+    // quitar), con el mismo criterio de columnas seguras que ya definió
+    // data_sanitize.js (EQUIPO_CAMPOS_COSTO_PROVEEDOR: costoConIVA/llevaIVA/
+    // est/fechaCosto -- todos ya visibles/editables para operativo desde
+    // Fase 2F1A). Deliberadamente SIN replicar: el panel "Cotización de
+    // solo equipamiento" (soloEquipo/modoEquipo/margenEquipo/montoGanar) ni
+    // la columna "Margen %" (margenPropio) -- son 100% estratégicos, admin-only,
+    // nunca deben aparecer aquí. ══
     tab==='equipo' && h('div', null,
       h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 } },
-        h('div', { style:{ fontSize:12, color:'var(--t2)' } }, 'Equipo capturado en esta cotización'),
-        h('button', { onClick:()=>setShowCat(!showCat), style:{ fontSize:12, color:'var(--blue)', border:'.5px solid var(--blue)44', padding:'5px 12px', borderRadius:'var(--r)', background:'transparent', cursor:'pointer' } }, showCat?'Ocultar catálogo':'+ Agregar equipo del catálogo'),
+        h('div', { style:{ fontSize:12, color:'var(--t2)' } }, 'Cantidades = por unidad del vehículo'),
+        h('button', { onClick:()=>setShowCat(!showCat), style:{ fontSize:12, color:'var(--blue)', border:'.5px solid var(--blue)44', padding:'5px 12px', borderRadius:'var(--r)', background:'transparent', cursor:'pointer' } }, showCat?'Ocultar catálogo':'+ Del catálogo'),
       ),
       showCat && h('div', { className:'card', style:{ marginBottom:12 } },
         h('div', { style:{ fontSize:13, fontWeight:500, marginBottom:8 } }, 'Catálogo — clic en + para agregar'),
@@ -236,51 +241,55 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
           }),
         ),
       ),
-      equipo.length===0 && h('div', { className:'empty' }, h('p', null, 'Sin equipo capturado todavía.')),
-      equipo.length > 0 && h('div', { style:{ overflowX:'auto' } },
-        h('table', { style:{ width:'100%', borderCollapse:'collapse', fontSize:12 } },
+      equipo.length===0 && h('div', { className:'card', style:{ textAlign:'center', padding:'30px', color:'var(--t2)', fontSize:13 } }, 'Sin equipo. Abre el catálogo arriba.'),
+      equipo.length > 0 && h('div', { className:'card' }, h('div', { className:'tbl-scroll' },
+        h('table', { style:{ fontSize:12, minWidth:700 } },
           h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b3)' } },
-            ['Nombre','Proveedor','Marca/Modelo/Unidad','Costo proveedor','Precio propuesto','Usar'].map(hd=>h('td',{key:hd,style:{padding:'6px 4px',color:'var(--t2)',fontSize:11}},hd))
+            h('td', { style:{ padding:'6px 4px', color:'var(--t2)', fontSize:10, width:30 } }, 'Usar'),
+            h('td', { style:{ padding:'6px 4px', color:'var(--t2)', fontSize:10, width:60 } }, 'Todas'),
+            h('td', { style:{ padding:'6px 8px', color:'var(--t2)', fontSize:10 } }, 'Producto'),
+            h('td', { style:{ padding:'6px 4px', color:'var(--t2)', fontSize:10, width:95 } }, 'Costo proveedor'),
+            h('td', { style:{ padding:'6px 4px', color:'var(--blue)', fontSize:10, width:95 } }, 'Precio propuesto'),
+            ...partidas.filter(p=>p.activo).map(p=>h('td',{key:p.id,style:{padding:'6px 4px',color:'var(--blue)',fontSize:10,width:52,textAlign:'center'}},p.id,h('br'),h('span',{style:{fontSize:9,color:'var(--t3)'}},p.cantidad,' uds'))),
+            h('td', { style:{ padding:'6px 4px', color:'var(--t2)', fontSize:10, width:38, textAlign:'center' } }, 'IVA'),
+            h('td', { style:{ padding:'6px 4px', color:'var(--t2)', fontSize:10, width:115 } }, 'Estatus'),
+            h('td', { style:{ padding:'6px 4px', width:24 } }),
           )),
-          h('tbody', null, equipo.map(e => h('tr', { key:e.id, style:{ borderBottom:'.5px solid var(--b3)' } },
-            h('td', { style:{ padding:'6px 4px', fontWeight:500 } }, e.nombre),
-            h('td', { style:{ padding:'6px 4px', fontSize:11, color:'var(--t2)' } }, provDeProducto(e.productoId)),
-            h('td', { style:{ padding:'6px 4px' } },
-              h('input', { value:e.marca||'', onChange:ev=>updEquipo(e.id,'marca',ev.target.value), placeholder:'Marca', style:{ fontSize:10, padding:'2px 5px', width:70, border:'1px solid var(--b2)', borderRadius:5, marginRight:4 } }),
-              h('input', { value:e.modelo||'', onChange:ev=>updEquipo(e.id,'modelo',ev.target.value), placeholder:'Modelo', style:{ fontSize:10, padding:'2px 5px', width:70, border:'1px solid var(--b2)', borderRadius:5, marginRight:4 } }),
-              h('input', { value:e.unidad||'pz', onChange:ev=>updEquipo(e.id,'unidad',ev.target.value), placeholder:'Unidad', style:{ fontSize:10, padding:'2px 5px', width:40, border:'1px solid var(--b2)', borderRadius:5 } }),
-            ),
-            h('td', { style:{ padding:'6px 4px' } }, h(NumInput, { value:e.costoConIVA||0, onChange:v=>updEquipo(e.id,'costoConIVA',v), style:{ width:80, fontSize:11, padding:'3px 5px' } })),
-            h('td', { style:{ padding:'6px 4px' } }, h(NumInput, { value:e.precioPropuesto||0, onChange:v=>updEquipo(e.id,'precioPropuesto',v), style:{ width:80, fontSize:11, padding:'3px 5px', fontWeight:500 } })),
-            h('td', { style:{ padding:'6px 4px', textAlign:'center' } }, h('input', { type:'checkbox', checked:e.usar, onChange:ev=>updEquipo(e.id,'usar',ev.target.checked), style:{ width:14, height:14, accentColor:'var(--blue)' } })),
-          ))),
-        ),
-      ),
-      partidas.filter(p=>p.activo).length > 0 && equipo.length > 0 && h('div', { style:{ marginTop:16 } },
-        h('div', { style:{ fontSize:11, color:'var(--t2)', fontWeight:600, marginBottom:8 } }, 'Cantidad de cada equipo por partida'),
-        h('div', { style:{ overflowX:'auto' } },
-          h('table', { style:{ width:'100%', borderCollapse:'collapse', fontSize:11 } },
-            h('thead', null, h('tr', null,
-              h('td', { style:{ padding:'4px' } }, 'Equipo'),
-              h('td', { style:{ padding:'4px' } }, ''),
-              partidas.filter(p=>p.activo).map(p=>h('td',{key:p.id,style:{padding:'4px',textAlign:'center'}},p.id)),
-            )),
-            h('tbody', null, equipo.map(e => h('tr', { key:e.id },
-              h('td', { style:{ padding:'4px' } }, e.nombre),
-              h('td', { style:{ padding:'4px' } },
-                h('button', { onClick:()=>aplicarEquipoATodasLasPartidas(e.id), title:'Poner cantidad 1 en todas las partidas que estén en 0, sin bajar las que ya tengan más',
-                  style:{ fontSize:10, padding:'3px 8px', border:'.5px solid var(--blue)', color:'var(--blue)', background:'transparent', borderRadius:'var(--r)', cursor:'pointer', whiteSpace:'nowrap' } }, 'Todas'),
+          h('tbody', null, [...equipo].sort((a,b)=>(a.cat||'').localeCompare(b.cat||'','es',{numeric:true})).map(e => {
+            const estBg = e.est==='Confirmado'?'#E1F5EE':e.est==='Vencido'?'#FCEBEB':'#FAEEDA';
+            const estTx = e.est==='Confirmado'?'#085041':e.est==='Vencido'?'#791F1F':'#633806';
+            return h('tr', { key:e.id, style:{ borderBottom:'.5px solid var(--b3)', opacity:e.usar?1:.45 } },
+              h('td', { style:{ padding:'6px 4px', textAlign:'center' } },
+                h('input', { type:'checkbox', checked:e.usar, onChange:ev=>updEquipo(e.id,'usar',ev.target.checked), style:{ width:14, height:14, accentColor:'var(--blue)' } }),
               ),
-              partidas.filter(p=>p.activo).map(p => {
-                const pi = parseInt((p.id||'').replace('P',''))-1;
-                return h('td', { key:p.id, style:{ padding:'4px', textAlign:'center' } },
-                  h(NumInput, { value:(e.cnts&&e.cnts[pi])||0, onChange:v=>updCnts(e.id,pi,v), style:{ width:46, fontSize:11, padding:'3px 4px', textAlign:'center' } }),
-                );
-              }),
-            ))),
-          ),
+              h('td', { style:{ padding:'4px 4px', textAlign:'center' } },
+                h('button', { onClick:()=>aplicarEquipoATodasLasPartidas(e.id), title:'Poner cantidad 1 en todas las partidas que estén en 0, sin bajar las que ya tengan más',
+                  style:{ fontSize:10, padding:'2px 7px', borderRadius:6, border:'1px solid var(--blue-border)', color:'var(--blue)', background:'transparent', cursor:'pointer', whiteSpace:'nowrap' } }, '✓ Todas'),
+              ),
+              h('td', { style:{ padding:'6px 8px' } },
+                h('div', { style:{ fontWeight:e.usar?500:400 } }, e.nombre),
+                h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:2 } }, e.cat),
+                h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:4 } }, 'Proveedor: ', provDeProducto(e.productoId)),
+                h('div', { style:{ display:'flex', gap:4, flexWrap:'wrap' } },
+                  h('input', { value:e.marca||'', onChange:ev=>updEquipo(e.id,'marca',ev.target.value), placeholder:'Marca', style:{ fontSize:10, padding:'2px 5px', width:80, border:'1px solid var(--b2)', borderRadius:5 } }),
+                  h('input', { value:e.modelo||'', onChange:ev=>updEquipo(e.id,'modelo',ev.target.value), placeholder:'Modelo', style:{ fontSize:10, padding:'2px 5px', width:90, border:'1px solid var(--b2)', borderRadius:5 } }),
+                  h('input', { value:e.unidad||'pz', onChange:ev=>updEquipo(e.id,'unidad',ev.target.value), placeholder:'Unidad', style:{ fontSize:10, padding:'2px 5px', width:44, border:'1px solid var(--b2)', borderRadius:5 } }),
+                ),
+              ),
+              h('td', { style:{ padding:'6px 4px' } }, h(NumInput, { value:e.costoConIVA||0, onChange:v=>updEquipo(e.id,'costoConIVA',v), style:{ width:90, fontSize:11, padding:'3px 5px' } })),
+              h('td', { style:{ padding:'6px 4px' } }, h(NumInput, { value:e.precioPropuesto||0, onChange:v=>updEquipo(e.id,'precioPropuesto',v), style:{ width:90, fontSize:11, padding:'3px 5px', fontWeight:500 } })),
+              ...partidas.filter(p=>p.activo).map(p => { const pi=parseInt((p.id||'').replace('P',''))-1; return h('td',{key:p.id,style:{padding:'6px 4px',textAlign:'center'}}, h(NumInput,{value:(e.cnts&&e.cnts[pi])||0,onChange:v=>updCnts(e.id,pi,v),style:{width:46,fontSize:11,padding:'3px 4px',textAlign:'center'}})); }),
+              h('td', { style:{ padding:'6px 4px', textAlign:'center' } }, h('input', { type:'checkbox', checked:e.llevaIVA, onChange:ev=>updEquipo(e.id,'llevaIVA',ev.target.checked), style:{ width:14, height:14 } })),
+              h('td', { style:{ padding:'6px 4px' } },
+                h('select', { value:e.est||'Estimado', onChange:ev=>updEquipo(e.id,'est',ev.target.value), style:{ fontSize:10, padding:'3px 5px', background:estBg, color:estTx, border:'none', borderRadius:8, cursor:'pointer', width:'100%' } },
+                  ['Confirmado','Estimado','Heredado','Pendiente MSM','Vencido'].map(o=>h('option',{key:o},o))
+                ),
+              ),
+              h('td', { style:{ padding:'6px 4px' } }, h('button', { onClick:()=>removeEquipoDesdeCatalogo(e.id), style:{ background:'transparent', border:'none', color:'var(--red)', cursor:'pointer', fontSize:14, padding:'2px 4px' } }, '×')),
+            );
+          })),
         ),
-      ),
+      )),
     ),
   );
 }
