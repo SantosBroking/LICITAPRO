@@ -210,14 +210,29 @@ export function sanitizeProjectsForRole(projects, user) {
   return (projects || []).map(p => sanitizeProjectForRole(p, user));
 }
 
-// Vehículo — shape real verificado en Vehicles.js (Fase 2A0).
-const VEHICLE_CAMPOS_FINANCIEROS = ['precioUnitario', 'precioTotal', 'iva', 'facturaAgencia', 'facturaIntermedia', 'facturaEquipo', 'facturaGobierno'];
+// Vehículo — shape real verificado en Vehicles.js (Fase 2A0). Fase 2F1B:
+// separado en dos categorías reales con evidencia de código, no supuesto.
+// Vehicles.js:190-199/207-220 confirma que precioUnitario/precioTotal/iva
+// se derivan DIRECTAMENTE del subtotal/iva/total de facturaAgencia (la
+// factura de COMPRA a la agencia) -- es decir, es el costo de origen que
+// paga MSMS, no un precio de venta al cliente final (eso se calcula aparte,
+// a nivel cotización, con campos que siguen 100% admin-only). facturaEquipo
+// es la factura de proveedores de equipamiento -- mismo tipo de dato
+// (costo de origen). Ambas se abren para 'empleado' (operativo) desde esta
+// fase, igual que ya se hizo con partida.costoMSMS en Fase 2F1A.
+const VEHICLE_CAMPOS_COSTO_PROVEEDOR = ['precioUnitario', 'precioTotal', 'iva', 'facturaAgencia', 'facturaEquipo'];
+// ESTRATEGICOS: facturaIntermedia (venta ENTRE empresas, ej. Broking a
+// SATHRI -- estructura interna) y facturaGobierno (factura de VENTA al
+// cliente final) -- siguen admin-only, sin cambio.
+const VEHICLE_CAMPOS_ESTRATEGICOS = ['facturaIntermedia', 'facturaGobierno'];
 
 export function sanitizeVehicleForRole(vehicle, user) {
-  if (getPermissions(user).verVehiculosFinancieros) return vehicle;
+  if (getPermissions(user).verVehiculosFinancieros) return vehicle; // admin: sin cambios, mismo objeto
   if (!vehicle) return vehicle;
+  const perms = getPermissions(user);
   const limpio = { ...vehicle };
-  VEHICLE_CAMPOS_FINANCIEROS.forEach(campo => { delete limpio[campo]; });
+  VEHICLE_CAMPOS_ESTRATEGICOS.forEach(campo => { delete limpio[campo]; });
+  if (!perms.verCostosProveedor) VEHICLE_CAMPOS_COSTO_PROVEEDOR.forEach(campo => { delete limpio[campo]; });
   return limpio;
 }
 
@@ -565,16 +580,28 @@ export function sanitizeProjectUpdateForRole(originalProject, incomingProject, u
 export function sanitizeVehicleUpdateForRole(originalVehicle, incomingVehicle, user) {
   if (getPermissions(user).verVehiculosFinancieros) return incomingVehicle; // admin: sin cambios
 
+  const perms = getPermissions(user);
+  const permitidos = [
+    ...VEHICLE_OPERATIONAL_UPDATE_FIELDS,
+    ...(perms.verCostosProveedor ? VEHICLE_CAMPOS_COSTO_PROVEEDOR : []),
+  ];
+
   if (!originalVehicle) {
     // Caso: vehículo NUEVO. Empleado sí puede crear vehículos hoy (el
-    // formulario no bloquea creación, solo Fase 2A0 ocultó sus campos
-    // financieros) — se crea con SOLO los campos operativos permitidos, los
-    // financieros quedan ausentes, nunca null inventado ni aceptados.
-    return copiarSoloPermitidos(incomingVehicle, VEHICLE_OPERATIONAL_UPDATE_FIELDS, { id: incomingVehicle.id });
+    // formulario no bloquea creación). Con verCostosProveedor (Fase 2F1B),
+    // también puede capturar costo de origen/facturaAgencia/facturaEquipo
+    // desde la creación -- los estratégicos (facturaIntermedia/
+    // facturaGobierno) quedan ausentes, nunca inventados ni aceptados.
+    return copiarSoloPermitidos(incomingVehicle, permitidos, { id: incomingVehicle.id });
   }
 
-  // Vehículo existente — SIEMPRE parte del original. Los financieros ya
-  // están en el original — nunca se tocan con lo que traiga incomingVehicle,
-  // sin importar qué intente mandar.
-  return copiarSoloPermitidos(incomingVehicle, VEHICLE_OPERATIONAL_UPDATE_FIELDS, { ...originalVehicle });
+  // Vehículo existente — SIEMPRE parte del original. Los estratégicos
+  // (facturaIntermedia/facturaGobierno) SIEMPRE vienen del original, nunca
+  // de incomingVehicle, sin importar el nivel de acceso del usuario.
+  const nuevo = copiarSoloPermitidos(incomingVehicle, permitidos, { ...originalVehicle });
+  VEHICLE_CAMPOS_ESTRATEGICOS.forEach(campo => { nuevo[campo] = originalVehicle[campo]; });
+  // Si no tiene verCostosProveedor (futuro rol sin costos), también se
+  // preservan del original en vez de perderse.
+  if (!perms.verCostosProveedor) VEHICLE_CAMPOS_COSTO_PROVEEDOR.forEach(campo => { nuevo[campo] = originalVehicle[campo]; });
+  return nuevo;
 }

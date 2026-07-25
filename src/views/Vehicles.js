@@ -127,19 +127,32 @@ export function VehiclesTab({ project, vehicles, onSave, onDelete, onNav, user, 
           h('div', { className:'tbl-scroll', style:{ overflowX:'auto', WebkitOverflowScrolling:'touch' } },
             h('table', { style:{ fontSize:13 } },
               h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b3)' } },
-                (getPermissions(user).verVehiculosFinancieros
+                // Fase 2F1B: PRECIO (costo de origen) ahora se muestra con
+                // verCostosProveedor (empleado operativo incluido), no con
+                // verVehiculosFinancieros (que sigue admin-only, gate real
+                // de facturaIntermedia/facturaGobierno más abajo).
+                (getPermissions(user).verCostosProveedor
                   ? ['VIN','MARCA/MODELO','AÑO','PRECIO','ENTREGA','FACTURAS','']
                   : ['VIN','MARCA/MODELO','AÑO','ENTREGA','']
                 ).map(hd => h('td', { key:hd, style:{ padding:'8px 6px', color:'var(--t2)', fontSize:11 } }, hd))
               )),
               h('tbody', null, vehicles.map(v => {
-                const fc = (v.facturaAgencia?.folio?1:0)+(v.facturaGobierno?.folio?1:0);
+                const puedeCostos = getPermissions(user).verCostosProveedor;
                 const puedeFinanciero = getPermissions(user).verVehiculosFinancieros;
+                // Fase 2F1B: el indicador de "facturas completas" ahora
+                // cuenta lo que cada rol puede ver -- admin sigue viendo
+                // Agencia+Gobierno (las 2 puntas del negocio, sin cambio);
+                // empleado ve Agencia+Equipo (las 2 facturas de origen/
+                // proveedor que sí puede tener), nunca se le insinúa la
+                // existencia de facturaGobierno con este contador.
+                const fc = puedeFinanciero
+                  ? (v.facturaAgencia?.folio?1:0)+(v.facturaGobierno?.folio?1:0)
+                  : (v.facturaAgencia?.folio?1:0)+(v.facturaEquipo?.folio?1:0);
                 return h('tr', { key:v.id, style:{ borderBottom:'.5px solid var(--b3)', cursor:'pointer' }, onClick:()=>onNav('vehicle_detail',v.id) },
                   h('td', { style:{ padding:'10px 6px', fontFamily:'monospace', fontSize:11 } }, v.vin||'—'),
                   h('td', { style:{ padding:'10px 6px', fontWeight:500 } }, v.marca,' ',v.modelo, v.version?' · '+v.version:''),
                   h('td', { style:{ padding:'10px 6px' } }, v.ano||'—'),
-                  puedeFinanciero && h('td', { style:{ padding:'10px 6px', fontWeight:500 } }, fmt(v.precioTotal)),
+                  puedeCostos && h('td', { style:{ padding:'10px 6px', fontWeight:500 } }, fmt(v.precioTotal)),
                   h('td', { style:{ padding:'10px 6px' }, onClick:e=>e.stopPropagation() },
                     (() => {
                       const st = v.statusEntrega || 'En agencia/planta';
@@ -153,7 +166,7 @@ export function VehiclesTab({ project, vehicles, onSave, onDelete, onNav, user, 
                       );
                     })()
                   ),
-                  puedeFinanciero && h('td', { style:{ padding:'10px 6px', fontSize:11, color:fc===2?'var(--green)':'var(--amber)' } }, fc+'/2'),
+                  puedeCostos && h('td', { style:{ padding:'10px 6px', fontSize:11, color:fc===2?'var(--green)':'var(--amber)' } }, fc+'/2'),
                   h('td', { style:{ padding:'10px 6px' } },
                     h('div', { style:{ display:'flex', gap:6 } },
                       h('button', { onClick:e=>{ e.stopPropagation(); setEditing(v); }, style:{ fontSize:11, padding:'3px 8px' } }, 'Editar'),
@@ -292,7 +305,9 @@ export function VehicleForm({ vehicle, projectId, onSave, onSaveMany, onCancel, 
         h(Inp, { label:'Ubicación', value:v.ubicacion, onChange:val=>set('ubicacion',val) }),
       ),
       h('div', null,
-        getPermissions(user).verVehiculosFinancieros && h('div', { className:'card', style:{ marginBottom:16 } },
+        // Fase 2F1B: costo de origen/proveedor -- ahora visible/editable
+        // para empleado operativo (verCostosProveedor), no solo admin.
+        getPermissions(user).verCostosProveedor && h('div', { className:'card', style:{ marginBottom:16 } },
           h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:14 } }, 'Datos económicos'),
           h(Inp, { label:'Precio unitario (sin IVA)', value:v.precioUnitario, onChange:val=>set('precioUnitario',val), type:'number', hint:'El IVA (16%) se calcula automáticamente' }),
           h(Inp, { label:'IVA', value:v.iva, onChange:val=>set('iva',val), type:'number' }),
@@ -388,9 +403,17 @@ export function FacturaCard({ title, subtitle, color, data, onSave }) {
 export function VehicleDetail({ vehicle, project, company, onNav, onUpdate, onDelete, user, logFn }) {
   const [tab, setTab] = useState('info');
   if (!vehicle) return h('div', { className:'empty' }, h('h3', null, 'Vehículo no encontrado'));
+  const puedeCostos = getPermissions(user).verCostosProveedor;
   const puedeFinanciero = getPermissions(user).verVehiculosFinancieros;
   const updFact = (key, fac) => { onUpdate({...vehicle,[key]:fac}); if(logFn)logFn(user,'actualizó factura '+key,'vehículo',vehicle.id,fac.folio||''); };
-  const tabs = [{id:'info',l:'Información'}, ...(puedeFinanciero?[{id:'facturas',l:'Facturación (2)'}]:[]), {id:'entrega',l:'Acta entrega'}];
+  // Fase 2F1B: la pestaña de Facturación ahora se muestra con
+  // verCostosProveedor (admin la sigue viendo por verVehiculosFinancieros,
+  // que ya implica costos). El número de tarjetas visibles se calcula
+  // dinámicamente en vez de un "(2)" fijo, porque ahora varía por rol:
+  // admin ve 4 (agencia/equipo/intermedia/gobierno), empleado ve 2
+  // (agencia/equipo).
+  const numFacturasVisibles = puedeFinanciero ? 4 : (puedeCostos ? 2 : 0);
+  const tabs = [{id:'info',l:'Información'}, ...(puedeCostos?[{id:'facturas',l:'Facturación ('+numFacturasVisibles+')'}]:[]), {id:'entrega',l:'Acta entrega'}];
   return h('div', null,
     h('div', { style:{ display:'flex', alignItems:'center', gap:8, marginBottom:6 } },
       h('span', { onClick:()=>onNav('projects'), style:{ fontSize:12, color:'var(--blue)', cursor:'pointer' } }, 'Proyectos'),
@@ -407,7 +430,7 @@ export function VehicleDetail({ vehicle, project, company, onNav, onUpdate, onDe
       h(ConfirmAction, { label:'Eliminar', dangerous:true, onConfirm:()=>{ onDelete(vehicle.id); if(logFn)logFn(user,'eliminó','vehículo',vehicle.id,vehicle.vin||''); onNav('project_detail',project.id); } }),
     ),
     h('div', { className:'grid-4', style:{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:20 } },
-      puedeFinanciero && h(Metric, { label:'Precio total', value:fmt(vehicle.precioTotal), sub:'Unit: '+fmt(vehicle.precioUnitario)+' + IVA '+fmt(vehicle.iva) }),
+      puedeCostos && h(Metric, { label:'Precio total', value:fmt(vehicle.precioTotal), sub:'Unit: '+fmt(vehicle.precioUnitario)+' + IVA '+fmt(vehicle.iva) }),
       h(Metric, { label:'Estatus docs', value:vehicle.statusDocs||'—' }),
       h(Metric, { label:'Estatus entrega', value:vehicle.statusEntrega||'—', sc:['Entregada','Cobrada'].includes(vehicle.statusEntrega)?'var(--green)':undefined }),
       h(Metric, { label:'Ubicación', value:vehicle.ubicacion||'—' }),
@@ -427,9 +450,14 @@ export function VehicleDetail({ vehicle, project, company, onNav, onUpdate, onDe
       ),
     ),
     tab==='facturas' && h('div', { style:{ display:'flex', flexDirection:'column', gap:16 } },
-      h(FacturaCard, { title:'Factura de la agencia (compra)', subtitle:'La agencia automotriz me factura este vehículo', color:'#5B8DEF', data:vehicle.facturaAgencia||{}, onSave:f=>updFact('facturaAgencia',f) }),
-      h(FacturaCard, { title:'Factura de reventa (intermedia)', subtitle:'Venta entre empresas (ej: Broking a SATHRI)', color:'#9B7EDE', data:vehicle.facturaIntermedia||{}, onSave:f=>updFact('facturaIntermedia',f) }),
-      h(FacturaCard, { title:'Factura al cliente final (gobierno)', subtitle:'Yo facturo el vehículo equipado al cliente', color:'#1D9E75', data:vehicle.facturaGobierno||{}, onSave:f=>updFact('facturaGobierno',f) }),
+      // Fase 2F1B: Agencia y Equipo son costo de origen/proveedor -- ahora
+      // visibles/editables para empleado operativo (verCostosProveedor).
+      puedeCostos && h(FacturaCard, { title:'Factura de la agencia (compra)', subtitle:'La agencia automotriz me factura este vehículo', color:'#5B8DEF', data:vehicle.facturaAgencia||{}, onSave:f=>updFact('facturaAgencia',f) }),
+      puedeCostos && h(FacturaCard, { title:'Factura de equipo', subtitle:'Proveedores de equipamiento (torretas, sirenas, etc.)', color:'#3F8F6B', data:vehicle.facturaEquipo||{}, onSave:f=>updFact('facturaEquipo',f) }),
+      // Intermedia y Gobierno son estratégicas (estructura entre empresas /
+      // venta al cliente final) -- siguen admin-only, sin cambio.
+      puedeFinanciero && h(FacturaCard, { title:'Factura de reventa (intermedia)', subtitle:'Venta entre empresas (ej: Broking a SATHRI)', color:'#9B7EDE', data:vehicle.facturaIntermedia||{}, onSave:f=>updFact('facturaIntermedia',f) }),
+      puedeFinanciero && h(FacturaCard, { title:'Factura al cliente final (gobierno)', subtitle:'Yo facturo el vehículo equipado al cliente', color:'#1D9E75', data:vehicle.facturaGobierno||{}, onSave:f=>updFact('facturaGobierno',f) }),
     ),
     tab==='entrega' && h(ActaEntrega, { vehicle, project, company, onUpdate }),
   );
