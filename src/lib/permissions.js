@@ -168,8 +168,12 @@ const SUBTABS_POR_SCOPE_ADMIN = {
   docs: ['documentos', 'bases', 'preguntas'],
 };
 // Sub-pestañas de CotizacionOperativa.js (Fase 2A4) — ninguna financiera.
+// Microfix (limpieza UI): 'resumen' se quitó como sub-pestaña -- pasó a ser
+// una franja informativa siempre visible dentro de CotizacionOperativa.js,
+// no una pestaña propia (evita el "Resumen" duplicado con el tab principal
+// del proyecto).
 const SUBTABS_POR_SCOPE_EMPLEADO = {
-  cotizacion: ['resumen', 'partidas', 'equipo'],
+  cotizacion: ['partidas', 'equipo'],
   operacion: ['vehiculos'],
   docs: ['documentos', 'bases', 'preguntas'],
 };
@@ -186,7 +190,11 @@ export function canSubTab(scope, tab, user) {
 // para quien tuviera ese valor guardado -- no en la primera sub-pestaña
 // genérica de la lista.
 const LEGACY_SUBTAB_MAP = {
-  cotizacion: { corrida: 'finanzas', unitario: 'finanzas' },
+  // Microfix (limpieza UI): 'resumen' ya no es una sub-pestaña válida de
+  // Cotización (se volvió franja informativa siempre visible) -- cualquier
+  // navegación vieja guardada con ese valor cae en 'partidas', no en la
+  // primera sub-pestaña genérica de la lista (aunque hoy coincida).
+  cotizacion: { corrida: 'finanzas', unitario: 'finanzas', resumen: 'partidas' },
   // Fase 2A6 (cierre): si algo quedó guardado como sub-pestaña 'docs'
   // (id viejo del tab principal), debe caer en 'documentos', no en la
   // primera sub-pestaña genérica de la lista.

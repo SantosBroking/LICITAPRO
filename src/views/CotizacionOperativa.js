@@ -25,8 +25,12 @@ import { Metric, StorageImg, NumInput } from '../ui/primitives.js';
 import { CATALOG_PRODUCTS } from '../lib/catalog.js';
 import { TODAY } from '../lib/utils.js';
 
-const SUBTABS = ['resumen', 'partidas', 'equipo'];
-const SUBTAB_LABELS = { resumen: 'Resumen', partidas: 'Partidas', equipo: 'Equipo' };
+// Microfix (limpieza UI): 'resumen' ya no es una sub-pestaña -- se volvió
+// una franja informativa siempre visible arriba de Partidas/Equipo (evita
+// el "Resumen" duplicado con el tab principal del proyecto, que ya existe
+// como PROJ_TABS en Projects.js).
+const SUBTABS = ['partidas', 'equipo'];
+const SUBTAB_LABELS = { partidas: 'Partidas', equipo: 'Equipo' };
 
 // Partida nueva — Fase 2F1A: se agrega costoMSMS/precioLista (costo de
 // origen/proveedor, ahora visible/editable para empleado operativo) y
@@ -36,7 +40,7 @@ const SUBTAB_LABELS = { resumen: 'Resumen', partidas: 'Partidas', equipo: 'Equip
 const makePartidaOperativa = (id) => ({ id, activo:false, tipo:'', marca:'', modelo:'', ano:new Date().getFullYear(), version:'', color:'', cantidad:0, vehiculoId:null, foto:'', costoMSMS:0, precioLista:0, precioPropuesto:0 });
 
 export default function CotizacionOperativa({ project, onUpdate, activeTab, setActiveTab }) {
-  const [_localTab, _setLocalTab] = useState(activeTab || 'resumen');
+  const [_localTab, _setLocalTab] = useState(activeTab || 'partidas');
   const tab = activeTab || _localTab;
   const setTab = (t) => { _setLocalTab(t); if (setActiveTab) setActiveTab(t); };
   const [showCat, setShowCat] = useState(false);
@@ -123,20 +127,20 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
   })});
 
   return h('div', null,
-    h('div', { style:{ display:'flex', gap:0, marginBottom:20, borderBottom:'1px solid var(--b1)', overflowX:'auto' } },
-      SUBTABS.map(t => h('button', { key:t, className:'tab'+(tab===t?' active':''), onClick:()=>setTab(t), style:{ flexShrink:0, whiteSpace:'nowrap' } }, SUBTAB_LABELS[t]))
-    ),
-
-    // ══ Resumen operativo ══
-    tab==='resumen' && h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(160px, 1fr))', gap:12 } },
+    // ══ Franja informativa de contexto — SIEMPRE visible arriba de
+    // Partidas/Equipo, no es una sub-pestaña (microfix de limpieza UI). ══
+    h('div', { className:'card', style:{ marginBottom:16, display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))', gap:10, padding:'12px 14px' } },
       h(Metric, { label:'Proyecto', value:project.name || '—' }),
       h(Metric, { label:'Cliente / Dependencia', value:project.dependencia || '—' }),
-      h(Metric, { label:'Tipo de procedimiento', value:project.tipoProcedimiento || '—' }),
       h(Metric, { label:'Estatus', value:project.status || '—' }),
       h(Metric, { label:'Responsable', value:project.responsable || '—' }),
       h(Metric, { label:'Monto estimado', value: project.montoEstimado ? ('$'+Number(project.montoEstimado).toLocaleString('es-MX')) : '—' }),
       h(Metric, { label:'Folio de cotización', value: cot.folio || '—' }),
       h(Metric, { label:'Fecha de cotización', value: cot.fechaCotizacion || '—' }),
+    ),
+
+    h('div', { style:{ display:'flex', gap:0, marginBottom:20, borderBottom:'1px solid var(--b1)', overflowX:'auto' } },
+      SUBTABS.map(t => h('button', { key:t, className:'tab'+(tab===t?' active':''), onClick:()=>setTab(t), style:{ flexShrink:0, whiteSpace:'nowrap' } }, SUBTAB_LABELS[t]))
     ),
 
     // ══ Partidas operativas ══
@@ -230,7 +234,7 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
       equipo.length > 0 && h('div', { style:{ overflowX:'auto' } },
         h('table', { style:{ width:'100%', borderCollapse:'collapse', fontSize:12 } },
           h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b3)' } },
-            ['Nombre','Proveedor','Marca/Modelo/Unidad','Costo proveedor','Precio propuesto','Usar','Notas'].map(hd=>h('td',{key:hd,style:{padding:'6px 4px',color:'var(--t2)',fontSize:11}},hd))
+            ['Nombre','Proveedor','Marca/Modelo/Unidad','Costo proveedor','Precio propuesto','Usar'].map(hd=>h('td',{key:hd,style:{padding:'6px 4px',color:'var(--t2)',fontSize:11}},hd))
           )),
           h('tbody', null, equipo.map(e => h('tr', { key:e.id, style:{ borderBottom:'.5px solid var(--b3)' } },
             h('td', { style:{ padding:'6px 4px', fontWeight:500 } }, e.nombre),
@@ -243,7 +247,6 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
             h('td', { style:{ padding:'6px 4px' } }, h(NumInput, { value:e.costoConIVA||0, onChange:v=>updEquipo(e.id,'costoConIVA',v), style:{ width:80, fontSize:11, padding:'3px 5px' } })),
             h('td', { style:{ padding:'6px 4px' } }, h(NumInput, { value:e.precioPropuesto||0, onChange:v=>updEquipo(e.id,'precioPropuesto',v), style:{ width:80, fontSize:11, padding:'3px 5px', fontWeight:500 } })),
             h('td', { style:{ padding:'6px 4px', textAlign:'center' } }, h('input', { type:'checkbox', checked:e.usar, onChange:ev=>updEquipo(e.id,'usar',ev.target.checked), style:{ width:14, height:14, accentColor:'var(--blue)' } })),
-            h('td', { style:{ padding:'6px 4px' } }, h('input', { value:e.notas||'', onChange:ev=>updEquipo(e.id,'notas',ev.target.value), placeholder:'Notas', style:{ fontSize:11, padding:'3px 6px', width:'100%' } })),
           ))),
         ),
       ),
