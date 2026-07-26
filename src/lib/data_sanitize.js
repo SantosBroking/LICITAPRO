@@ -203,15 +203,15 @@ export function sanitizeProjectForRole(project, user) {
     // Fase 2E1 (fix adicional) -- cierra el hallazgo real de firmas[].proyecto
     // (ver sanitizeFirmaForRole arriba).
     firmas: sanitizeFirmasForRole(project.firmas, user),
-    // project.flujo (src/views/Flujo.js:161) es 100% financiero (costos,
-    // % de anticipo, días de crédito) -- misma sub-pestaña admin-only de
-    // Operación desde Fase 2A6. El empleado no tiene ningún uso operativo
-    // de esta estructura; se vacía completa en vez de redactar parcialmente
-    // (evita dejar pasar valores de texto tipo "Retorno"/"Fianza" dentro de
-    // bloques[].nom, que removeSensitiveKeysDeep no detectaría por ser
-    // VALORES, no llaves).
-    flujo: null,
   };
+  // project.flujo (src/views/Flujo.js:161) es 100% financiero (costos,
+  // % de anticipo, días de crédito) -- misma sub-pestaña admin-only de
+  // Operación desde Fase 2A6. El empleado no tiene ningún uso operativo de
+  // esta estructura; se ELIMINA la llave por completo (Fase 2F2: antes se
+  // ponía en `null`, pero un escáner de texto literal seguía encontrando la
+  // palabra "flujo" como nombre de campo -- eliminar la llave la hace
+  // desaparecer del todo, no solo su contenido).
+  delete limpio.flujo;
   // project.ocCondiciones (src/views/Projects.js:1186) es la última
   // condicion comercial usada al generar una OC (forma de pago, anticipo,
   // garantía...) -- mismo tipo de dato que OC_CAMPOS_FINANCIEROS a nivel de

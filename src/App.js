@@ -1,7 +1,7 @@
 // App.js — Estado global, navegación y CRUD
 import { h, useState, useEffect, useRef, useCallback } from './lib/core.js';
 import { DEFAULT_CONFIG } from './lib/constants.js';
-import { sb, authSb, signOut, buildAppUser, WORKSPACE_ID, dbLoadViaWorkspaceEndpoint, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveConfigViaEndpoint, saveCompanyViaEndpoint, saveProjectViaEndpoint, saveVehicleViaEndpoint, saveAuditLog, saveProjectFinancials } from './lib/supabase.js';
+import { sb, authSb, signOut, buildAppUser, WORKSPACE_ID, dbLoadViaWorkspaceEndpoint, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveConfigViaEndpoint, saveCompanyViaEndpoint, saveProjectViaEndpoint, saveVehicleViaEndpoint, saveAuditLog, saveProjectFinancials, createInboxItem } from './lib/supabase.js';
 import { calcCotizacion } from './lib/calc.js'; // Fase 0C — solo se USA, calc.js no se modifica
 import { getPermissions, canView, sanitizeView, canProjectTab, sanitizeProjectTab, sanitizeSubTab } from './lib/permissions.js'; // Fase 1C — permisos centralizados
 import { sanitizeProjectsForRole, sanitizeVehiclesForRole, sanitizeProjectUpdateForRole, sanitizeVehicleUpdateForRole } from './lib/data_sanitize.js'; // Fase 2A2 — sanitización React profunda
@@ -424,6 +424,21 @@ export default function App() {
       setProjects(prev => prev.map(x=>x.id===guardado.id?guardado:x));
       await maybeSaveFinancials(guardado);
       log(user,'guardó','proyecto',guardado.id,guardado.name);
+      // Fase 2F3: notificar a admin en el Inbox cuando un EMPLEADO (no
+      // admin) crea un proyecto NUEVO (original === undefined significa
+      // que no existía antes de este guardado). Referencia liviana, nunca
+      // un snapshot del proyecto.
+      if (!original && !getPermissions(user).isAdmin) {
+        try {
+          await createInboxItem({
+            type: 'proyecto_nuevo',
+            title: 'Nuevo proyecto: "'+(guardado.name||'proyecto sin nombre')+'"',
+            message: 'Creado por '+(user?.email||user?.name||'un empleado')+'.',
+            project_id: guardado.id,
+            data: { proyectoNombre: guardado.name||'' },
+          });
+        } catch(e) { console.error('[2F3] No se pudo notificar en el inbox:', e); }
+      }
     } catch(e){ console.error('[2E3C] Error guardando proyecto vía /api/save-project:', e); }
   }, [user, nav, log, projects]);
 
