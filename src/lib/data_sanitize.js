@@ -431,7 +431,13 @@ const PROJECT_OPERATIONAL_UPDATE_FIELDS = [
   // 'cotizacion' se maneja aparte, campo por campo (ver abajo).
 ];
 
-const COTIZACION_OPERATIONAL_FIELDS = ['version', 'folio', 'municipio', 'fechaCotizacion', 'vigenciaDias', 'agenciaProveedor', 'vendedor', 'vendedorCorreo'];
+// Fase 2F3: 'estatusRevision' -- estatus operativo del flujo de aprobación
+// (borrador/en_revision/cambios_solicitados/aprobada/rechazada). Es solo un
+// eco local para feedback inmediato en la UI -- la fuente de verdad real
+// del estatus es el inbox_item correspondiente (tabla separada, ver
+// sql/2f3_inbox_items.sql), que CotizacionOperativa.js también consulta.
+// No es un campo financiero ni estratégico, cualquier rol puede escribirlo.
+const COTIZACION_OPERATIONAL_FIELDS = ['version', 'folio', 'municipio', 'fechaCotizacion', 'vigenciaDias', 'agenciaProveedor', 'vendedor', 'vendedorCorreo', 'estatusRevision'];
 const PARTIDA_OPERATIONAL_FIELDS = ['id', 'activo', 'tipo', 'marca', 'modelo', 'ano', 'version', 'color', 'cantidad', 'vehiculoId', 'foto'];
 const EQUIPO_OPERATIONAL_FIELDS = ['id', 'productoId', 'nombre', 'cat', 'marca', 'modelo', 'unidad', 'usar', 'vis', 'cnts', 'notas'];
 const VEHICLE_OPERATIONAL_UPDATE_FIELDS = ['id', 'vin', 'marca', 'modelo', 'version', 'ano', 'color', 'numMotor', 'numInventario', 'statusEntrega', 'statusDocs', 'ubicacion', 'equipamiento', 'observaciones', 'actaEntrega'];

@@ -718,7 +718,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
     ),
     // Cotización Operativa — empleado. Sin botones de PDF/OC/IA financiera;
     // ninguno de esos vive dentro de CotizacionOperativa.js en absoluto.
-    tab==='cotizacion' && !isAdmin && h(CotizacionOperativa, { project, onUpdate:updProject, activeTab:cotSubTab, setActiveTab:setCotSubTab }),
+    tab==='cotizacion' && !isAdmin && h(CotizacionOperativa, { project, onUpdate:updProject, activeTab:cotSubTab, setActiveTab:setCotSubTab, user, logFn }),
     // Fase 2A6 (cierre): Expediente fusiona Bases + Documentos + Preguntas
     // bajo el tab principal 'docs' (id interno sin cambios, label visible
     // 'Expediente'), con su propia sub-navegación interna -- mismo patrón

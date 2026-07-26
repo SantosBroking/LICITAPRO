@@ -20,10 +20,11 @@
 // cuenta, pero tampoco debe asumir que puede leer datos reservados si
 // alguna vez cambiara ese contrato.
 
-import { h, useState } from '../lib/core.js';
+import { h, useState, useEffect } from '../lib/core.js';
 import { StorageImg, NumInput } from '../ui/primitives.js';
 import { CATALOG_PRODUCTS } from '../lib/catalog.js';
 import { TODAY } from '../lib/utils.js';
+import { createInboxItem, listInboxItems } from '../lib/supabase.js';
 
 // Microfix (limpieza UI): 'resumen' ya no es una sub-pestaña ni una franja
 // informativa aparte -- se eliminó por completo (repetía el encabezado del
@@ -39,22 +40,70 @@ const SUBTAB_LABELS = { partidas: 'Partidas', equipo: 'Equipo' };
 // PARTIDA_CAMPOS_ESTRATEGICOS en data_sanitize.js, que sigue admin-only).
 const makePartidaOperativa = (id) => ({ id, activo:false, tipo:'', marca:'', modelo:'', ano:new Date().getFullYear(), version:'', color:'', cantidad:0, vehiculoId:null, foto:'', costoMSMS:0, precioLista:0, precioPropuesto:0 });
 
-export default function CotizacionOperativa({ project, onUpdate, activeTab, setActiveTab }) {
+export default function CotizacionOperativa({ project, onUpdate, activeTab, setActiveTab, user, logFn }) {
   const [_localTab, _setLocalTab] = useState(activeTab || 'partidas');
   const tab = activeTab || _localTab;
   const setTab = (t) => { _setLocalTab(t); if (setActiveTab) setActiveTab(t); };
   const [showCat, setShowCat] = useState(false);
   const [catSel, setCatSel] = useState(null);
+  const [enviando, setEnviando] = useState(false);
+  const [ultimoEstatusInbox, setUltimoEstatusInbox] = useState(null);
 
   const cot = project.cotizacion || {};
   const partidas = cot.partidas || [];
   const equipo = cot.equipo || [];
+
+  // Fase 2F3: el estatus REAL de revisión vive en inbox_items (fuente de
+  // verdad), no en cot.estatusRevision (que es solo un eco local para
+  // feedback inmediato al enviar). Se consulta el pendiente más reciente
+  // de este proyecto para reflejar aprobaciones/rechazos/cambios
+  // solicitados que el admin haya resuelto desde el Inbox.
+  useEffect(() => {
+    let cancelado = false;
+    listInboxItems()
+      .then(items => {
+        if (cancelado) return;
+        const propios = (items||[]).filter(i => i.project_id===project.id && i.type==='cotizacion_revision');
+        if (propios.length) {
+          propios.sort((a,b) => new Date(b.updated_at||b.created_at) - new Date(a.updated_at||a.created_at));
+          setUltimoEstatusInbox(propios[0].status);
+        }
+      })
+      .catch(e => console.error('[CotizacionOperativa] No se pudo consultar el estatus de revisión:', e));
+    return () => { cancelado = true; };
+  }, [project.id]);
+
+  const estatusMostrado = ultimoEstatusInbox || cot.estatusRevision || 'borrador';
+  const ESTATUS_LABELS = { borrador:'Borrador', pendiente:'Enviada, en espera', en_revision:'En revisión', cambios_solicitados:'Cambios solicitados', aprobado:'Aprobada', rechazado:'Rechazada', revisado:'Revisada' };
+  const ESTATUS_COLORES = { borrador:{bg:'var(--bg2)',tx:'var(--t2)'}, pendiente:{bg:'#E6F1FB',tx:'#1A4480'}, en_revision:{bg:'#E6F1FB',tx:'#1A4480'}, cambios_solicitados:{bg:'#FAEEDA',tx:'#633806'}, aprobado:{bg:'#E1F5EE',tx:'#085041'}, rechazado:{bg:'#FCEBEB',tx:'#791F1F'}, revisado:{bg:'#E1F5EE',tx:'#085041'} };
 
   // No se ejecuta ningún cálculo reservado aquí -- App.js decide si hace
   // falta recalcular el monto estimado tras el merge seguro (Fase 2A4, Commit 4).
   const updCot = (newCot) => { onUpdate({ ...project, cotizacion: newCot }); };
 
   const updPartida = (id, k, v) => updCot({ ...cot, partidas: partidas.map(p => p.id===id ? {...p,[k]:v} : p) });
+
+  // Fase 2F3: "Enviar a revisión" -- crea un pendiente en el Inbox (tabla
+  // separada, ver sql/2f3_inbox_items.sql) con SOLO una referencia liviana
+  // (folio, nombre de proyecto, conteo de partidas/equipo) -- NUNCA un
+  // snapshot de la cotización completa (misma lección de firmas[].proyecto,
+  // Fase 2E). Actualiza cot.estatusRevision como eco local inmediato.
+  const enviarARevision = async () => {
+    setEnviando(true);
+    try {
+      await createInboxItem({
+        type: 'cotizacion_revision',
+        title: 'Cotización de "'+(project.name||'proyecto sin nombre')+'" lista para revisión',
+        message: 'Folio: '+(cot.folio||'—')+' · '+partidas.filter(p=>p.activo).length+' partida(s) · '+equipo.length+' equipo(s).',
+        project_id: project.id,
+        data: { folio: cot.folio||'', proyectoNombre: project.name||'', partidasActivas: partidas.filter(p=>p.activo).length, equipoCount: equipo.length },
+      });
+      updCot({ ...cot, estatusRevision: 'en_revision' });
+      setUltimoEstatusInbox('en_revision');
+      if (logFn) logFn(user, 'envió a revisión', 'cotización', project.id, project.name||'');
+    } catch(e) { alert('No se pudo enviar a revisión: ' + e.message); }
+    setEnviando(false);
+  };
 
   // Fase 2F1A: catálogo de EQUIPO disponible para agregar -- mismo criterio
   // de construcción que Cotizacion.js (base + personalizados del config,
@@ -145,6 +194,13 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
   })});
 
   return h('div', null,
+    // Fase 2F3: estatus de revisión + botón "Enviar a revisión" -- franja
+    // compacta, no una sub-pestaña (mismo criterio que el microfix de
+    // limpieza de Cotización Operativa: nada de resúmenes repetidos).
+    h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, flexWrap:'wrap', gap:8 } },
+      h('span', { style:{ fontSize:11, padding:'4px 12px', borderRadius:12, background:(ESTATUS_COLORES[estatusMostrado]||ESTATUS_COLORES.borrador).bg, color:(ESTATUS_COLORES[estatusMostrado]||ESTATUS_COLORES.borrador).tx, fontWeight:500 } }, 'Estatus: '+(ESTATUS_LABELS[estatusMostrado]||estatusMostrado)),
+      h('button', { disabled:enviando, onClick:enviarARevision, style:{ fontSize:12, padding:'7px 14px', background:'var(--blue)', color:'#fff', border:'none', borderRadius:'var(--r)', cursor:enviando?'wait':'pointer', opacity:enviando?.7:1 } }, enviando?'Enviando...':'Enviar a revisión'),
+    ),
     h('div', { style:{ display:'flex', gap:0, marginBottom:20, borderBottom:'1px solid var(--b1)', overflowX:'auto' } },
       SUBTABS.map(t => h('button', { key:t, className:'tab'+(tab===t?' active':''), onClick:()=>setTab(t), style:{ flexShrink:0, whiteSpace:'nowrap' } }, SUBTAB_LABELS[t]))
     ),
