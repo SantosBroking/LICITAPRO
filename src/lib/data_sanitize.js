@@ -88,13 +88,28 @@ export function sanitizeCotizacionForRole(cotizacion, user) {
 }
 
 // Categorías de project.docs que pueden contener referencias financieras —
-// verificado en src/lib/constants.js:41-45 (DOC_CATEGORIES), campo real
+// verificado en src/lib/constants.js (DOC_CATEGORIES), campo real
 // confirmado: `category` (no `categoria`).
-const DOC_CATEGORIAS_FINANCIERAS = ['Facturas', 'Propuesta económica', 'Garantías', 'Fianzas'];
+//
+// Fase 2F2: separadas en dos grupos reales. 'Facturas' (la categoría VIEJA,
+// ambigua -- podía ser tanto factura de proveedor como factura al cliente
+// final) se queda 100% cerrada por precaución: no hay forma retroactiva de
+// saber cuál era cuál en documentos ya existentes, y abrir de más aquí
+// arriesgaría exponer facturas de cliente/venta. Los documentos NUEVOS que
+// se registren bajo la categoría explícita 'Facturas proveedor/origen'
+// (agregada a DOC_CATEGORIES en esta misma fase) sí quedan abiertos.
+const DOC_CATEGORIAS_ESTRATEGICAS = ['Facturas', 'Propuesta económica', 'Garantías', 'Fianzas'];
+const DOC_CATEGORIAS_COSTO_PROVEEDOR = ['Facturas proveedor/origen'];
 
 export function sanitizeDocsForRole(docs, user) {
   if (getPermissions(user).verCostosInternos) return docs;
-  return (docs || []).filter(d => !DOC_CATEGORIAS_FINANCIERAS.includes(d && d.category));
+  const perms = getPermissions(user);
+  return (docs || []).filter(d => {
+    const cat = d && d.category;
+    if (DOC_CATEGORIAS_ESTRATEGICAS.includes(cat)) return false;
+    if (DOC_CATEGORIAS_COSTO_PROVEEDOR.includes(cat)) return perms.verCostosProveedor;
+    return true;
+  });
 }
 
 // Orden de Compra — shape real verificado en src/views/Projects.js:1175-1184
@@ -487,16 +502,24 @@ function construirEquipoOperativo(eEmpleado, eOriginal, user) {
 
 export function sanitizeDocsUpdateForRole(originalDocs, incomingDocs, user) {
   if (getPermissions(user).verCostosInternos) return incomingDocs; // admin: sin cambios
+  const perms = getPermissions(user);
   const originalArr = originalDocs || [];
   if (!Array.isArray(incomingDocs)) return originalArr;
-  // El empleado nunca vio los docs financieros (se filtraron en lectura) —
+  const esRestringido = (d) => {
+    const cat = d && d.category;
+    if (DOC_CATEGORIAS_ESTRATEGICAS.includes(cat)) return true; // siempre restringido
+    if (DOC_CATEGORIAS_COSTO_PROVEEDOR.includes(cat)) return !perms.verCostosProveedor; // restringido solo si no tiene el permiso
+    return false;
+  };
+  // El empleado nunca vio los docs restringidos (se filtraron en lectura) —
   // si se guardara solo lo entrante, esos documentos desaparecerían del
   // proyecto sin que el empleado supiera que existían. Se preservan.
-  const financierosOriginales = originalArr.filter(d => DOC_CATEGORIAS_FINANCIERAS.includes(d && d.category));
-  // Defensa: si intentó colar una categoría financiera nueva (ej. seleccionó
-  // 'Facturas' en el formulario), se descarta.
-  const operativos = incomingDocs.filter(d => !DOC_CATEGORIAS_FINANCIERAS.includes(d && d.category));
-  return [...financierosOriginales, ...operativos];
+  const restringidosOriginales = originalArr.filter(esRestringido);
+  // Defensa: si intentó colar una categoría restringida (ej. seleccionó
+  // 'Facturas' o 'Propuesta económica' en el formulario, o 'Facturas
+  // proveedor/origen' sin tener el permiso), se descarta.
+  const permitidos = incomingDocs.filter(d => !esRestringido(d));
+  return [...restringidosOriginales, ...permitidos];
 }
 
 // Exactamente los campos que subirFirmadoDoc/reenviar (las únicas acciones

@@ -38,11 +38,17 @@ export const TIPOS_PRODUCTO = [
 
 export const ESTATUS_COSTO = ['Confirmado','Estimado','Heredado','Pendiente MSM','Vencido'];
 export const MODOS_PRECIO  = ['Utilidad deseada $','Utilidad deseada %','Techo presupuestal'];
+// Fase 2F2: 'Facturas proveedor/origen' es una categoría NUEVA, explícita,
+// para separar visualmente lo que antes era ambiguo bajo 'Facturas' (podía
+// ser tanto factura de compra/proveedor como factura al cliente final). La
+// categoría vieja 'Facturas' se deja INTACTA (no se renombra, no se
+// elimina) para no romper documentos existentes -- ver data_sanitize.js
+// para el criterio de seguridad de cada una.
 export const DOC_CATEGORIES = [
   'Convocatoria','Bases','Junta de aclaraciones','Anexo técnico','Anexos administrativos','Anexos legales',
   'Propuesta técnica','Propuesta económica','Acta de apertura','Fallo','Contrato',
   'Cartas','Membretado','Poderes','Constancias fiscales','Opiniones de cumplimiento','Fichas técnicas',
-  'Facturas','Órdenes de compra','Fotografías','Comprobantes de entrega','Garantías','Fianzas','Otro',
+  'Facturas','Facturas proveedor/origen','Órdenes de compra','Fotografías','Comprobantes de entrega','Garantías','Fianzas','Otro',
 ];
 
 export const EMPRESA_BASE_DOCS = [

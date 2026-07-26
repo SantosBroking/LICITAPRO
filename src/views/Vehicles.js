@@ -1,7 +1,7 @@
 // Vehicles.js — Vehículos, Facturas, Acta entrega, Billing, Docs
 import { h, useState, useRef } from '../lib/core.js';
 import { analyzeFactura } from '../lib/ai_analyzer.js';
-import { uploadFileToStorage as _uploadFile, uploadImageToStorage, isBase64, downloadFile as dlStorage, abrirArchivo, signedUrl } from '../lib/supabase.js';
+import { uploadFileToStorage as _uploadFile, uploadImageToStorage, isBase64, downloadFile as dlStorage, abrirArchivo, signedUrl, createInboxItem } from '../lib/supabase.js';
 import { getPermissions } from '../lib/permissions.js'; // Fase 2A0 — contención visible
 // Guard: si Storage no está disponible, devuelve null y el código cae a base64
 const uploadFileToStorage = async (path, file) => {
@@ -687,18 +687,28 @@ export function DocsTab({ project, vehicles, companies, config, onSaveCompany, o
   const vehs = vehicles || [];
 
   // Documentos automáticos del sistema (facturas de vehículos + órdenes de compra)
-  // Fase 2A0: si el usuario no puede ver facturas de vehículo, estas entradas
-  // ni siquiera se construyen — no se genera fileUrl/referencia alguna para
-  // empleado, no solo se oculta el link. No debe aparecer ni la fila.
+  // Fase 2A0 + 2F2: si el usuario no puede ver un tipo de factura, esa
+  // entrada ni siquiera se construye — no se genera fileUrl/referencia
+  // alguna para empleado, no solo se oculta el link. No debe aparecer ni
+  // la fila. Fase 2F2: graduado -- agencia/equipo (costo de origen/
+  // proveedor, ya abiertos en 2F1B) usan verCostosProveedor; intermedia/
+  // gobierno (estratégicos) siguen exclusivos de verVehiculosFinancieros.
   const autoDocs = [];
-  if (getPermissions(user).verFacturasVehiculo) {
-    vehs.forEach(v => {
-      [['facturaAgencia','Factura de compra'],['facturaIntermedia','Factura de reventa'],['facturaEquipo','Factura de equipo'],['facturaGobierno','Factura a cliente']].forEach(([campo,etiq]) => {
+  const permsDocs = getPermissions(user);
+  vehs.forEach(v => {
+    if (permsDocs.verCostosProveedor) {
+      [['facturaAgencia','Factura de compra'],['facturaEquipo','Factura de equipo']].forEach(([campo,etiq]) => {
         const f = v[campo];
-      if (f && f.folio) autoDocs.push({ id:'auto-'+v.id+'-'+campo, name:etiq+' '+f.folio+' ('+(v.vin||v.marca||'')+')', category:'Facturas', date:f.fecha||'', fileUrl:f.xmlData||'', notes:f.nota||'', auto:true });
+        if (f && f.folio) autoDocs.push({ id:'auto-'+v.id+'-'+campo, name:etiq+' '+f.folio+' ('+(v.vin||v.marca||'')+')', category:'Facturas', date:f.fecha||'', fileUrl:f.xmlData||'', notes:f.nota||'', auto:true });
       });
-    });
-  }
+    }
+    if (permsDocs.verVehiculosFinancieros) {
+      [['facturaIntermedia','Factura de reventa'],['facturaGobierno','Factura a cliente']].forEach(([campo,etiq]) => {
+        const f = v[campo];
+        if (f && f.folio) autoDocs.push({ id:'auto-'+v.id+'-'+campo, name:etiq+' '+f.folio+' ('+(v.vin||v.marca||'')+')', category:'Facturas', date:f.fecha||'', fileUrl:f.xmlData||'', notes:f.nota||'', auto:true });
+      });
+    }
+  });
   (project.ordenesCompra||[]).forEach(oc => {
     autoDocs.push({ id:'auto-oc-'+oc.id, name:'Orden de compra '+oc.folio+' · '+(oc.proveedor||''), category:'Órdenes de compra', date:oc.fecha||'', fileUrl:'', notes:'Generada en el sistema', auto:true });
   });
@@ -733,6 +743,20 @@ export function DocsTab({ project, vehicles, companies, config, onSaveCompany, o
       if (logFn) logFn(user,'subió '+nuevos.length+' documento(s)','proyecto',project.id,project.name);
       setMsg('✅ '+nuevos.length+' archivo(s) agregado(s) al expediente.');
       setNewDoc(p=>({ ...p, name:'', notes:'' }));
+      // Fase 2F2: notificar a admin en el Inbox cuando un EMPLEADO (no
+      // admin) carga un documento -- referencia liviana (nombres/categoría),
+      // NUNCA el archivo ni su URL real.
+      if (!getPermissions(user).isAdmin) {
+        try {
+          await createInboxItem({
+            type: 'documento_cargado',
+            title: (nuevos.length>1?nuevos.length+' documentos cargados':'Documento cargado')+' en "'+(project.name||'proyecto sin nombre')+'"',
+            message: nuevos.map(d=>d.name+' ('+d.category+')').join(', '),
+            project_id: project.id,
+            data: { categorias: [...new Set(nuevos.map(d=>d.category))], cantidad: nuevos.length },
+          });
+        } catch(e) { console.error('[DocsTab] No se pudo notificar en el inbox:', e); }
+      }
     }
     setBusy(false);
   };

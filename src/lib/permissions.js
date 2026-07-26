@@ -24,7 +24,7 @@ export function getPermissions(user) {
 
     // ── Fase 2A0: contención visible inmediata (Vehículos + PDF) ──
     verVehiculosFinancieros: isAdmin,   // columna PRECIO/FACTURAS, Metric, tab Facturación del vehículo
-    verFacturasVehiculo: isAdmin,       // documentos de factura en DocsTab (no listar ni generar referencia)
+    verFacturasVehiculo: isAdmin,       // Fase 2F2: ya no se usa en Vehicles.js (reemplazado por verCostosProveedor/verVehiculosFinancieros, graduado por tipo de factura) -- se deja definida, sin romper nada que la referencie a futuro
     exportVehiculosCompleto: isAdmin,   // Excel con columnas financieras
     exportVehiculosOperativo: !!role,   // Excel sin columnas financieras — ambos roles
     generarPDFCliente: !!role,         // ambos roles — el PDF ya se corrigió en esta misma Fase 2A0
