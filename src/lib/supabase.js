@@ -277,6 +277,42 @@ export async function saveVehicleViaEndpoint(vehicle) {
   return json.vehicle;
 }
 
+// Fase 2F3 — Inbox / Centro de aprobaciones. Mismo patrón: sesión real,
+// sin fallback silencioso, acceso real siempre vía service_role en el
+// servidor (RLS de inbox_items es admin-only, ver sql/2f3_inbox_items.sql).
+export async function listInboxItems() {
+  const { data: sessionData, error: sessionError } = await sb.auth.getSession();
+  if (sessionError) throw new Error('No se pudo obtener la sesión real: ' + sessionError.message);
+  const token = sessionData?.session?.access_token;
+  if (!token) throw new Error('No hay sesión activa de Supabase Auth -- no se puede leer el inbox.');
+
+  let res;
+  try {
+    res = await fetch('/api/inbox-list', { headers: { Authorization: `Bearer ${token}` } });
+  } catch (e) {
+    throw new Error('No se pudo contactar /api/inbox-list: ' + e.message);
+  }
+  if (!res.ok) {
+    let detalle = '';
+    try { const body = await res.json(); detalle = body?.error || ''; } catch(_e) {}
+    throw new Error(`/api/inbox-list respondió HTTP ${res.status}` + (detalle ? ` -- ${detalle}` : ''));
+  }
+  let json;
+  try { json = await res.json(); } catch (e) { throw new Error('Respuesta de /api/inbox-list no es JSON válido: ' + e.message); }
+  if (!json.ok) throw new Error('/api/inbox-list respondió ok:false -- ' + (json.error || 'sin detalle'));
+  return json.items || [];
+}
+
+export async function createInboxItem(item) {
+  const json = await postJsonWithSession('/api/inbox-create', item);
+  return json.item;
+}
+
+export async function updateInboxItem(id, status, comentario) {
+  const json = await postJsonWithSession('/api/inbox-update', { id, status, comentario });
+  return json.item;
+}
+
 export async function saveAuditLog(entry, userId) {
   if (!userId) return;
   await sb.from('audit_log').insert({ id: entry.id, user_id: userId, data: entry }).catch(()=>{});
