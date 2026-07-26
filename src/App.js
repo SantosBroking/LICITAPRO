@@ -14,11 +14,13 @@ import CatalogView from './views/Catalog.js';
 import Companies   from './views/Companies.js';
 import { ProjectsList, ProjectForm, ProjectDetail } from './views/Projects.js';
 import { Reports, Settings, AuditLogView } from './views/Admin.js';
+import { Inbox } from './views/Inbox.js';
 import FirmasView from './views/Firmas.js';
 
 const NAV_ITEMS = [
   { id:'dashboard', label:'Dashboard', icon:'◈' },
   { id:'projects',  label:'Proyectos', icon:'◉' },
+  { id:'inbox',     label:'Inbox',     icon:'📥' },
   { id:'firmas',    label:'Firmas',    icon:'◫' },
   { id:'companies', label:'Empresas',  icon:'◎' },
   { id:'catalog',   label:'Catálogo',  icon:'◳' },
@@ -552,6 +554,7 @@ export default function App() {
     reports:        h(Reports,       { projects, vehicles, companies, audit }),
     settings:       h(Settings,      { config, user, onSave:handleSaveConfig }),
     audit:          h(AuditLogView,  { audit }),
+    inbox:          h(Inbox,         { user, onNav:nav, projects: isAdmin?projects:visibleProjects }),
   })[effectiveView] || h(Dashboard, { projects: isAdmin?projects:visibleProjects, vehicles: isAdmin?vehicles:visibleVehicles, companies, onNav:nav, onUpdate:upProject });
 
 
