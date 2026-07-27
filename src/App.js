@@ -1,7 +1,7 @@
 // App.js — Estado global, navegación y CRUD
 import { h, useState, useEffect, useRef, useCallback } from './lib/core.js';
 import { DEFAULT_CONFIG } from './lib/constants.js';
-import { sb, authSb, signOut, buildAppUser, WORKSPACE_ID, dbLoadViaWorkspaceEndpoint, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveConfigViaEndpoint, saveCompanyViaEndpoint, saveProjectViaEndpoint, saveVehicleViaEndpoint, saveAuditLog, saveProjectFinancials, createInboxItem } from './lib/supabase.js';
+import { sb, authSb, signOut, buildAppUser, WORKSPACE_ID, dbLoadViaWorkspaceEndpoint, saveProject, deleteProject, saveVehicle, deleteVehicle, saveCompany, saveConfig, saveConfigViaEndpoint, saveCompanyViaEndpoint, saveProjectViaEndpoint, saveVehicleViaEndpoint, saveAuditLog, saveProjectFinancials, createInboxItem, listInboxItems } from './lib/supabase.js';
 import { calcCotizacion } from './lib/calc.js'; // Fase 0C — solo se USA, calc.js no se modifica
 import { getPermissions, canView, sanitizeView, canProjectTab, sanitizeProjectTab, sanitizeSubTab } from './lib/permissions.js'; // Fase 1C — permisos centralizados
 import { sanitizeProjectsForRole, sanitizeVehiclesForRole, sanitizeProjectUpdateForRole, sanitizeVehicleUpdateForRole } from './lib/data_sanitize.js'; // Fase 2A2 — sanitización React profunda
@@ -81,6 +81,14 @@ function sanitizeNavigation({ view, projId, projTab, projects, projectsReady, su
 
 export default function App() {
   const [user,      setUser]      = useState(null); // null hasta que onAuthStateChange confirme la sesión
+  // Fase 2F4 -- contador de no leídos para el badge de Inbox en la
+  // navegación principal. Se refresca tras el login y cada vez que Inbox
+  // marca cosas como vistas (via el prop onSeenChange que se le pasa).
+  const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
+  const refreshInboxUnread = useCallback(async () => {
+    try { const { unreadCount } = await listInboxItems(); setInboxUnreadCount(unreadCount || 0); }
+    catch(e) { console.error('[2F4] No se pudo actualizar el contador del inbox:', e); }
+  }, []);
   const [loading,   setLoading]   = useState(true);
   const [projects,  setProjects]  = useState([]);
   const [vehicles,  setVehicles]  = useState([]);
@@ -196,6 +204,7 @@ export default function App() {
         setUser(appUser);
         setLoading(true);
         await loadData(appUser);
+        refreshInboxUnread(); // Fase 2F4 -- no bloqueante, sin await: el badge puede llegar un instante después
       } catch (e) {
         console.error('Perfil inválido o inactivo:', e.message);
         setAuthError(e.message);
@@ -569,7 +578,7 @@ export default function App() {
     reports:        h(Reports,       { projects, vehicles, companies, audit }),
     settings:       h(Settings,      { config, user, onSave:handleSaveConfig }),
     audit:          h(AuditLogView,  { audit }),
-    inbox:          h(Inbox,         { user, onNav:nav, projects: isAdmin?projects:visibleProjects }),
+    inbox:          h(Inbox,         { user, onNav:nav, projects: isAdmin?projects:visibleProjects, onSeenChange:refreshInboxUnread }),
   })[effectiveView] || h(Dashboard, { projects: isAdmin?projects:visibleProjects, vehicles: isAdmin?vehicles:visibleVehicles, companies, onNav:nav, onUpdate:upProject });
 
 
@@ -585,9 +594,10 @@ export default function App() {
       h('nav', { style:{ flex:1, padding:'10px 8px', overflowY:'auto' } },
         navItemsPermitidos.map(item => {
           const active = effectiveView===item.id || (item.id==='projects' && effectiveView.startsWith('project'));
-          return h('button', { key:item.id, onClick:()=>nav(item.id), className:'nav-item' + (active?' active':'') },
-            h('span', { className:'nav-icon' }, item.icon),
-            item.label,
+          return h('button', { key:item.id, onClick:()=>nav(item.id), className:'nav-item' + (active?' active':''), style:{ display:'flex', alignItems:'center', justifyContent:'space-between' } },
+            h('span', null, h('span', { className:'nav-icon' }, item.icon), item.label),
+            // Fase 2F4 -- badge rojo con contador, solo en Inbox, solo si > 0.
+            item.id==='inbox' && inboxUnreadCount>0 && h('span', { style:{ background:'var(--red)', color:'#fff', fontSize:10, fontWeight:600, borderRadius:10, padding:'1px 6px', minWidth:16, textAlign:'center' } }, inboxUnreadCount>99?'99+':inboxUnreadCount),
           );
         })
       ),
@@ -615,9 +625,9 @@ export default function App() {
         ),
         navItemsPermitidos.map(item => {
           const active = effectiveView===item.id || (item.id==='projects' && effectiveView.startsWith('project'));
-          return h('button', { key:item.id, onClick:()=>{ nav(item.id); setMobileMenuOpen(false); }, className:'nav-item' + (active?' active':''), style:{ marginBottom:2 } },
-            h('span', { className:'nav-icon' }, item.icon),
-            item.label,
+          return h('button', { key:item.id, onClick:()=>{ nav(item.id); setMobileMenuOpen(false); }, className:'nav-item' + (active?' active':''), style:{ marginBottom:2, display:'flex', alignItems:'center', justifyContent:'space-between' } },
+            h('span', null, h('span', { className:'nav-icon' }, item.icon), item.label),
+            item.id==='inbox' && inboxUnreadCount>0 && h('span', { style:{ background:'var(--red)', color:'#fff', fontSize:10, fontWeight:600, borderRadius:10, padding:'1px 6px', minWidth:16, textAlign:'center' } }, inboxUnreadCount>99?'99+':inboxUnreadCount),
           );
         }),
         h('div', { style:{ marginTop:20, paddingTop:16, borderTop:'1px solid var(--b1)' } },
@@ -632,9 +642,10 @@ export default function App() {
       h('div', { className:'mobile-nav-inner' },
         MOBILE_NAV.map(item => {
           const active = effectiveView===item.id || (item.id==='projects' && effectiveView.startsWith('project'));
-          return h('button', { key:item.id, onClick:()=>nav(item.id), className:'mobile-nav-btn' + (active?' active':'') },
+          return h('button', { key:item.id, onClick:()=>nav(item.id), className:'mobile-nav-btn' + (active?' active':''), style:{ position:'relative' } },
             h('span', { className:'nav-dot' }, item.icon),
             item.label,
+            item.id==='inbox' && inboxUnreadCount>0 && h('span', { style:{ position:'absolute', top:2, right:'28%', background:'var(--red)', color:'#fff', fontSize:9, fontWeight:600, borderRadius:8, padding:'0 4px', minWidth:14, textAlign:'center', lineHeight:'14px' } }, inboxUnreadCount>9?'9+':inboxUnreadCount),
           );
         })
       ),
