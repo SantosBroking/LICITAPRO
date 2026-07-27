@@ -61,6 +61,7 @@ module.exports = async function handler(req, res) {
     dataLimitada = data;
   }
 
+  const ahora = new Date().toISOString();
   const nuevoItem = {
     user_id: WORKSPACE_ID,
     project_id: typeof project_id === 'string' ? project_id : null,
@@ -71,9 +72,15 @@ module.exports = async function handler(req, res) {
     created_by: profile.email, // SIEMPRE del servidor, nunca del body
     assigned_to: null,
     data: dataLimitada,
-    history: [{ accion:'creado', por:profile.email, fecha:new Date().toISOString(), comentario:'' }],
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    history: [{ accion:'creado', por:profile.email, fecha:ahora, comentario:'' }],
+    created_at: ahora,
+    updated_at: ahora,
+    // Fase 2F4 -- quien crea el pendiente ya lo "vio" (es su propia acción);
+    // el otro lado queda en null (no leído) para que le aparezca como
+    // notificación nueva. Empleado crea -> admin no lo ha visto todavía;
+    // admin crea -> el empleado (si aplica) no lo ha visto todavía.
+    seen_by_admin_at: profile.role === 'admin' ? ahora : null,
+    seen_by_creator_at: profile.role === 'admin' ? null : ahora,
   };
 
   const restHeaders = { apikey:serviceKey, Authorization:`Bearer ${serviceKey}` };

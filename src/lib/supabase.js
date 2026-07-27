@@ -300,7 +300,9 @@ export async function listInboxItems() {
   let json;
   try { json = await res.json(); } catch (e) { throw new Error('Respuesta de /api/inbox-list no es JSON válido: ' + e.message); }
   if (!json.ok) throw new Error('/api/inbox-list respondió ok:false -- ' + (json.error || 'sin detalle'));
-  return json.items || [];
+  // Fase 2F4 -- ahora regresa { items, unreadCount } en vez de solo el
+  // arreglo. Todo llamador debe desestructurar (Inbox.js, App.js).
+  return { items: json.items || [], unreadCount: json.unreadCount || 0 };
 }
 
 export async function createInboxItem(item) {
@@ -311,6 +313,16 @@ export async function createInboxItem(item) {
 export async function updateInboxItem(id, status, comentario) {
   const json = await postJsonWithSession('/api/inbox-update', { id, status, comentario });
   return json.item;
+}
+
+// Fase 2F4 — marcar pendientes como vistos. `ids` es un arreglo de ids
+// específicos, o pasa `{ all: true }` para marcar todos los visibles para
+// este usuario (admin: todos; empleado: los suyos). El campo que se
+// actualiza en el servidor (seen_by_admin_at o seen_by_creator_at) sale
+// siempre del rol real, nunca de lo que mande este cliente.
+export async function markInboxSeen({ ids, all } = {}) {
+  const json = await postJsonWithSession('/api/inbox-mark-seen', all ? { all:true } : { ids });
+  return json.updated || 0;
 }
 
 export async function saveAuditLog(entry, userId) {

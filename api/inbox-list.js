@@ -46,7 +46,7 @@ module.exports = async function handler(req, res) {
   const restHeaders = { apikey:serviceKey, Authorization:`Bearer ${serviceKey}` };
   const isAdmin = profile.role === 'admin';
 
-  let query = `${SUPA_URL}/rest/v1/inbox_items?user_id=eq.${WORKSPACE_ID}&select=id,project_id,type,status,title,message,created_by,assigned_to,data,history,created_at,updated_at&order=created_at.desc`;
+  let query = `${SUPA_URL}/rest/v1/inbox_items?user_id=eq.${WORKSPACE_ID}&select=id,project_id,type,status,title,message,created_by,assigned_to,data,history,created_at,updated_at,seen_by_admin_at,seen_by_creator_at&order=created_at.desc`;
   if (!isAdmin) {
     // Empleado: solo sus propios pendientes.
     query += `&created_by=eq.${encodeURIComponent(profile.email)}`;
@@ -62,5 +62,11 @@ module.exports = async function handler(req, res) {
     return res.status(502).json({ ok:false, error:'No se pudo leer el inbox' });
   }
 
-  return res.status(200).json({ ok:true, user:{ id:authUser.id, email:profile.email, role:profile.role }, items });
+  // Fase 2F4 -- unreadCount: para admin, cuenta seen_by_admin_at nulo;
+  // para empleado, cuenta seen_by_creator_at nulo (dentro de sus propios
+  // pendientes, ya filtrados arriba).
+  const campoVisto = isAdmin ? 'seen_by_admin_at' : 'seen_by_creator_at';
+  const unreadCount = items.filter(i => !i[campoVisto]).length;
+
+  return res.status(200).json({ ok:true, user:{ id:authUser.id, email:profile.email, role:profile.role }, items, unreadCount });
 };

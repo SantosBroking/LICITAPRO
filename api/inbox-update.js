@@ -72,7 +72,14 @@ module.exports = async function handler(req, res) {
     const r = await fetch(`${SUPA_URL}/rest/v1/inbox_items?id=eq.${encodeURIComponent(id)}`, {
       method: 'PATCH',
       headers: { ...restHeaders, 'Content-Type':'application/json', Prefer:'return=representation' },
-      body: JSON.stringify({ status, history: historialNuevo, updated_at: new Date().toISOString() }),
+      body: JSON.stringify({
+        status, history: historialNuevo, updated_at: new Date().toISOString(),
+        // Fase 2F4 -- admin acaba de actuar sobre el pendiente, así que ya
+        // lo vio (seen_by_admin_at). Esto genera una notificación NUEVA
+        // para quien lo creó -- su "visto" se reinicia a null.
+        seen_by_admin_at: new Date().toISOString(),
+        seen_by_creator_at: null,
+      }),
     });
     if (!r.ok) {
       const detalle = await r.text().catch(()=> '');
