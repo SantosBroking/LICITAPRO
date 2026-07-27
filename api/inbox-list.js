@@ -56,17 +56,32 @@ module.exports = async function handler(req, res) {
   try {
     const r = await fetch(query, { headers:restHeaders });
     if (!r.ok) return res.status(502).json({ ok:false, error:'No se pudo leer el inbox' });
-    items = await r.json();
+    const parsed = await r.json();
+    // Hotfix 2F4 -- defensivo: la REST API de Supabase siempre debería
+    // regresar un arreglo para un SELECT normal, pero si por cualquier
+    // motivo regresara otra cosa (objeto de error con 200, null, etc.),
+    // nunca se debe dejar que eso se propague como "items" ni rompa el
+    // cálculo de unreadCount de abajo.
+    items = Array.isArray(parsed) ? parsed : [];
   } catch(e) {
     console.error('[inbox-list] Error leyendo inbox_items:', e.message);
     return res.status(502).json({ ok:false, error:'No se pudo leer el inbox' });
   }
 
-  // Fase 2F4 -- unreadCount: para admin, cuenta seen_by_admin_at nulo;
-  // para empleado, cuenta seen_by_creator_at nulo (dentro de sus propios
-  // pendientes, ya filtrados arriba).
+  // Fase 2F4 (hotfix) -- unreadCount: para admin, cuenta seen_by_admin_at
+  // nulo; para empleado, cuenta seen_by_creator_at nulo (dentro de sus
+  // propios pendientes, ya filtrados arriba). Envuelto en try/catch y
+  // validado al final -- unreadCount NUNCA debe faltar ni ser undefined
+  // en la respuesta, pase lo que pase con el contenido de `items`.
   const campoVisto = isAdmin ? 'seen_by_admin_at' : 'seen_by_creator_at';
-  const unreadCount = items.filter(i => !i[campoVisto]).length;
+  let unreadCount = 0;
+  try {
+    unreadCount = items.filter(i => i && !i[campoVisto]).length;
+  } catch(e) {
+    console.error('[inbox-list] Error calculando unreadCount:', e.message);
+    unreadCount = 0;
+  }
+  if (typeof unreadCount !== 'number' || Number.isNaN(unreadCount)) unreadCount = 0;
 
   return res.status(200).json({ ok:true, user:{ id:authUser.id, email:profile.email, role:profile.role }, items, unreadCount });
 };
