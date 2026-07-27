@@ -1,5 +1,5 @@
-import { h, useState, useEffect } from '../lib/core.js';
-import { listInboxItems, updateInboxItem } from '../lib/supabase.js';
+import { h, useState, useEffect, useRef } from '../lib/core.js';
+import { listInboxItems, updateInboxItem, markInboxSeen } from '../lib/supabase.js';
 import { getPermissions } from '../lib/permissions.js';
 
 // Fase 2F3 — Inbox / Centro de aprobaciones. Componente autocontenido:
@@ -32,7 +32,7 @@ const STATUS_COLORS = {
 };
 const ESTATUS_FINALES = ['aprobado', 'rechazado', 'revisado'];
 
-export function Inbox({ user, onNav, projects }) {
+export function Inbox({ user, onNav, projects, onSeenChange }) {
   const [items, setItems] = useState(null); // null = cargando todavía
   const [error, setError] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('todos');
@@ -40,11 +40,40 @@ export function Inbox({ user, onNav, projects }) {
   const [comentarios, setComentarios] = useState({});
   const [busyId, setBusyId] = useState(null);
   const isAdmin = getPermissions(user).isAdmin;
+  // Fase 2F4: campo de "visto" según el rol -- admin usa seen_by_admin_at,
+  // empleado usa seen_by_creator_at (dentro de sus propios pendientes).
+  const campoVisto = isAdmin ? 'seen_by_admin_at' : 'seen_by_creator_at';
+  // "Foto" de qué estaba sin leer AL MOMENTO de cargar esta vez -- se usa
+  // solo para el resaltado visual, y no se recalcula hasta la PRÓXIMA
+  // carga (cargar()) -- así el usuario alcanza a VER qué era nuevo antes
+  // de que marcarlo como visto (en segundo plano, justo después) lo
+  // vuelva indistinguible en esta misma visita.
+  const sinLeerAlCargarRef = useRef(new Set());
 
   const cargar = async () => {
     setError('');
-    try { setItems(await listInboxItems()); }
-    catch(e) { console.error('[Inbox] Error al cargar:', e); setError('No se pudo cargar el inbox: ' + e.message); setItems([]); }
+    try {
+      const { items: nuevos } = await listInboxItems();
+      sinLeerAlCargarRef.current = new Set(nuevos.filter(i => !i[campoVisto]).map(i => i.id));
+      setItems(nuevos);
+      // Fase 2F4 -- MVP recomendado: al abrir/recargar el Inbox, se marcan
+      // como vistos TODOS los pendientes visibles para este usuario,
+      // después de ya haberlos cargado (no antes) -- el usuario alcanza a
+      // ver el resaltado de "no leído" en esta visita; en la siguiente
+      // carga ya no lo verá (correcto, ya los vio). No se marca por-click-
+      // en-item porque con pocos pendientes por proyecto esto es más simple
+      // y no se presta a confusión ("¿por qué no se quitó el badge si ya
+      // lo abrí?").
+      if (sinLeerAlCargarRef.current.size > 0) {
+        markInboxSeen({ all:true })
+          .then(() => { if (onSeenChange) onSeenChange(); })
+          .catch(e => console.error('[Inbox] No se pudo marcar como visto:', e));
+      }
+    } catch(e) {
+      console.error('[Inbox] Error al cargar:', e);
+      setError('No se pudo cargar el inbox: ' + e.message);
+      setItems([]);
+    }
   };
   useEffect(() => { cargar(); }, []);
 
@@ -83,10 +112,14 @@ export function Inbox({ user, onNav, projects }) {
       : h('div', { style:{ display:'flex', flexDirection:'column', gap:12 } }, filtrados.map(item => {
           const col = STATUS_COLORS[item.status] || STATUS_COLORS.pendiente;
           const proyecto = (projects || []).find(p => p.id === item.project_id);
-          return h('div', { key:item.id, className:'card' },
+          const noLeido = sinLeerAlCargarRef.current.has(item.id);
+          return h('div', { key:item.id, className:'card', style: noLeido ? { background:'#FFF8F0', borderLeft:'3px solid var(--red)' } : {} },
             h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8, gap:8, flexWrap:'wrap' } },
               h('div', null,
-                h('div', { style:{ fontSize:14, fontWeight:500 } }, item.title),
+                h('div', { style:{ fontSize:14, fontWeight:noLeido?700:500, display:'flex', alignItems:'center', gap:6 } },
+                  noLeido && h('span', { style:{ width:8, height:8, borderRadius:'50%', background:'var(--red)', display:'inline-block', flexShrink:0 } }),
+                  item.title,
+                ),
                 h('div', { style:{ fontSize:11, color:'var(--t2)', marginTop:2 } },
                   (TIPO_LABELS[item.type]||item.type), ' · ', (proyecto ? proyecto.name : (item.project_id || '—')),
                   ' · ', (item.created_by||'—'), ' · ', item.created_at ? new Date(item.created_at).toLocaleString('es-MX') : '—'),
