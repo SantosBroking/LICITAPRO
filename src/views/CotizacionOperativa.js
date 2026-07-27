@@ -61,7 +61,7 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
   useEffect(() => {
     let cancelado = false;
     listInboxItems()
-      .then(items => {
+      .then(({ items }) => {
         if (cancelado) return;
         const propios = (items||[]).filter(i => i.project_id===project.id && i.type==='cotizacion_revision');
         if (propios.length) {
