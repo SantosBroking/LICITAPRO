@@ -49,9 +49,18 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
   const [enviando, setEnviando] = useState(false);
   const [ultimoEstatusInbox, setUltimoEstatusInbox] = useState(null);
 
+  // Hotfix -- si `project` llega undefined/null (proyecto no encontrado
+  // para este usuario en visibleProjects, aún cargando, o cualquier otro
+  // motivo), esto NO debe tronar en silencio ni dejar la pantalla en
+  // blanco -- se muestra un mensaje claro en vez de intentar leer
+  // project.cotizacion sobre algo inexistente.
+  if (!project) {
+    return h('div', { className:'empty' }, h('p', null, 'No se pudo cargar este proyecto. Vuelve a Proyectos e inténtalo de nuevo.'));
+  }
+
   const cot = project.cotizacion || {};
-  const partidas = cot.partidas || [];
-  const equipo = cot.equipo || [];
+  const partidas = Array.isArray(cot.partidas) ? cot.partidas : [];
+  const equipo = Array.isArray(cot.equipo) ? cot.equipo : [];
 
   // Fase 2F3: el estatus REAL de revisión vive en inbox_items (fuente de
   // verdad), no en cot.estatusRevision (que es solo un eco local para
