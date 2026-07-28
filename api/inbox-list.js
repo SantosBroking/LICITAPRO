@@ -52,20 +52,35 @@ module.exports = async function handler(req, res) {
     query += `&created_by=eq.${encodeURIComponent(profile.email)}`;
   }
 
+  // Hotfix 2F4 -- si la lectura de inbox_items falla (por el motivo que
+  // sea: cache de esquema de PostgREST desactualizada tras el ALTER TABLE
+  // que agregó seen_by_admin_at/seen_by_creator_at, un hipo transitorio de
+  // red, etc.), NO se rompe el endpoint completo con un 502 -- eso tumbaba
+  // el badge de navegación Y la vista de Inbox por igual. Se degrada con
+  // gracia: se responde igual con ok:true, items:[] y unreadCount:0, y el
+  // detalle REAL del error queda en los logs del servidor (nunca se
+  // expone al cliente, y nunca incluye la service key). El único caso que
+  // sigue devolviendo un error real es que falte la sesión/el perfil/la
+  // service key -- esos sí son fatales para esta solicitud.
   let items = [];
+  let degradado = false;
   try {
     const r = await fetch(query, { headers:restHeaders });
-    if (!r.ok) return res.status(502).json({ ok:false, error:'No se pudo leer el inbox' });
-    const parsed = await r.json();
-    // Hotfix 2F4 -- defensivo: la REST API de Supabase siempre debería
-    // regresar un arreglo para un SELECT normal, pero si por cualquier
-    // motivo regresara otra cosa (objeto de error con 200, null, etc.),
-    // nunca se debe dejar que eso se propague como "items" ni rompa el
-    // cálculo de unreadCount de abajo.
-    items = Array.isArray(parsed) ? parsed : [];
+    if (!r.ok) {
+      const detalle = await r.text().catch(()=> '');
+      console.error('[inbox-list] La lectura de inbox_items respondió HTTP', r.status, '-- se degrada a inbox vacío. Detalle:', detalle);
+      degradado = true;
+    } else {
+      const parsed = await r.json();
+      // Defensivo: la REST API de Supabase siempre debería regresar un
+      // arreglo para un SELECT normal, pero si por cualquier motivo
+      // regresara otra cosa (objeto de error con 200, null, etc.), nunca
+      // se debe dejar que eso se propague como "items".
+      items = Array.isArray(parsed) ? parsed : [];
+    }
   } catch(e) {
-    console.error('[inbox-list] Error leyendo inbox_items:', e.message);
-    return res.status(502).json({ ok:false, error:'No se pudo leer el inbox' });
+    console.error('[inbox-list] Excepción leyendo inbox_items, se degrada a inbox vacío:', e.message);
+    degradado = true;
   }
 
   // Fase 2F4 (hotfix) -- unreadCount: para admin, cuenta seen_by_admin_at
@@ -83,5 +98,13 @@ module.exports = async function handler(req, res) {
   }
   if (typeof unreadCount !== 'number' || Number.isNaN(unreadCount)) unreadCount = 0;
 
-  return res.status(200).json({ ok:true, user:{ id:authUser.id, email:profile.email, role:profile.role }, items, unreadCount });
+  const respuesta = { ok:true, user:{ id:authUser.id, email:profile.email, role:profile.role }, items, unreadCount };
+  // Señal SEGURA (sin detalle interno) de que esta respuesta es un
+  // fallback degradado -- Inbox.js/App.js pueden ignorarla hoy sin romper
+  // nada (siguen viendo ok:true, items:[], unreadCount:0), y sirve como
+  // gancho si más adelante se quiere mostrar un aviso distinto de "sin
+  // pendientes" real.
+  if (degradado) respuesta.degraded = true;
+
+  return res.status(200).json(respuesta);
 };
