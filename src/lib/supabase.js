@@ -320,8 +320,12 @@ export async function updateInboxItem(id, status, comentario) {
 // este usuario (admin: todos; empleado: los suyos). El campo que se
 // actualiza en el servidor (seen_by_admin_at o seen_by_creator_at) sale
 // siempre del rol real, nunca de lo que mande este cliente.
+// Hotfix de deployment (Vercel Hobby: límite de 12 Serverless Functions) --
+// api/inbox-mark-seen.js se fusionó dentro de api/inbox-update.js. Mismo
+// comportamiento para quien llama esta función, solo cambia el endpoint y
+// el shape del body (envuelto en `mark_seen`).
 export async function markInboxSeen({ ids, all } = {}) {
-  const json = await postJsonWithSession('/api/inbox-mark-seen', all ? { all:true } : { ids });
+  const json = await postJsonWithSession('/api/inbox-update', { mark_seen: all ? { all:true } : { ids } });
   return json.updated || 0;
 }
 
