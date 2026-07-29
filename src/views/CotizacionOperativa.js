@@ -41,17 +41,39 @@ const SUBTAB_LABELS = { partidas: 'Partidas', equipo: 'Equipo' };
 const makePartidaOperativa = (id) => ({ id, activo:false, tipo:'', marca:'', modelo:'', ano:new Date().getFullYear(), version:'', color:'', cantidad:0, vehiculoId:null, foto:'', costoMSMS:0, precioLista:0, precioPropuesto:0 });
 
 export default function CotizacionOperativa({ project, onUpdate, activeTab, setActiveTab, user, logFn }) {
-  const [_localTab, _setLocalTab] = useState(activeTab || 'partidas');
-  const tab = activeTab || _localTab;
+  const [_localTab, _setLocalTab] = useState('partidas');
+  // Hotfix -- `tab` SIEMPRE debe ser uno de SUBTABS ('partidas'|'equipo'),
+  // nunca un valor legacy/inválido (ej. 'resumen', que dejó de existir en
+  // el microfix de limpieza de UI) -- si eso llegara a colarse por
+  // cualquier motivo (subTabs con un valor viejo persistido, timing entre
+  // proyectos, etc.), ANTES no coincidía con ninguna de las dos ramas de
+  // render y la pantalla quedaba en blanco debajo de la barra de tabs, sin
+  // ningún error visible. Ahora se autocorrige aquí mismo, sin depender
+  // solo de que App.js/sanitizeSubTab lo haya saneado antes de llegar.
+  const tabCrudo = activeTab || _localTab;
+  const tab = SUBTABS.includes(tabCrudo) ? tabCrudo : 'partidas';
   const setTab = (t) => { _setLocalTab(t); if (setActiveTab) setActiveTab(t); };
   const [showCat, setShowCat] = useState(false);
   const [catSel, setCatSel] = useState(null);
   const [enviando, setEnviando] = useState(false);
   const [ultimoEstatusInbox, setUltimoEstatusInbox] = useState(null);
 
-  const cot = project.cotizacion || {};
-  const partidas = cot.partidas || [];
-  const equipo = cot.equipo || [];
+  // Hotfix -- soporta cotizaciones MÍNIMAS: { equipo, partidas,
+  // estatusRevision } y nada más (sin folio/vendedor/agenciaProveedor/etc.)
+  // -- ninguno de esos campos se lee en este archivo salvo con fallback
+  // (`cot.folio||'—'`), así que su ausencia nunca debería tronar; se
+  // valida explícitamente con Array.isArray() en vez de solo `|| []`, que
+  // no protege si el campo viniera con una forma inesperada (objeto en
+  // vez de arreglo, por ejemplo). `project` puede llegar undefined/null
+  // (proyecto no encontrado, timing, etc.) -- estas constantes usan
+  // encadenamiento opcional para nunca tronar en ese caso; el mensaje
+  // claro (en vez de renderizar contenido con datos inexistentes) se
+  // muestra más abajo, DESPUÉS de todos los hooks (nunca antes -- un
+  // return condicional antes de un hook rompe el orden de hooks de React
+  // si `project` cambia de undefined a definido entre renders).
+  const cot = project?.cotizacion || {};
+  const partidas = Array.isArray(cot.partidas) ? cot.partidas : [];
+  const equipo = Array.isArray(cot.equipo) ? cot.equipo : [];
 
   // Fase 2F3: el estatus REAL de revisión vive en inbox_items (fuente de
   // verdad), no en cot.estatusRevision (que es solo un eco local para
@@ -59,6 +81,7 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
   // de este proyecto para reflejar aprobaciones/rechazos/cambios
   // solicitados que el admin haya resuelto desde el Inbox.
   useEffect(() => {
+    if (!project) return; // hotfix -- sin proyecto, nada que consultar
     let cancelado = false;
     listInboxItems()
       .then(({ items }) => {
@@ -71,7 +94,14 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
       })
       .catch(e => console.error('[CotizacionOperativa] No se pudo consultar el estatus de revisión:', e));
     return () => { cancelado = true; };
-  }, [project.id]);
+  }, [project?.id]);
+
+  // Hotfix -- ahora sí, DESPUÉS de todos los hooks: si `project` llega
+  // undefined/null, se muestra un mensaje claro en vez de intentar leer
+  // sus campos o renderizar contenido inexistente.
+  if (!project) {
+    return h('div', { className:'empty' }, h('p', null, 'No se pudo cargar este proyecto. Vuelve a Proyectos e inténtalo de nuevo.'));
+  }
 
   const estatusMostrado = ultimoEstatusInbox || cot.estatusRevision || 'borrador';
   const ESTATUS_LABELS = { borrador:'Borrador', pendiente:'Enviada, en espera', en_revision:'En revisión', cambios_solicitados:'Cambios solicitados', aprobado:'Aprobada', rechazado:'Rechazada', revisado:'Revisada' };
