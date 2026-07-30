@@ -505,7 +505,7 @@ export default function App() {
     try {
       const guardado = await saveVehicleViaEndpoint(paraGuardar);
       setVehicles(prev => prev.map(x=>x.id===guardado.id?guardado:x));
-    } catch(e){ console.error('[2E3D] Error guardando vehículo vía /api/save-vehicle:', e); }
+    } catch(e){ console.error('[3F-1] Error guardando vehículo vía /api/save-project (entity:vehicle):', e); }
   }, [user, vehicles]);
 
   const handleDeleteVehicle = useCallback(async (id) => {

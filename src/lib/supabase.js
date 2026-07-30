@@ -264,16 +264,21 @@ export async function saveCompanyViaEndpoint(company) {
 // Fase 2E3C — guardado de proyecto vía endpoint server-side
 // (api/save-project.js), con merge seguro contra la base real.
 // saveProject() de arriba NO se toca, sigue existiendo.
+// Fase 3F-1 — api/save-vehicle.js se fusionó dentro de api/save-project.js
+// (consolidación de límite de funciones Vercel Hobby). El endpoint ahora
+// exige `entity` explícito ("project"|"vehicle") para saber qué guardar --
+// ver api/save-project.js para el razonamiento de por qué no hay fallback.
 export async function saveProjectViaEndpoint(project) {
-  const json = await postJsonWithSession('/api/save-project', project);
+  const json = await postJsonWithSession('/api/save-project', { entity:'project', payload:project });
   return json.project;
 }
 
-// Fase 2E3D — guardado de vehículo vía endpoint server-side
-// (api/save-vehicle.js), con merge seguro contra la base real.
+// Fase 2E3D — guardado de vehículo vía endpoint server-side. Fase 3F-1:
+// mismo endpoint que saveProjectViaEndpoint (api/save-project.js), ya no
+// existe api/save-vehicle.js como archivo separado.
 // saveVehicle() de arriba NO se toca, sigue existiendo.
 export async function saveVehicleViaEndpoint(vehicle) {
-  const json = await postJsonWithSession('/api/save-vehicle', vehicle);
+  const json = await postJsonWithSession('/api/save-project', { entity:'vehicle', payload:vehicle });
   return json.vehicle;
 }
 
