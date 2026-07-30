@@ -25,6 +25,7 @@ import { StorageImg, NumInput } from '../ui/primitives.js';
 import { CATALOG_PRODUCTS } from '../lib/catalog.js';
 import { TODAY } from '../lib/utils.js';
 import { createInboxItem, listInboxItems } from '../lib/supabase.js';
+import { INBOX_PRIORIDADES, INBOX_PRIORIDAD_LABELS, INBOX_ACCIONES, INBOX_ACCION_LABELS } from '../lib/constants.js';
 
 // Microfix (limpieza UI): 'resumen' ya no es una sub-pestaña ni una franja
 // informativa aparte -- se eliminó por completo (repetía el encabezado del
@@ -57,6 +58,7 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
   const [catSel, setCatSel] = useState(null);
   const [enviando, setEnviando] = useState(false);
   const [ultimoEstatusInbox, setUltimoEstatusInbox] = useState(null);
+  const [showModalRevision, setShowModalRevision] = useState(false);
 
   // Hotfix -- soporta cotizaciones MÍNIMAS: { equipo, partidas,
   // estatusRevision } y nada más (sin folio/vendedor/agenciaProveedor/etc.)
@@ -113,24 +115,34 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
 
   const updPartida = (id, k, v) => updCot({ ...cot, partidas: partidas.map(p => p.id===id ? {...p,[k]:v} : p) });
 
-  // Fase 2F3: "Enviar a revisión" -- crea un pendiente en el Inbox (tabla
-  // separada, ver sql/2f3_inbox_items.sql) con SOLO una referencia liviana
-  // (folio, nombre de proyecto, conteo de partidas/equipo) -- NUNCA un
-  // snapshot de la cotización completa (misma lección de firmas[].proyecto,
-  // Fase 2E). Actualiza cot.estatusRevision como eco local inmediato.
-  const enviarARevision = async () => {
+  // Fase 2F3 + 2G: "Enviar a revisión" -- crea un pendiente en el Inbox
+  // (tabla separada, ver sql/2f3_inbox_items.sql) con SOLO una referencia
+  // liviana (folio, nombre de proyecto, conteo de partidas/equipo) + los
+  // campos robustos que el modal recolecta (prioridad/mensaje/acción/
+  // referencia opcional) -- NUNCA un snapshot de la cotización completa
+  // (misma lección de firmas[].proyecto, Fase 2E). Actualiza
+  // cot.estatusRevision como eco local inmediato.
+  const enviarARevision = async ({ prioridad, mensaje, accionSolicitada, referenciaTipo, referenciaId, referenciaLabel }) => {
     setEnviando(true);
     try {
       await createInboxItem({
         type: 'cotizacion_revision',
         title: 'Cotización de "'+(project.name||'proyecto sin nombre')+'" lista para revisión',
-        message: 'Folio: '+(cot.folio||'—')+' · '+partidas.filter(p=>p.activo).length+' partida(s) · '+equipo.length+' equipo(s).',
+        message: (mensaje && mensaje.trim()) || ('Folio: '+(cot.folio||'—')+' · '+partidas.filter(p=>p.activo).length+' partida(s) · '+equipo.length+' equipo(s).'),
         project_id: project.id,
-        data: { folio: cot.folio||'', proyectoNombre: project.name||'', partidasActivas: partidas.filter(p=>p.activo).length, equipoCount: equipo.length },
+        data: {
+          folio: cot.folio||'', proyectoNombre: project.name||'',
+          partidasActivas: partidas.filter(p=>p.activo).length, equipoCount: equipo.length,
+          prioridad: prioridad || 'media',
+          ...(accionSolicitada ? { accionSolicitada } : {}),
+          ...(referenciaTipo ? { referenciaTipo, referenciaId, referenciaLabel } : {}),
+          source: 'cotizacion_operativa',
+        },
       });
       updCot({ ...cot, estatusRevision: 'en_revision' });
       setUltimoEstatusInbox('en_revision');
       if (logFn) logFn(user, 'envió a revisión', 'cotización', project.id, project.name||'');
+      setShowModalRevision(false);
     } catch(e) { alert('No se pudo enviar a revisión: ' + e.message); }
     setEnviando(false);
   };
@@ -229,7 +241,7 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
     // limpieza de Cotización Operativa: nada de resúmenes repetidos).
     h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, flexWrap:'wrap', gap:8 } },
       h('span', { style:{ fontSize:11, padding:'4px 12px', borderRadius:12, background:(ESTATUS_COLORES[estatusMostrado]||ESTATUS_COLORES.borrador).bg, color:(ESTATUS_COLORES[estatusMostrado]||ESTATUS_COLORES.borrador).tx, fontWeight:500 } }, 'Estatus: '+(ESTATUS_LABELS[estatusMostrado]||estatusMostrado)),
-      h('button', { disabled:enviando, onClick:enviarARevision, style:{ fontSize:12, padding:'7px 14px', background:'var(--blue)', color:'#fff', border:'none', borderRadius:'var(--r)', cursor:enviando?'wait':'pointer', opacity:enviando?.7:1 } }, enviando?'Enviando...':'Enviar a revisión'),
+      h('button', { disabled:enviando, onClick:()=>setShowModalRevision(true), style:{ fontSize:12, padding:'7px 14px', background:'var(--blue)', color:'#fff', border:'none', borderRadius:'var(--r)', cursor:enviando?'wait':'pointer', opacity:enviando?.7:1 } }, enviando?'Enviando...':'Enviar a revisión'),
     ),
     h('div', { style:{ display:'flex', gap:0, marginBottom:20, borderBottom:'1px solid var(--b1)', overflowX:'auto' } },
       SUBTABS.map(t => h('button', { key:t, className:'tab'+(tab===t?' active':''), onClick:()=>setTab(t), style:{ flexShrink:0, whiteSpace:'nowrap' } }, SUBTAB_LABELS[t]))
@@ -376,6 +388,74 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
           })),
         ),
       )),
+    ),
+    showModalRevision && h(ModalEnviarRevision, {
+      partidasActivas: partidas.filter(p=>p.activo), equipo, enviando,
+      onCancel:()=>setShowModalRevision(false), onSubmit:enviarARevision,
+    }),
+  );
+}
+
+// Fase 2G — modal simple para "Enviar a revisión": prioridad, mensaje,
+// acción solicitada, y una referencia opcional (proyecto completo, una
+// partida activa específica, o un equipo específico). Nunca manda datos
+// financieros -- solo id/etiqueta de la referencia elegida, igual que el
+// resto de `data` en inbox_items (allowlist server-side en
+// api/inbox-create.js, esto es solo la recolección en UI).
+function ModalEnviarRevision({ partidasActivas, equipo, enviando, onCancel, onSubmit }) {
+  const [prioridad, setPrioridad] = useState('media');
+  const [mensaje, setMensaje] = useState('');
+  const [accion, setAccion] = useState('');
+  const [referencia, setReferencia] = useState(''); // '' = proyecto completo; 'P:<id>' o 'E:<id>'
+
+  const enviar = () => {
+    let referenciaTipo, referenciaId, referenciaLabel;
+    if (referencia.startsWith('P:')) {
+      const id = referencia.slice(2);
+      const p = partidasActivas.find(x=>x.id===id);
+      referenciaTipo = 'partida'; referenciaId = id; referenciaLabel = p ? (p.id+' — '+(p.tipo||p.marca||'')) : id;
+    } else if (referencia.startsWith('E:')) {
+      const id = referencia.slice(2);
+      const e = equipo.find(x=>x.id===id);
+      referenciaTipo = 'equipo'; referenciaId = id; referenciaLabel = e ? e.nombre : id;
+    }
+    onSubmit({ prioridad, mensaje, accionSolicitada: accion || undefined, referenciaTipo, referenciaId, referenciaLabel });
+  };
+
+  return h('div', { style:{ position:'fixed', inset:0, background:'rgba(0,0,0,.4)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000, padding:16 }, onClick:onCancel },
+    h('div', { className:'card', style:{ maxWidth:440, width:'100%', maxHeight:'85vh', overflowY:'auto' }, onClick:e=>e.stopPropagation() },
+      h('div', { style:{ fontSize:16, fontWeight:500, marginBottom:14 } }, 'Enviar cotización a revisión'),
+      h('div', { style:{ display:'flex', flexDirection:'column', gap:10 } },
+        h('div', null,
+          h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:3 } }, 'Prioridad'),
+          h('select', { value:prioridad, onChange:e=>setPrioridad(e.target.value), style:{ fontSize:12, padding:'6px 8px', width:'100%', boxSizing:'border-box' } },
+            INBOX_PRIORIDADES.map(p => h('option', { key:p, value:p }, INBOX_PRIORIDAD_LABELS[p])),
+          ),
+        ),
+        h('div', null,
+          h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:3 } }, 'Mensaje para admin'),
+          h('textarea', { value:mensaje, onChange:e=>setMensaje(e.target.value), rows:3, placeholder:'Ej: Ya quedó lista, solo falta confirmar el equipo de la partida P2', style:{ fontSize:13, padding:'7px 9px', width:'100%', boxSizing:'border-box', fontFamily:'inherit', resize:'vertical' } }),
+        ),
+        h('div', null,
+          h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:3 } }, 'Acción solicitada (opcional)'),
+          h('select', { value:accion, onChange:e=>setAccion(e.target.value), style:{ fontSize:12, padding:'6px 8px', width:'100%', boxSizing:'border-box' } },
+            h('option', { value:'' }, '—'),
+            INBOX_ACCIONES.map(a => h('option', { key:a, value:a }, INBOX_ACCION_LABELS[a])),
+          ),
+        ),
+        (partidasActivas.length>0 || equipo.length>0) && h('div', null,
+          h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:3 } }, 'Referencia (opcional)'),
+          h('select', { value:referencia, onChange:e=>setReferencia(e.target.value), style:{ fontSize:12, padding:'6px 8px', width:'100%', boxSizing:'border-box' } },
+            h('option', { value:'' }, 'Cotización completa'),
+            partidasActivas.map(p => h('option', { key:'P:'+p.id, value:'P:'+p.id }, 'Partida '+p.id+(p.tipo?' — '+p.tipo:''))),
+            equipo.map(e => h('option', { key:'E:'+e.id, value:'E:'+e.id }, 'Equipo — '+e.nombre)),
+          ),
+        ),
+      ),
+      h('div', { style:{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:16 } },
+        h('button', { onClick:onCancel, style:{ fontSize:12, padding:'7px 14px', background:'transparent', border:'1px solid var(--b2)', borderRadius:6, cursor:'pointer' } }, 'Cancelar'),
+        h('button', { disabled:enviando, onClick:enviar, style:{ fontSize:12, padding:'7px 16px', background:'var(--blue)', color:'#fff', border:'none', borderRadius:6, cursor:'pointer', opacity:enviando?.7:1 } }, enviando?'Enviando...':'Enviar a revisión'),
+      ),
     ),
   );
 }
