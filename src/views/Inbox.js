@@ -1,6 +1,7 @@
 import { h, useState, useEffect, useRef } from '../lib/core.js';
 import { listInboxItems, updateInboxItem, markInboxSeen, createInboxItem, commentOnInboxItem } from '../lib/supabase.js';
 import { getPermissions } from '../lib/permissions.js';
+import { normalizeProjectName } from '../lib/utils.js';
 import {
   INBOX_TIPOS, INBOX_TIPO_LABELS, INBOX_ESTATUS, INBOX_ESTATUS_LABELS,
   INBOX_PRIORIDADES, INBOX_PRIORIDAD_LABELS, INBOX_ACCIONES, INBOX_ACCION_LABELS,
@@ -153,7 +154,7 @@ export function Inbox({ user, onNav, projects, onSeenChange }) {
       ),
       h('select', { value:filtroProyecto, onChange:e=>setFiltroProyecto(e.target.value), style:{ fontSize:12, padding:'6px 10px', borderRadius:6, border:'1px solid var(--b2)', maxWidth:180 } },
         h('option', { value:'todos' }, 'Todos los proyectos'),
-        (projects||[]).map(p => h('option', { key:p.id, value:p.id }, p.name)),
+        (projects||[]).map(p => h('option', { key:p.id, value:p.id }, normalizeProjectName(p.name))),
       ),
       isAdmin && h('select', { value:filtroCreador, onChange:e=>setFiltroCreador(e.target.value), style:{ fontSize:12, padding:'6px 10px', borderRadius:6, border:'1px solid var(--b2)' } },
         h('option', { value:'todos' }, 'Todos los creadores'),
@@ -184,7 +185,7 @@ export function Inbox({ user, onNav, projects, onSeenChange }) {
                     h(BadgePrioridad, { prioridad }),
                   ),
                   h('div', { style:{ fontSize:11, color:'var(--t2)', marginTop:3 } },
-                    (INBOX_TIPO_LABELS[item.type]||item.type), ' · ', (proyecto ? proyecto.name : (item.project_id || 'sin proyecto')),
+                    (INBOX_TIPO_LABELS[item.type]||item.type), ' · ', (proyecto ? normalizeProjectName(proyecto.name) : (item.project_id || 'sin proyecto')),
                     ' · ', (item.created_by||'—'), ' · ', item.created_at ? new Date(item.created_at).toLocaleString('es-MX') : '—'),
                   !expandido && item.message && h('div', { style:{ fontSize:12, color:'var(--t1)', marginTop:6, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, item.message),
                 ),
@@ -266,7 +267,7 @@ function NuevaPeticionModal({ projects, onClose, onCreated }) {
           prioridad,
           ...(accion ? { accionSolicitada: accion } : {}),
           ...(dueDate ? { dueDate } : {}),
-          ...(proyecto ? { proyectoNombre: proyecto.name } : {}),
+          ...(proyecto ? { proyectoNombre: normalizeProjectName(proyecto.name) } : {}),
           source: 'inbox_manual',
         },
       });
@@ -288,7 +289,7 @@ function NuevaPeticionModal({ projects, onClose, onCreated }) {
             // CREAR una petición nueva (el filtro de búsqueda de arriba,
             // en cambio, sigue listando todos, para poder encontrar
             // peticiones ya existentes de un proyecto que ya se perdió).
-            (projects||[]).filter(p=>!esProyectoPerdido(p.status)).map(p => h('option', { key:p.id, value:p.id }, p.name)),
+            (projects||[]).filter(p=>!esProyectoPerdido(p.status)).map(p => h('option', { key:p.id, value:p.id }, normalizeProjectName(p.name))),
           ),
         ),
         h('div', { style:{ display:'flex', gap:8 } },

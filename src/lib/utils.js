@@ -140,3 +140,11 @@ export function numeroALetras(num) {
   const centStr = String(centavos).padStart(2,'0');
   return `${letras} PESOS ${centStr}/100 M.N.`;
 }
+
+// Ajuste solicitado -- nombres/títulos de proyecto en MAYÚSCULAS,
+// uniforme. Solo para project.name -- NUNCA para folios, nombres de
+// cliente/dependencia, descripciones, documentos, ni razón social/datos
+// fiscales de empresas (esos campos son otros, no se tocan por este
+// helper). Colapsa espacios múltiples y recorta extremos antes de
+// mayuscular, para evitar inconsistencias tipo "  Patrullas   Morelos ".
+export const normalizeProjectName = (nombre) => (nombre || '').replace(/\s+/g, ' ').trim().toUpperCase();

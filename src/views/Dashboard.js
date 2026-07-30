@@ -96,7 +96,7 @@ export default function Dashboard({ projects, vehicles, companies, onNav, onUpda
           h('tbody', null, projectsVisibles.map(p => {
             const alF = alertLevel(p.fechaFallo);
             return h('tr', { key:p.id, onClick:()=>onNav('project_detail',p.id), style:{ borderBottom:'.5px solid var(--b3)', cursor:'pointer' } },
-              h('td', { style:{ padding:'10px 6px', fontWeight:500 } }, p.name),
+              h('td', { style:{ padding:'10px 6px', fontWeight:500, textTransform:'uppercase' } }, p.name),
               h('td', { style:{ padding:'10px 6px', color:'var(--t2)' } }, p.dependencia||'—'),
               h('td', { style:{ padding:'10px 6px', fontSize:12, color:'var(--t2)' } }, p.company||'—'),
               h('td', { style:{ padding:'10px 6px', fontWeight:500, whiteSpace:'nowrap' } }, fmt(p.montoEstimado)),
@@ -114,7 +114,7 @@ export default function Dashboard({ projects, vehicles, companies, onNav, onUpda
           return h('div', { key:p.id, onClick:()=>onNav('project_detail',p.id),
             style:{ padding:'12px 0', borderBottom:'.5px solid var(--b3)', cursor:'pointer' } },
             h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8, marginBottom:4 } },
-              h('div', { style:{ fontWeight:500, fontSize:13, flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, p.name),
+              h('div', { style:{ fontWeight:500, fontSize:13, flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textTransform:'uppercase' } }, p.name),
               h(Badge, { statusId:p.status }),
             ),
             h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', fontSize:11, color:'var(--t2)', gap:8 } },

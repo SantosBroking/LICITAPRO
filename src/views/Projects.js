@@ -4,7 +4,7 @@ import { calcCotizacion } from '../lib/calc.js';
 // Projects.js — Lista, formulario y detalle de proyecto
 import { h, useState, useMemo, useCallback, useRef, useEffect } from '../lib/core.js';
 import { STATUSES, FINAL_STATUS, KANBAN_COLS, TIPOS_PROCEDIMIENTO, DEPENDENCIAS_COMUNES, TIPOS_PRODUCTO, esProyectoPerdido } from '../lib/constants.js';
-import { fmt, daysUntil, alertLevel, TODAY, NOW, uid } from '../lib/utils.js';
+import { fmt, daysUntil, alertLevel, TODAY, NOW, uid, normalizeProjectName } from '../lib/utils.js';
 import { Badge, AlertChip, Metric, Inp, EmptyState, ConfirmAction, NumInput, DeleteConfirmModal } from '../ui/primitives.js';
 import { getPermissions, canProjectTab, getAllowedSubTabs } from '../lib/permissions.js'; // Fase 1C + fix navegación + Fase 2A6 (sub-nav de Operación)
 import { sb } from '../lib/supabase.js'; // Fase 1C — directorio de usuarios activos
@@ -175,7 +175,7 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate, user }) {
         const alF=alertLevel(p.fechaFallo);
         return h('tr', { key:p.id, style:{ borderBottom:'.5px solid var(--b3)', cursor:'pointer' }, onClick:()=>onNav('project_detail',p.id) },
           h('td', { style:{ padding:'10px 6px', fontWeight:500, maxWidth:220 } },
-            h('div', { style:{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, p.name),
+            h('div', { style:{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textTransform:'uppercase' } }, p.name),
             p.numLicitacion && h('div', { style:{ fontSize:11, color:'var(--t2)' } }, p.numLicitacion),
           ),
           h('td', { style:{ padding:'10px 6px', color:'var(--t2)', fontSize:12 } }, p.dependencia||'—'),
@@ -195,7 +195,7 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate, user }) {
           // Línea 1: nombre + monto
           h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10, marginBottom:4 } },
             h('div', { style:{ flex:1, minWidth:0 } },
-              h('div', { style:{ fontWeight:600, fontSize:14, lineHeight:1.25 } }, p.name),
+              h('div', { style:{ fontWeight:600, fontSize:14, lineHeight:1.25, textTransform:'uppercase' } }, p.name),
               p.numLicitacion && h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:1 } }, p.numLicitacion),
             ),
             h('div', { style:{ fontWeight:600, fontSize:14, whiteSpace:'nowrap', flexShrink:0 } }, fmt(p.montoEstimado)),
@@ -249,7 +249,7 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate, user }) {
           return h('div', { key:colId, style:{ width:220, flexShrink:0 } },
             h('div', { style:{ fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:.5, color:s?.tx||'var(--t2)', background:s?.bg||'var(--bg2)', padding:'6px 12px', borderRadius:'var(--r)', marginBottom:8 } }, s?.label||colId,' (',cols.length,')'),
             cols.map(p => h('div', { key:p.id, className:'card', style:{ marginBottom:8, cursor:'pointer', fontSize:13 }, onClick:()=>onNav('project_detail',p.id) },
-              h('div', { style:{ fontWeight:500, marginBottom:4, lineHeight:1.3 } }, p.name),
+              h('div', { style:{ fontWeight:500, marginBottom:4, lineHeight:1.3, textTransform:'uppercase' } }, p.name),
               h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:6 } }, p.dependencia||'—'),
               h('div', { style:{ fontSize:12, fontWeight:500 } }, fmt(p.montoEstimado)),
               p.fechaFallo && h('div', { style:{ fontSize:10, color:alertLevel(p.fechaFallo)?'var(--red)':'var(--t3)', marginTop:4 } }, 'Fallo: ',p.fechaFallo),
@@ -346,6 +346,12 @@ export function ProjectForm({ project, companies, config, onSave, onCancel, user
   };
   const doSave = async () => {
     if(!p.name.trim()){alert('El nombre del proyecto es obligatorio');return;}
+    // Ajuste solicitado -- el nombre del proyecto se guarda ya en
+    // MAYÚSCULAS uniforme (crear y editar comparten este mismo doSave).
+    // Solo el nombre -- dependencia/numLicitacion/descripciones/etc. NO
+    // se tocan. `p` es const (useState) -- no se reasigna, se construye
+    // un objeto nuevo para lo que realmente se envía a guardar.
+    const pParaGuardar = { ...p, name: normalizeProjectName(p.name) };
     // ¿Cambió el responsable? Si es uno nuevo (distinto al original), ofrecer avisarle
     const respAnterior = project?.responsable || '';
     const respNuevo = p.responsable || '';
@@ -358,7 +364,7 @@ export function ProjectForm({ project, companies, config, onSave, onCancel, user
           try {
             await avisarAsignacionProyecto({
               responsableNombre:emp.name, responsableEmail:emp.email,
-              proyectoNombre:p.name, dependencia:p.dependencia, numLicitacion:p.numLicitacion, fechaFallo:p.fechaFallo,
+              proyectoNombre:pParaGuardar.name, dependencia:p.dependencia, numLicitacion:p.numLicitacion, fechaFallo:p.fechaFallo,
               asignadoPor:(user?.name||user?.email||'La dirección'), linkApp:'https://licitapro-beta.vercel.app/?view=project_detail&project='+p.id,
             });
             alert('✅ Correo enviado a '+emp.email);
@@ -366,7 +372,7 @@ export function ProjectForm({ project, companies, config, onSave, onCancel, user
         }
       }
     }
-    await onSave(p,true);
+    await onSave(pParaGuardar,true);
   };
   return h('div', null,
     h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 } },
@@ -557,12 +563,12 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
     h('div', { style:{ display:'flex', alignItems:'center', gap:8, marginBottom:6 } },
       h('span', { onClick:()=>onNav('projects'), style:{ fontSize:12, color:'var(--blue)', cursor:'pointer' } }, 'Proyectos'),
       h('span', { style:{ fontSize:12, color:'var(--t2)' } }, '/'),
-      h('span', { style:{ fontSize:12 } }, project.name),
+      h('span', { style:{ fontSize:12, textTransform:'uppercase' } }, project.name),
     ),
     // Header
     h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16, flexWrap:'wrap', gap:12 } },
       h('div', null,
-        h('div', { style:{ fontSize:20, fontWeight:600, marginBottom:4, lineHeight:1.3, letterSpacing:'-0.3px' } }, project.name),
+        h('div', { style:{ fontSize:20, fontWeight:600, marginBottom:4, lineHeight:1.3, letterSpacing:'-0.3px', textTransform:'uppercase' } }, project.name),
         h('div', { style:{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' } },
           h(Badge, { statusId:project.status }),
           project.dependencia && h('span', { style:{ fontSize:12, color:'var(--t2)' } }, project.dependencia),
