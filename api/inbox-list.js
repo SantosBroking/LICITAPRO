@@ -48,8 +48,11 @@ module.exports = async function handler(req, res) {
 
   let query = `${SUPA_URL}/rest/v1/inbox_items?user_id=eq.${WORKSPACE_ID}&select=id,project_id,type,status,title,message,created_by,assigned_to,data,history,created_at,updated_at,seen_by_admin_at,seen_by_creator_at&order=created_at.desc`;
   if (!isAdmin) {
-    // Empleado: solo sus propios pendientes.
-    query += `&created_by=eq.${encodeURIComponent(profile.email)}`;
+    // Fase 2G -- empleado ve sus propios pendientes Y los que le asignen
+    // explícitamente (created_by O assigned_to = su email). Antes solo
+    // veía lo que él mismo creaba.
+    const emailParam = encodeURIComponent(profile.email);
+    query += `&or=(created_by.eq.${emailParam},assigned_to.eq.${emailParam})`;
   }
 
   let items = [];

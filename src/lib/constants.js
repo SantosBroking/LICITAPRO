@@ -81,3 +81,40 @@ export const DEFAULT_CONFIG = {
   customStatuses: [],
   customProductTypes: [],
 };
+
+// ── Fase 2G — Peticiones internas robustas (Inbox) ──────────────────────
+// Los 4 tipos originales (Fase 2F3) se mantienen con su nombre exacto, sin
+// renombrar -- ya existen pendientes reales en producción con esos valores
+// de `type`, renombrarlos rompería su visualización histórica. Los nuevos
+// se agregan como tipos adicionales, no reemplazos.
+export const INBOX_TIPOS = [
+  'proyecto_nuevo', 'cotizacion_revision', 'documento_cargado', 'cambios_solicitados',
+  'aprobar_precio', 'revisar_documento', 'aprobar_factura_proveedor', 'cambio_operativo', 'duda_admin', 'alta_proveedor', 'otro',
+];
+export const INBOX_TIPO_LABELS = {
+  proyecto_nuevo: 'Proyecto nuevo',
+  cotizacion_revision: 'Cotización a revisión',
+  documento_cargado: 'Documento cargado',
+  cambios_solicitados: 'Cambios solicitados',
+  aprobar_precio: 'Aprobar precio',
+  revisar_documento: 'Revisar documento',
+  aprobar_factura_proveedor: 'Aprobar factura de proveedor',
+  cambio_operativo: 'Cambio operativo',
+  duda_admin: 'Duda para admin',
+  alta_proveedor: 'Alta de proveedor',
+  otro: 'Otro',
+};
+// 'cerrado' es NUEVO en esta fase -- se agrega al final, no se reordena ni
+// se quita ninguno de los 6 existentes (compatibilidad con pendientes ya
+// creados desde Fase 2F3).
+export const INBOX_ESTATUS = ['pendiente', 'en_revision', 'cambios_solicitados', 'aprobado', 'rechazado', 'revisado', 'cerrado'];
+export const INBOX_ESTATUS_LABELS = {
+  pendiente: 'Pendiente', en_revision: 'En revisión', cambios_solicitados: 'Cambios solicitados',
+  aprobado: 'Aprobado', rechazado: 'Rechazado', revisado: 'Revisado', cerrado: 'Cerrado',
+};
+export const INBOX_PRIORIDADES = ['baja', 'media', 'alta', 'urgente'];
+export const INBOX_PRIORIDAD_LABELS = { baja:'Baja', media:'Media', alta:'Alta', urgente:'Urgente' };
+export const INBOX_ACCIONES = ['aprobar', 'revisar', 'corregir', 'comentar', 'confirmar'];
+export const INBOX_ACCION_LABELS = { aprobar:'Aprobar', revisar:'Revisar', corregir:'Corregir', comentar:'Comentar', confirmar:'Confirmar' };
+export const INBOX_REFERENCIA_TIPOS = ['partida', 'equipo', 'documento', 'vehiculo'];
+

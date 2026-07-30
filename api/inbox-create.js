@@ -2,9 +2,30 @@ const SUPA_URL = 'https://lzogvusabogzitwnlttb.supabase.co';
 const SUPA_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx6b2d2dXNhYm9neml0d25sdHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAyNjY0NDEsImV4cCI6MjA5NTg0MjQ0MX0.IbX6NCBOOMdl9CAjn82GlOlIpRgolLZf_kLso35UK58';
 const WORKSPACE_ID = '31daca2f-17ff-4ce1-83ca-99e2b31094b7';
 
-// Tipos válidos de pendiente -- allowlist explícita, nunca se acepta un
-// `type` arbitrario del cliente.
-const TIPOS_VALIDOS = ['proyecto_nuevo', 'cotizacion_revision', 'documento_cargado', 'cambios_solicitados'];
+// Fase 2G — tipos/prioridad/acción/referencia ahora viven en
+// src/lib/constants.js (compartido con la UI, Inbox.js/CotizacionOperativa.js)
+// para no duplicar listas -- import dinámico, mismo patrón ya usado por
+// api/save-project.js con data_sanitize.js.
+async function cargarConstantesInbox() {
+  const mod = await import('../src/lib/constants.js');
+  return {
+    TIPOS_VALIDOS: mod.INBOX_TIPOS,
+    PRIORIDADES_VALIDAS: mod.INBOX_PRIORIDADES,
+    ACCIONES_VALIDAS: mod.INBOX_ACCIONES,
+    REFERENCIA_TIPOS_VALIDOS: mod.INBOX_REFERENCIA_TIPOS,
+  };
+}
+
+// Fase 2G — campos permitidos dentro de `data` (jsonb). Allowlist explícita
+// -- cualquier campo que NO esté aquí se descarta silenciosamente, nunca se
+// guarda tal cual lo mande el cliente. Cubre tanto los campos operativos ya
+// existentes desde 2F2/2F3 (folio, proyectoNombre, partidasActivas,
+// equipoCount, categorias, cantidad) como los nuevos de la petición robusta
+// (prioridad, accionSolicitada, referenciaTipo/Id/Label, dueDate, source).
+const CAMPOS_DATA_PERMITIDOS = [
+  'folio', 'proyectoNombre', 'partidasActivas', 'equipoCount', 'categorias', 'cantidad',
+  'prioridad', 'accionSolicitada', 'referenciaTipo', 'referenciaId', 'referenciaLabel', 'dueDate', 'source',
+];
 
 // Fase 2F3 — endpoint de ESCRITURA para CREAR un pendiente nuevo. Ambos
 // roles pueden crear (empleado manda a revisión / registra que cargó un
@@ -43,23 +64,61 @@ module.exports = async function handler(req, res) {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceKey) return res.status(500).json({ ok:false, error:'No se puede procesar la solicitud' });
 
+  let constantesInbox;
+  try {
+    constantesInbox = await cargarConstantesInbox();
+  } catch(e) {
+    console.error('[inbox-create] No se pudieron cargar las constantes:', e.message);
+    return res.status(500).json({ ok:false, error:'No se pudo procesar la solicitud' });
+  }
+  const { TIPOS_VALIDOS, PRIORIDADES_VALIDAS, ACCIONES_VALIDAS, REFERENCIA_TIPOS_VALIDOS } = constantesInbox;
+
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch(e) { body = null; } }
   if (!body || typeof body !== 'object') return res.status(400).json({ ok:false, error:'Falta el pendiente a crear' });
 
-  const { type, title, message, project_id, data } = body;
+  // Fase 2G -- `status` NUNCA se acepta del body en la creación, ni antes
+  // ni ahora: siempre se fuerza a 'pendiente' más abajo, sin importar qué
+  // mande el cliente (incluido cualquier intento de empleado de crear ya
+  // directamente como 'aprobado'/'rechazado'/'cerrado').
+  const { type, title, message, project_id, data, assigned_to } = body;
   if (!TIPOS_VALIDOS.includes(type)) return res.status(400).json({ ok:false, error:'Tipo de pendiente no válido' });
   if (!title || typeof title !== 'string') return res.status(400).json({ ok:false, error:'Falta el título del pendiente' });
 
-  // `data` acotado a un objeto liviano -- se descarta cualquier cosa que no
-  // sea un objeto plano, y se limita su tamaño serializado para evitar que
-  // alguien intente colar un snapshot grande por aquí.
+  // `data` acotado a un objeto liviano, con allowlist explícita de campos
+  // Y límite de tamaño -- se descarta cualquier campo no reconocido, nunca
+  // se guarda tal cual lo mande el cliente.
   let dataLimitada = {};
   if (data && typeof data === 'object' && !Array.isArray(data)) {
     const serializado = JSON.stringify(data);
     if (serializado.length > 4000) return res.status(400).json({ ok:false, error:'El campo data es demasiado grande -- solo debe llevar referencias (folio, nombre, id), no un snapshot del proyecto' });
-    dataLimitada = data;
+    Object.keys(data).forEach(campo => {
+      if (CAMPOS_DATA_PERMITIDOS.includes(campo)) dataLimitada[campo] = data[campo];
+    });
   }
+  // Validaciones específicas de los campos robustos de Fase 2G -- si algo
+  // no es válido, se descarta ese campo puntual (no se rechaza toda la
+  // petición por un valor de más), salvo prioridad/accionSolicitada que si
+  // vienen, deben ser válidos (para no guardar basura silenciosamente).
+  if (dataLimitada.prioridad !== undefined && !PRIORIDADES_VALIDAS.includes(dataLimitada.prioridad)) delete dataLimitada.prioridad;
+  if (dataLimitada.accionSolicitada !== undefined && !ACCIONES_VALIDAS.includes(dataLimitada.accionSolicitada)) delete dataLimitada.accionSolicitada;
+  if (dataLimitada.referenciaTipo !== undefined && !REFERENCIA_TIPOS_VALIDOS.includes(dataLimitada.referenciaTipo)) delete dataLimitada.referenciaTipo;
+  if (typeof dataLimitada.referenciaId !== 'string') delete dataLimitada.referenciaId;
+  if (typeof dataLimitada.referenciaLabel !== 'string') delete dataLimitada.referenciaLabel;
+  else dataLimitada.referenciaLabel = dataLimitada.referenciaLabel.slice(0, 200);
+  if (typeof dataLimitada.dueDate !== 'string' || isNaN(Date.parse(dataLimitada.dueDate))) delete dataLimitada.dueDate;
+  if (typeof dataLimitada.source !== 'string') delete dataLimitada.source;
+  else dataLimitada.source = dataLimitada.source.slice(0, 100);
+  // Default silencioso: si no se mandó prioridad válida, queda 'media' --
+  // nunca ausente, para que la UI siempre tenga algo consistente que mostrar.
+  if (!dataLimitada.prioridad) dataLimitada.prioridad = 'media';
+
+  // Fase 2G -- `assigned_to`: puramente informativo (a quién va dirigida la
+  // petición). NUNCA se usa para otorgar permisos -- created_by sigue
+  // siendo el único criterio real de "es mío" en el resto de los
+  // endpoints. Se acota a un string corto, sin validar que sea un email
+  // real de un usuario existente (bajo riesgo, es solo metadata).
+  const assignedToLimitado = (typeof assigned_to === 'string' && assigned_to.trim()) ? assigned_to.trim().slice(0, 200) : null;
 
   const ahora = new Date().toISOString();
   const nuevoItem = {
@@ -70,7 +129,7 @@ module.exports = async function handler(req, res) {
     title: String(title).slice(0, 200),
     message: message ? String(message).slice(0, 2000) : null,
     created_by: profile.email, // SIEMPRE del servidor, nunca del body
-    assigned_to: null,
+    assigned_to: assignedToLimitado,
     data: dataLimitada,
     history: [{ accion:'creado', por:profile.email, fecha:ahora, comentario:'' }],
     created_at: ahora,
