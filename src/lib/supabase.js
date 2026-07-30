@@ -329,6 +329,14 @@ export async function markInboxSeen({ ids, all } = {}) {
   return json.updated || 0;
 }
 
+// Fase 2G — responder/comentar en un pendiente sin cambiar su estatus.
+// Mismo endpoint fusionado (api/inbox-update.js), shape distinto ({comment}
+// en vez de {mark_seen} o {id,status}).
+export async function commentOnInboxItem(id, message) {
+  const json = await postJsonWithSession('/api/inbox-update', { comment: { id, message } });
+  return json.item;
+}
+
 export async function saveAuditLog(entry, userId) {
   if (!userId) return;
   await sb.from('audit_log').insert({ id: entry.id, user_id: userId, data: entry }).catch(()=>{});
