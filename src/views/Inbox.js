@@ -4,6 +4,7 @@ import { getPermissions } from '../lib/permissions.js';
 import {
   INBOX_TIPOS, INBOX_TIPO_LABELS, INBOX_ESTATUS, INBOX_ESTATUS_LABELS,
   INBOX_PRIORIDADES, INBOX_PRIORIDAD_LABELS, INBOX_ACCIONES, INBOX_ACCION_LABELS,
+  esProyectoPerdido,
 } from '../lib/constants.js';
 
 // Fase 2F3/2G — Inbox / Centro de aprobaciones / Peticiones internas.
@@ -283,7 +284,11 @@ function NuevaPeticionModal({ projects, onClose, onCreated }) {
           h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:3 } }, 'Proyecto (opcional)'),
           h('select', { value:projectId, onChange:e=>setProjectId(e.target.value), style:{ fontSize:12, padding:'6px 8px', width:'100%', boxSizing:'border-box' } },
             h('option', { value:'' }, '— Sin proyecto —'),
-            (projects||[]).map(p => h('option', { key:p.id, value:p.id }, p.name)),
+            // Hotfix -- no se ofrecen proyectos perdidos/cancelados para
+            // CREAR una petición nueva (el filtro de búsqueda de arriba,
+            // en cambio, sigue listando todos, para poder encontrar
+            // peticiones ya existentes de un proyecto que ya se perdió).
+            (projects||[]).filter(p=>!esProyectoPerdido(p.status)).map(p => h('option', { key:p.id, value:p.id }, p.name)),
           ),
         ),
         h('div', { style:{ display:'flex', gap:8 } },

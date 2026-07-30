@@ -1,6 +1,6 @@
 // Dashboard.js — Panel principal con KPIs y alertas
 import { h, useMemo } from '../lib/core.js';
-import { STATUSES, FINAL_STATUS } from '../lib/constants.js';
+import { STATUSES, FINAL_STATUS, esProyectoPerdido } from '../lib/constants.js';
 import { fmt, fmtNum, daysUntil, alertLevel } from '../lib/utils.js';
 import { Metric, Badge, AlertChip, EmptyState } from '../ui/primitives.js';
 
@@ -8,6 +8,11 @@ export default function Dashboard({ projects, vehicles, companies, onNav, onUpda
   const ac   = projects.filter(p => !FINAL_STATUS.includes(p.status));
   const won  = projects.filter(p => ['ganada','contrato','entrega','facturado','cobrado'].includes(p.status));
   const lost = projects.filter(p => p.status === 'perdida');
+  // Hotfix -- la tabla de "Proyectos" de la pantalla principal ya no
+  // muestra perdidos/cancelados por default (sin borrar nada -- solo se
+  // usa para ESTA lista, projects/ac/won/lost de arriba siguen intactos
+  // para las métricas/KPIs, que ya excluían FINAL_STATUS donde correspondía).
+  const projectsVisibles = projects.filter(p => !esProyectoPerdido(p.status));
   // El pipeline solo considera proyectos ganados (ganada, contrato, entrega, facturado, cobrado)
   const pipeline  = won.reduce((s,p) => s+(p.montoEstimado||0), 0);
   const wonTotal  = won.reduce((s,p) => s+(p.montoEstimado||0), 0);
@@ -88,7 +93,7 @@ export default function Dashboard({ projects, vehicles, companies, onNav, onUpda
               h('th', { key:hd, style:{ padding:'10px 8px', color:'var(--t3)', fontSize:11, fontWeight:600, letterSpacing:'.4px', textAlign:'left', whiteSpace:'nowrap', borderBottom:'1px solid var(--b1)' } }, hd)
             )
           )),
-          h('tbody', null, projects.map(p => {
+          h('tbody', null, projectsVisibles.map(p => {
             const alF = alertLevel(p.fechaFallo);
             return h('tr', { key:p.id, onClick:()=>onNav('project_detail',p.id), style:{ borderBottom:'.5px solid var(--b3)', cursor:'pointer' } },
               h('td', { style:{ padding:'10px 6px', fontWeight:500 } }, p.name),
@@ -104,7 +109,7 @@ export default function Dashboard({ projects, vehicles, companies, onNav, onUpda
 
       /* Tarjetas para mobile */
       h('div', { className:'show-mobile', style:{ display:'none' } },
-        projects.map(p => {
+        projectsVisibles.map(p => {
           const alF = alertLevel(p.fechaFallo);
           return h('div', { key:p.id, onClick:()=>onNav('project_detail',p.id),
             style:{ padding:'12px 0', borderBottom:'.5px solid var(--b3)', cursor:'pointer' } },

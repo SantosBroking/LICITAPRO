@@ -118,3 +118,19 @@ export const INBOX_ACCIONES = ['aprobar', 'revisar', 'corregir', 'comentar', 'co
 export const INBOX_ACCION_LABELS = { aprobar:'Aprobar', revisar:'Revisar', corregir:'Corregir', comentar:'Comentar', confirmar:'Confirmar' };
 export const INBOX_REFERENCIA_TIPOS = ['partida', 'equipo', 'documento', 'vehiculo'];
 
+// ── Ocultar proyectos perdidos/cancelados por default en UI (sin borrar
+// nada, sin tocar SQL/base de datos). El campo real es `project.status`
+// (confirmado en código: STATUSES y GRUPOS.cerradas de Projects.js) --
+// los valores que usa esta app HOY son exactamente 'perdida' y
+// 'cancelada'. Se agregan variantes adicionales (perdido/lost/cancelado/
+// rechazado/rechazada) solo como blindaje defensivo por si algún dato
+// legado tuviera otra grafía -- hoy no hay evidencia en el código de que
+// se usen, pero normalizar (minúsculas, sin acentos) antes de comparar no
+// tiene costo y evita sorpresas futuras.
+export const PROYECTO_ESTATUS_PERDIDO = ['perdida', 'perdido', 'lost', 'cancelada', 'cancelado', 'rechazado', 'rechazada'];
+export function esProyectoPerdido(status) {
+  if (!status || typeof status !== 'string') return false;
+  const norm = status.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return PROYECTO_ESTATUS_PERDIDO.includes(norm);
+}
+

@@ -3,7 +3,7 @@ import { nuevoDocFlujo, avisarAprobacion, avisarAsignacionProyecto, avisarCambio
 import { calcCotizacion } from '../lib/calc.js';
 // Projects.js — Lista, formulario y detalle de proyecto
 import { h, useState, useMemo, useCallback, useRef, useEffect } from '../lib/core.js';
-import { STATUSES, FINAL_STATUS, KANBAN_COLS, TIPOS_PROCEDIMIENTO, DEPENDENCIAS_COMUNES, TIPOS_PRODUCTO } from '../lib/constants.js';
+import { STATUSES, FINAL_STATUS, KANBAN_COLS, TIPOS_PROCEDIMIENTO, DEPENDENCIAS_COMUNES, TIPOS_PRODUCTO, esProyectoPerdido } from '../lib/constants.js';
 import { fmt, daysUntil, alertLevel, TODAY, NOW, uid } from '../lib/utils.js';
 import { Badge, AlertChip, Metric, Inp, EmptyState, ConfirmAction, NumInput, DeleteConfirmModal } from '../ui/primitives.js';
 import { getPermissions, canProjectTab, getAllowedSubTabs } from '../lib/permissions.js'; // Fase 1C + fix navegación + Fase 2A6 (sub-nav de Operación)
@@ -38,6 +38,11 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate, user }) {
   const [sort, setSort]     = useState('etapa');
   const [grupo, setGrupo]   = useState('todos');
   const [soloMios, setSoloMios] = useState(false);
+  // Hotfix -- proyectos perdidos/cancelados NO se muestran por default en
+  // la pantalla principal (sin borrar nada): quedan colapsados detrás de
+  // este toggle, igual que ya existía la sección "Cerradas" pero ahora
+  // arranca oculta.
+  const [mostrarCerradas, setMostrarCerradas] = useState(false);
   const miNombre = user?.name || '';
 
   // Orden por etapa del pipeline (ganados primero, luego avanzados, prospectos al final)
@@ -64,8 +69,11 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate, user }) {
     return list;
   };
 
-  // Activos (no cerrados) vs cerrados (perdida/cancelada)
-  const esCerrado = p => GRUPOS.cerradas.includes(p.status);
+  // Activos (no cerrados) vs cerrados (perdida/cancelada). Hotfix: usa el
+  // helper compartido esProyectoPerdido (normalizado) -- para los datos
+  // reales de hoy ('perdida'/'cancelada') el resultado es idéntico a
+  // GRUPOS.cerradas.includes(p.status), solo más resiliente a variantes.
+  const esCerrado = p => esProyectoPerdido(p.status);
   const visible = useMemo(() => {
     let list=[...projects];
     if(grupo!=='todos')list=list.filter(p=>(GRUPOS[grupo]||[]).includes(p.status));
@@ -223,9 +231,14 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate, user }) {
       );
       return h('div', null,
         h('div', { className:'card' }, tablaCard(activos, 'No hay proyectos activos con estos filtros.')),
-        cerrados.length>0 && h('div', { className:'card', style:{ marginTop:16, opacity:.85 } },
-          h('div', { style:{ fontSize:12, fontWeight:600, color:'var(--t2)', marginBottom:10, letterSpacing:'.3px' } }, '📁 Cerradas — perdidas y canceladas (',cerrados.length,')'),
-          tablaCard(cerrados, ''),
+        // Hotfix -- perdidos/cancelados ya NO se muestran automáticamente:
+        // arrancan colapsados detrás de este botón (sin borrar nada, solo
+        // ocultos por default). Mismo contenido/tabla de siempre una vez
+        // que se despliega.
+        cerrados.length>0 && h('div', { style:{ marginTop:16 } },
+          h('button', { onClick:()=>setMostrarCerradas(m=>!m), style:{ fontSize:12, color:'var(--t2)', background:'transparent', border:'1px solid var(--b2)', borderRadius:'var(--r)', padding:'6px 12px', cursor:'pointer' } },
+            (mostrarCerradas?'▾ ':'▸ ')+'Cerradas — perdidas y canceladas ('+cerrados.length+')'),
+          mostrarCerradas && h('div', { className:'card', style:{ marginTop:8, opacity:.85 } }, tablaCard(cerrados, '')),
         ),
       );
     })(),
