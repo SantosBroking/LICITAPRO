@@ -186,6 +186,7 @@ export function Inbox({ user, onNav, projects, onSeenChange }) {
                   ),
                   h('div', { style:{ fontSize:11, color:'var(--t2)', marginTop:3 } },
                     (INBOX_TIPO_LABELS[item.type]||item.type), ' · ', (proyecto ? normalizeProjectName(proyecto.name) : (item.project_id || 'sin proyecto')),
+                    (proyecto && proyecto.folioProyecto) ? ' ('+proyecto.folioProyecto+')' : '',
                     ' · ', (item.created_by||'—'), ' · ', item.created_at ? new Date(item.created_at).toLocaleString('es-MX') : '—'),
                   !expandido && item.message && h('div', { style:{ fontSize:12, color:'var(--t1)', marginTop:6, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, item.message),
                 ),

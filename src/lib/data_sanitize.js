@@ -433,6 +433,13 @@ const PROJECT_OPERATIONAL_UPDATE_FIELDS = [
   'id', 'name', 'dependencia', 'nivelGobierno', 'municipio', 'company', 'numLicitacion',
   'status', 'tipoProcedimiento', 'productType', 'responsable', 'montoEstimado', 'probability',
   'description', 'observaciones',
+  // Fase 3C-1: folioProyecto es el folio interno maestro (distinto de
+  // numLicitacion, que sigue siendo el número oficial externo de la
+  // licitación, sin tocar). tipoOperacion es el clasificador nuevo
+  // (licitacion/venta_privada/compra_interna/otro) que alimenta el TIPO
+  // del folio. Ninguno de los dos es financiero ni estratégico --
+  // cualquier rol puede leerlos/escribirlos igual que name/status.
+  'folioProyecto', 'tipoOperacion',
   'fechaPublicacion', 'fechaAclaraciones', 'fechaPropuesta', 'fechaFallo', 'fechaContrato',
   'clienteEmpresaId', 'clienteRfc', 'clienteDomicilio', 'clienteCorreo', 'clienteTelefono',
   'notes', 'activity', 'preguntas', 'preparation',

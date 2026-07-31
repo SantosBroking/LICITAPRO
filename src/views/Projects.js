@@ -4,7 +4,7 @@ import { calcCotizacion } from '../lib/calc.js';
 // Projects.js — Lista, formulario y detalle de proyecto
 import { h, useState, useMemo, useCallback, useRef, useEffect } from '../lib/core.js';
 import { STATUSES, FINAL_STATUS, KANBAN_COLS, TIPOS_PROCEDIMIENTO, DEPENDENCIAS_COMUNES, TIPOS_PRODUCTO, esProyectoPerdido } from '../lib/constants.js';
-import { fmt, daysUntil, alertLevel, TODAY, NOW, uid, normalizeProjectName } from '../lib/utils.js';
+import { fmt, daysUntil, alertLevel, TODAY, NOW, uid, normalizeProjectName, generarFolioProyecto } from '../lib/utils.js';
 import { Badge, AlertChip, Metric, Inp, EmptyState, ConfirmAction, NumInput, DeleteConfirmModal } from '../ui/primitives.js';
 import { getPermissions, canProjectTab, getAllowedSubTabs } from '../lib/permissions.js'; // Fase 1C + fix navegación + Fase 2A6 (sub-nav de Operación)
 import { sb } from '../lib/supabase.js'; // Fase 1C — directorio de usuarios activos
@@ -176,6 +176,7 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate, user }) {
         return h('tr', { key:p.id, style:{ borderBottom:'.5px solid var(--b3)', cursor:'pointer' }, onClick:()=>onNav('project_detail',p.id) },
           h('td', { style:{ padding:'10px 6px', fontWeight:500, maxWidth:220 } },
             h('div', { style:{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textTransform:'uppercase' } }, p.name),
+            p.folioProyecto && h('div', { style:{ fontSize:10, color:'var(--t3)' } }, p.folioProyecto),
             p.numLicitacion && h('div', { style:{ fontSize:11, color:'var(--t2)' } }, p.numLicitacion),
           ),
           h('td', { style:{ padding:'10px 6px', color:'var(--t2)', fontSize:12 } }, p.dependencia||'—'),
@@ -196,6 +197,7 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate, user }) {
           h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10, marginBottom:4 } },
             h('div', { style:{ flex:1, minWidth:0 } },
               h('div', { style:{ fontWeight:600, fontSize:14, lineHeight:1.25, textTransform:'uppercase' } }, p.name),
+              p.folioProyecto && h('div', { style:{ fontSize:10, color:'var(--t3)', marginBottom:2 } }, p.folioProyecto),
               p.numLicitacion && h('div', { style:{ fontSize:11, color:'var(--t3)', marginTop:1 } }, p.numLicitacion),
             ),
             h('div', { style:{ fontWeight:600, fontSize:14, whiteSpace:'nowrap', flexShrink:0 } }, fmt(p.montoEstimado)),
@@ -250,6 +252,7 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate, user }) {
             h('div', { style:{ fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:.5, color:s?.tx||'var(--t2)', background:s?.bg||'var(--bg2)', padding:'6px 12px', borderRadius:'var(--r)', marginBottom:8 } }, s?.label||colId,' (',cols.length,')'),
             cols.map(p => h('div', { key:p.id, className:'card', style:{ marginBottom:8, cursor:'pointer', fontSize:13 }, onClick:()=>onNav('project_detail',p.id) },
               h('div', { style:{ fontWeight:500, marginBottom:4, lineHeight:1.3, textTransform:'uppercase' } }, p.name),
+              p.folioProyecto && h('div', { style:{ fontSize:10, color:'var(--t3)', marginBottom:4 } }, p.folioProyecto),
               h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:6 } }, p.dependencia||'—'),
               h('div', { style:{ fontSize:12, fontWeight:500 } }, fmt(p.montoEstimado)),
               p.fechaFallo && h('div', { style:{ fontSize:10, color:alertLevel(p.fechaFallo)?'var(--red)':'var(--t3)', marginTop:4 } }, 'Fallo: ',p.fechaFallo),
@@ -261,9 +264,9 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate, user }) {
   );
 }
 
-export function ProjectForm({ project, companies, config, onSave, onCancel, user, onSaveConfig }) {
+export function ProjectForm({ project, companies, config, onSave, onCancel, user, onSaveConfig, projects }) {
   const isE = !!project;
-  const [p, sP] = useState(project || { id:uid('proj'), name:'', dependencia:'', nivelGobierno:'', municipio:'', company:'', numLicitacion:'', status:'prospecto', tipoProcedimiento:'', productType:'Patrullas y vehículos', responsable:'', montoEstimado:0, probability:50, description:'', observaciones:'', fechaPublicacion:'', fechaAclaraciones:'', fechaPropuesta:'', fechaFallo:'', fechaContrato:'', clienteEmpresaId:'', clienteRfc:'', clienteDomicilio:'', clienteCorreo:'', clienteTelefono:'', notes:[], activity:[], preguntas:[], docs:[], preparation:{}, cotizacion:{} });
+  const [p, sP] = useState(project || { id:uid('proj'), name:'', dependencia:'', nivelGobierno:'', municipio:'', company:'', numLicitacion:'', status:'prospecto', tipoProcedimiento:'', productType:'Patrullas y vehículos', responsable:'', montoEstimado:0, probability:50, description:'', observaciones:'', fechaPublicacion:'', fechaAclaraciones:'', fechaPropuesta:'', fechaFallo:'', fechaContrato:'', clienteEmpresaId:'', clienteRfc:'', clienteDomicilio:'', clienteCorreo:'', clienteTelefono:'', notes:[], activity:[], preguntas:[], docs:[], preparation:{}, cotizacion:{}, folioProyecto:'', tipoOperacion:'Licitación pública' });
   const set = (k,v) => sP(prev=>({...prev,[k]:v}));
   const [basesMsg, setBasesMsg] = useState('');
   // ── Fase 1C: directorio de usuarios activos (user_profiles), reemplaza config.equipo ──
@@ -351,7 +354,15 @@ export function ProjectForm({ project, companies, config, onSave, onCancel, user
     // Solo el nombre -- dependencia/numLicitacion/descripciones/etc. NO
     // se tocan. `p` es const (useState) -- no se reasigna, se construye
     // un objeto nuevo para lo que realmente se envía a guardar.
-    const pParaGuardar = { ...p, name: normalizeProjectName(p.name) };
+    let pParaGuardar = { ...p, name: normalizeProjectName(p.name) };
+    // Fase 3C-1 -- folio interno maestro: se genera SOLO al crear (!isE),
+    // y SOLO si todavía no trae uno (por si acaso se llama doSave() dos
+    // veces, o el usuario ya lo trae de algún flujo futuro) -- nunca se
+    // regenera ni se sobreescribe un folio ya existente. Al editar
+    // (isE===true) nunca se toca este campo, sea cual sea su valor.
+    if (!isE && !pParaGuardar.folioProyecto) {
+      pParaGuardar.folioProyecto = generarFolioProyecto(pParaGuardar.company, pParaGuardar.tipoOperacion, new Date().getFullYear(), projects);
+    }
     // ¿Cambió el responsable? Si es uno nuevo (distinto al original), ofrecer avisarle
     const respAnterior = project?.responsable || '';
     const respNuevo = p.responsable || '';
@@ -395,6 +406,16 @@ export function ProjectForm({ project, companies, config, onSave, onCancel, user
       h('div', { className:'card' },
         h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:14 } }, 'Datos principales'),
         h(Inp, { label:'Nombre del proyecto *', value:p.name, onChange:v=>set('name',v), placeholder:'Equipamiento patrullas SSP' }),
+        // Fase 3C-1 -- clasifica el TIPO del folio interno maestro
+        // (LIC/VTA/COM/OTR). No existía ningún campo real que distinguiera
+        // esto antes (confirmado: tipoProcedimiento solo describe métodos
+        // de licitación pública, nunca "venta privada"/"compra interna").
+        // Default 'Licitación pública' -- cubre el caso de uso actual, que
+        // es 100% licitación pública. Valores en español legible, mismo
+        // criterio que TIPOS_PROCEDIMIENTO/TIPOS_PRODUCTO (Inp no soporta
+        // labels separadas del value, así que se usa el string legible
+        // directamente como valor almacenado).
+        h(Inp, { label:'Tipo de operación', value:p.tipoOperacion||'Licitación pública', onChange:v=>set('tipoOperacion',v), options:['Licitación pública','Venta privada','Compra interna','Otro'] }),
         h(Inp, { label:'Nivel de gobierno', value:p.nivelGobierno, onChange:v=>set('nivelGobierno',v), options:[...DEPENDENCIAS_COMUNES,...(config?.customStatuses||[])] }),
         h(Inp, { label:'Dependencia (nombre)', value:p.dependencia, onChange:v=>set('dependencia',v), placeholder:'Dirección de Desarrollo Urbano…' }),
         h(Inp, { label:'Municipio / Ciudad', value:p.municipio||'', onChange:v=>set('municipio',v), placeholder:'Tultitlán, Tlalnepantla…' }),
@@ -464,7 +485,7 @@ export function ProjectForm({ project, companies, config, onSave, onCancel, user
   );
 }
 
-export function ProjectDetail({ project, vehicles, companies, config, onSaveConfig, onSaveCompany, onUpdate, onDelete, onSave, onNav, user, logFn, activeTab, setActiveTab, cotSubTab, setCotSubTab, operacionSubTab, setOperacionSubTab, docsSubTab, setDocsSubTab }) {
+export function ProjectDetail({ project, vehicles, companies, config, projects, onSaveConfig, onSaveCompany, onUpdate, onDelete, onSave, onNav, user, logFn, activeTab, setActiveTab, cotSubTab, setCotSubTab, operacionSubTab, setOperacionSubTab, docsSubTab, setDocsSubTab }) {
   const [showEdit, setShowEdit]     = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [showOC, setShowOC]         = useState(false);
@@ -549,7 +570,7 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
     setBasesAiMsg(campos.length ? '✅ Datos extraídos de las bases: ' + campos.join(', ') : 'No se detectaron datos en el PDF.');
   };
 
-  if(showEdit) return h(ProjectForm, { project, companies, config, user, onSaveConfig, onSave:async(updated)=>{ await onSave(updated); setShowEdit(false); }, onCancel:()=>setShowEdit(false) });
+  if(showEdit) return h(ProjectForm, { project, companies, config, user, projects, onSaveConfig, onSave:async(updated)=>{ await onSave(updated); setShowEdit(false); }, onCancel:()=>setShowEdit(false) });
   if(selVehicle) return h(VehicleDetail, {
     vehicle:vehicles.find(v=>v.id===selVehicle), project, company,
     onNav:(view,id)=>{ if(view==='project_detail'){setSelVehicle(null);setTab('vehiculos');}else onNav(view,id); },
@@ -564,11 +585,13 @@ export function ProjectDetail({ project, vehicles, companies, config, onSaveConf
       h('span', { onClick:()=>onNav('projects'), style:{ fontSize:12, color:'var(--blue)', cursor:'pointer' } }, 'Proyectos'),
       h('span', { style:{ fontSize:12, color:'var(--t2)' } }, '/'),
       h('span', { style:{ fontSize:12, textTransform:'uppercase' } }, project.name),
+      project.folioProyecto && h('span', { style:{ fontSize:11, color:'var(--t3)' } }, '· ', project.folioProyecto),
     ),
     // Header
     h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16, flexWrap:'wrap', gap:12 } },
       h('div', null,
         h('div', { style:{ fontSize:20, fontWeight:600, marginBottom:4, lineHeight:1.3, letterSpacing:'-0.3px', textTransform:'uppercase' } }, project.name),
+        project.folioProyecto && h('div', { style:{ fontSize:12, color:'var(--t2)', marginBottom:8 } }, project.folioProyecto),
         h('div', { style:{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' } },
           h(Badge, { statusId:project.status }),
           project.dependencia && h('span', { style:{ fontSize:12, color:'var(--t2)' } }, project.dependencia),

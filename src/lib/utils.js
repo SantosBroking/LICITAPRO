@@ -148,3 +148,65 @@ export function numeroALetras(num) {
 // helper). Colapsa espacios múltiples y recorta extremos antes de
 // mayuscular, para evitar inconsistencias tipo "  Patrullas   Morelos ".
 export const normalizeProjectName = (nombre) => (nombre || '').replace(/\s+/g, ' ').trim().toUpperCase();
+
+// ── Fase 3C-1 — Folios maestros de proyecto ─────────────────────────────
+// Formato: {EMPRESA}-{AÑO}-{TIPO}-{CONSECUTIVO}, ej. BRO-2026-LIC-001.
+// Todo esto es puramente en memoria (sin SQL): el consecutivo se calcula
+// contando proyectos existentes con el mismo prefijo+año+tipo, tal como
+// se aprobó en el diagnóstico 3A/3F -- opción sin SQL para volumen bajo.
+
+// Mapeo de nombre de empresa operadora -> prefijo de hasta 3 letras. No
+// existe hoy ningún campo de "prefijo"/"abreviatura" en companies[]
+// (confirmado por grep exhaustivo) -- se usa un fallback por nombre
+// conocido, y si no coincide con ninguno, iniciales limpias del nombre.
+export function obtenerPrefijoEmpresa(nombreEmpresa) {
+  if (!nombreEmpresa || typeof nombreEmpresa !== 'string') return 'GEN';
+  const norm = nombreEmpresa.trim().toLowerCase();
+  if (!norm) return 'GEN';
+  if (norm.includes('broking')) return 'BRO';
+  if (norm.includes('sathri') || norm.includes('satri')) return 'SAT';
+  const iniciales = nombreEmpresa.trim().split(/\s+/).filter(Boolean)
+    .map(palabra => palabra[0]).join('')
+    .toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-ZÑ]/g, '');
+  return iniciales.slice(0, 3) || 'GEN';
+}
+
+// Mapeo de tipoOperacion (campo nuevo, ver Projects.js -- valores en
+// español legible, mismo criterio que TIPOS_PROCEDIMIENTO/TIPOS_PRODUCTO,
+// ya que el componente Inp no separa value de label) -> código de folio.
+// Default explícito 'OTR' si el valor no se reconoce ("si no se puede
+// clasificar" -- pedido explícitamente).
+const TIPO_OPERACION_A_FOLIO = { 'Licitación pública': 'LIC', 'Venta privada': 'VTA', 'Compra interna': 'COM', 'Otro': 'OTR' };
+export function obtenerTipoFolio(tipoOperacion) {
+  return TIPO_OPERACION_A_FOLIO[tipoOperacion] || 'OTR';
+}
+
+// Genera el folio maestro de un proyecto NUEVO. `proyectosExistentes` es
+// el arreglo de proyectos ya cargados en memoria (projects) -- el
+// consecutivo es max(existente con el mismo prefijo) + 1. No requiere
+// ninguna consulta a la base ni SQL nuevo.
+export function generarFolioProyecto(nombreEmpresa, tipoOperacion, año, proyectosExistentes) {
+  const prefijoEmpresa = obtenerPrefijoEmpresa(nombreEmpresa);
+  const tipoFolio = obtenerTipoFolio(tipoOperacion);
+  const prefijoCompleto = `${prefijoEmpresa}-${año}-${tipoFolio}-`;
+  let maxConsecutivo = 0;
+  (proyectosExistentes || []).forEach(p => {
+    if (p && typeof p.folioProyecto === 'string' && p.folioProyecto.startsWith(prefijoCompleto)) {
+      const num = parseInt(p.folioProyecto.slice(prefijoCompleto.length), 10);
+      if (!isNaN(num) && num > maxConsecutivo) maxConsecutivo = num;
+    }
+  });
+  const siguiente = String(maxConsecutivo + 1).padStart(3, '0');
+  return `${prefijoCompleto}${siguiente}`;
+}
+
+// ── Helpers de folios DERIVADOS -- preparados para fases futuras, NO
+// integrados todavía en ningún flujo real de cotización/OC/documento/
+// factura (Fase 3C-1 es solo la base). Ejemplo de uso futuro:
+// generarFolioCotizacion('BRO-2026-LIC-001', 1) -> 'BRO-2026-LIC-001-COT-01'
+const _folioDerivado = (folioProyecto, sufijo, index) =>
+  (folioProyecto || '') ? `${folioProyecto}-${sufijo}-${String(index).padStart(2, '0')}` : '';
+export const generarFolioCotizacion = (folioProyecto, index) => _folioDerivado(folioProyecto, 'COT', index);
+export const generarFolioOC = (folioProyecto, index) => _folioDerivado(folioProyecto, 'OC', index);
+export const generarFolioDocumento = (folioProyecto, index) => _folioDerivado(folioProyecto, 'DOC', index);
+export const generarFolioFactura = (folioProyecto, index) => _folioDerivado(folioProyecto, 'FAC', index);
