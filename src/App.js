@@ -524,7 +524,7 @@ export default function App() {
       const guardado = await saveConfigViaEndpoint(cfg);
       setConfig(guardado); window._lpConfig = guardado;
     } catch(e) {
-      console.error('[2E3A] Error guardando config vía /api/save-config:', e);
+      console.error('[3F-2] Error guardando config vía /api/save-company (entity:config):', e);
       alert('Error al guardar configuración: ' + e.message);
       throw e;
     }

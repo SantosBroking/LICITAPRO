@@ -193,6 +193,10 @@ export async function saveConfig(config, userId) {
 // sigue existiendo, pero App.js deja de llamarla para config a partir de
 // esta fase. Sin fallback silencioso a propósito: cualquier fallo se lanza
 // tal cual, nunca cae a saveConfig() en silencio.
+// Fase 3F-2 — api/save-config.js se fusionó dentro de api/save-company.js
+// (consolidación de límite de funciones Vercel Hobby). Mismo endpoint,
+// mismo manejo de sesión/errores de siempre -- solo cambia la URL y el
+// body ahora va envuelto con {entity, payload}.
 export async function saveConfigViaEndpoint(config) {
   const { data: sessionData, error: sessionError } = await sb.auth.getSession();
   if (sessionError) throw new Error('No se pudo obtener la sesión real: ' + sessionError.message);
@@ -201,23 +205,23 @@ export async function saveConfigViaEndpoint(config) {
 
   let res;
   try {
-    res = await fetch('/api/save-config', {
+    res = await fetch('/api/save-company', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(config),
+      body: JSON.stringify({ entity:'config', payload:config }),
     });
   } catch (e) {
-    throw new Error('No se pudo contactar /api/save-config: ' + e.message);
+    throw new Error('No se pudo contactar /api/save-company: ' + e.message);
   }
   if (!res.ok) {
     let detalle = '';
     try { const body = await res.json(); detalle = body?.error || ''; } catch(_e) {}
-    throw new Error(`/api/save-config respondió HTTP ${res.status}` + (detalle ? ` -- ${detalle}` : ''));
+    throw new Error(`/api/save-company respondió HTTP ${res.status}` + (detalle ? ` -- ${detalle}` : ''));
   }
 
   let json;
-  try { json = await res.json(); } catch (e) { throw new Error('Respuesta de /api/save-config no es JSON válido: ' + e.message); }
-  if (!json.ok) throw new Error('/api/save-config respondió ok:false -- ' + (json.error || 'sin detalle'));
+  try { json = await res.json(); } catch (e) { throw new Error('Respuesta de /api/save-company no es JSON válido: ' + e.message); }
+  if (!json.ok) throw new Error('/api/save-company respondió ok:false -- ' + (json.error || 'sin detalle'));
 
   return json.config;
 }
@@ -256,8 +260,10 @@ async function postJsonWithSession(path, body) {
 // Fase 2E3B — guardado de empresa vía endpoint server-side
 // (api/save-company.js), con merge seguro contra la base real.
 // saveCompany() de arriba NO se toca, sigue existiendo.
+// Fase 3F-2 — mismo endpoint que saveConfigViaEndpoint (api/save-company.js
+// ahora hospeda ambas lógicas). El body va envuelto con {entity, payload}.
 export async function saveCompanyViaEndpoint(company) {
-  const json = await postJsonWithSession('/api/save-company', company);
+  const json = await postJsonWithSession('/api/save-company', { entity:'company', payload:company });
   return json.company;
 }
 
