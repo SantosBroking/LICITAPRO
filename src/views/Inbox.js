@@ -1,10 +1,11 @@
 import { h, useState, useEffect, useRef } from '../lib/core.js';
-import { listInboxItems, updateInboxItem, markInboxSeen, createInboxItem, commentOnInboxItem } from '../lib/supabase.js';
+import { listInboxItems, updateInboxItem, markInboxSeen, createInboxItem, commentOnInboxItem, actualizarFirmaInboxItem, uploadFileToStorage, abrirArchivo } from '../lib/supabase.js';
 import { getPermissions } from '../lib/permissions.js';
 import { normalizeProjectName } from '../lib/utils.js';
 import {
   INBOX_TIPOS, INBOX_TIPO_LABELS, INBOX_ESTATUS, INBOX_ESTATUS_LABELS,
   INBOX_PRIORIDADES, INBOX_PRIORIDAD_LABELS, INBOX_ACCIONES, INBOX_ACCION_LABELS,
+  INBOX_DOCUMENTO_TIPO_LABELS, INBOX_FIRMA_STATUS_LABELS,
   esProyectoPerdido,
 } from '../lib/constants.js';
 
@@ -58,6 +59,8 @@ export function Inbox({ user, onNav, projects, onSeenChange }) {
   const [busyId, setBusyId] = useState(null);
   const [expandidoId, setExpandidoId] = useState(null);
   const [showNueva, setShowNueva] = useState(false);
+  const [subiendoFirmaId, setSubiendoFirmaId] = useState(null);
+  const fileInputRefs = useRef({});
   const isAdmin = getPermissions(user).isAdmin;
   // Fase 2F4: campo de "visto" según el rol -- admin usa seen_by_admin_at,
   // empleado usa seen_by_creator_at (dentro de sus propios pendientes o
@@ -111,6 +114,48 @@ export function Inbox({ user, onNav, projects, onSeenChange }) {
     } catch(e) { alert('Error al responder: ' + e.message); }
     setBusyId(null);
   };
+
+  // Fase 3D-B2 -- flujo específico de firma, EXCLUSIVO de items
+  // type==='firma_documento'. "Aprobar para firma" reutiliza el modo B ya
+  // existente (accionar/updateInboxItem) sin ningún cambio -- solo cambia
+  // el status a 'aprobado', data.firmaStatus se queda igual
+  // ('pendiente_firma', el firmante todavía no ha subido nada).
+  const aprobarParaFirma = (id) => accionar(id, 'aprobado');
+
+  // Subir el documento firmado -- solo lo usa el firmante asignado. Sube
+  // el archivo a Storage con uploadFileToStorage() (ya existente, valida
+  // tipo/tamaño internamente, sin tocar policies), y guarda la URL/nombre/
+  // mime + firmaStatus:'firmado' vía el modo D del endpoint.
+  const subirDocumentoFirmado = async (item, file) => {
+    if (!file) return;
+    setSubiendoFirmaId(item.id);
+    try {
+      const folioParaRuta = (item.data && item.data.documentoFolio) || item.id;
+      const path = 'firmas/' + (item.project_id||'sin-proyecto') + '/' + folioParaRuta + '/' + Date.now() + '_' + file.name;
+      const url = await uploadFileToStorage(path, file);
+      if (!url) { alert('No se pudo subir el archivo (tipo o tamaño no permitido).'); setSubiendoFirmaId(null); return; }
+      await actualizarFirmaInboxItem(item.id, { documentoUrl:url, documentoNombre:file.name, documentoMime:file.type||'', firmaStatus:'firmado' });
+      await cargar();
+      if (onSeenChange) onSeenChange();
+      alert('✅ Documento firmado subido correctamente.');
+    } catch(e) { alert('Error al subir el documento firmado: ' + e.message); }
+    setSubiendoFirmaId(null);
+  };
+
+  // Dar visto bueno final -- solo admin. Cierra el pendiente en la misma
+  // escritura (firmaStatus:'visto_final' + status:'cerrado', atómico).
+  const darVistoBuenoFinal = async (item) => {
+    if (!confirm('¿Dar visto bueno final? El pendiente quedará cerrado.')) return;
+    setBusyId(item.id);
+    try {
+      await actualizarFirmaInboxItem(item.id, { firmaStatus:'visto_final', cerrar:true });
+      await cargar();
+      if (onSeenChange) onSeenChange();
+    } catch(e) { alert('Error al dar visto bueno final: ' + e.message); }
+    setBusyId(null);
+  };
+
+  const verDocumentoFirmado = (item) => { if (item.data && item.data.documentoUrl) abrirArchivo(item.data.documentoUrl); };
 
   if (items === null) return h('div', { className:'empty' }, h('p', null, 'Cargando pendientes...'));
 
@@ -203,6 +248,18 @@ export function Inbox({ user, onNav, projects, onSeenChange }) {
                 item.data?.dueDate && h('div', null, 'Fecha límite: ', h('b', null, item.data.dueDate)),
                 item.assigned_to && h('div', null, 'Asignado a: ', h('b', null, item.assigned_to)),
               ),
+              // Fase 3D-B2 -- bloque especial, EXCLUSIVO de items
+              // type==='firma_documento'. Nunca muestra nada financiero --
+              // solo referencias livianas ya guardadas en data (mismo
+              // criterio de siempre).
+              item.type === 'firma_documento' && h('div', { style:{ display:'flex', flexDirection:'column', gap:4, fontSize:12, color:'var(--t1)', marginBottom:10, padding:'10px 12px', background:'var(--bg2)', borderRadius:8 } },
+                item.data?.documentoTipo && h('div', null, 'Documento: ', h('b', null, INBOX_DOCUMENTO_TIPO_LABELS[item.data.documentoTipo]||item.data.documentoTipo)),
+                item.data?.documentoFolio && h('div', null, 'Folio documento: ', h('b', { style:{ fontFamily:'monospace' } }, item.data.documentoFolio)),
+                item.data?.folioProyecto && h('div', null, 'Folio proyecto: ', h('b', { style:{ fontFamily:'monospace' } }, item.data.folioProyecto)),
+                (item.data?.firmante || item.data?.firmanteEmail) && h('div', null, 'Firmante: ', h('b', null, item.data.firmante || item.data.firmanteEmail)),
+                item.data?.firmaStatus && h('div', null, 'Estado firma: ', h('b', null, INBOX_FIRMA_STATUS_LABELS[item.data.firmaStatus]||item.data.firmaStatus)),
+                item.data?.documentoUrl && h('button', { onClick:(e)=>{e.stopPropagation();verDocumentoFirmado(item);}, style:{ fontSize:11, color:'var(--blue)', background:'transparent', border:'none', cursor:'pointer', padding:0, marginTop:4, textAlign:'left' } }, '📄 Ver documento firmado ('+(item.data.documentoNombre||'archivo')+')'),
+              ),
               item.project_id && h('button', { onClick:(e)=>{e.stopPropagation();onNav('project_detail', item.project_id);}, style:{ fontSize:11, color:'var(--blue)', background:'transparent', border:'none', cursor:'pointer', padding:0, marginBottom:10, display:'block' } }, 'Ver proyecto →'),
               (item.history||[]).length>0 && h('div', { style:{ marginBottom:10 } },
                 h('div', { style:{ fontSize:11, color:'var(--t2)', fontWeight:600, marginBottom:6 } }, 'Historial ('+item.history.length+')'),
@@ -211,8 +268,24 @@ export function Inbox({ user, onNav, projects, onSeenChange }) {
                     h('b', null, h_.por), ' — ', (h_.accion==='comentario'?'comentó':(INBOX_ESTATUS_LABELS[h_.accion]||h_.accion)), (h_.comentario?': "'+h_.comentario+'"':''), ' · ', formatearFecha(h_.fecha))),
                 ),
               ),
-              // ── Botones admin ──
-              isAdmin && !ESTATUS_FINALES.includes(item.status) && h('div', { onClick:e=>e.stopPropagation() },
+              // Fase 3D-B2 -- botones específicos del flujo de firma
+              // (type==='firma_documento'). Reemplazan la fila genérica de
+              // admin para este tipo -- ver la fila genérica de abajo, que
+              // ahora se excluye explícitamente para firma_documento.
+              item.type === 'firma_documento' && h('div', { onClick:e=>e.stopPropagation(), style:{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:10 } },
+                isAdmin && item.data?.firmaStatus==='pendiente_firma' && item.status==='pendiente' && h('button', { disabled:busyId===item.id, onClick:()=>aprobarParaFirma(item.id), style:{ fontSize:12, padding:'6px 12px', background:'var(--green)', color:'#fff', border:'none', borderRadius:6, cursor:'pointer' } }, 'Aprobar para firma'),
+                !isAdmin && item.data?.firmaStatus==='pendiente_firma' && (item.assigned_to===user?.email || item.data?.firmanteEmail===user?.email) && h('div', null,
+                  h('input', { ref:el=>fileInputRefs.current[item.id]=el, type:'file', accept:'application/pdf,image/*', style:{ display:'none' }, onChange:e=>{ subirDocumentoFirmado(item, e.target.files[0]); e.target.value=''; } }),
+                  h('button', { disabled:subiendoFirmaId===item.id, onClick:()=>fileInputRefs.current[item.id]&&fileInputRefs.current[item.id].click(), style:{ fontSize:12, padding:'6px 12px', background:'var(--blue)', color:'#fff', border:'none', borderRadius:6, cursor:'pointer' } }, subiendoFirmaId===item.id?'Subiendo...':'📎 Subir documento firmado'),
+                ),
+                isAdmin && item.data?.firmaStatus==='firmado' && h('button', { disabled:busyId===item.id, onClick:()=>darVistoBuenoFinal(item), style:{ fontSize:12, padding:'6px 12px', background:'var(--green)', color:'#fff', border:'none', borderRadius:6, cursor:'pointer' } }, 'Dar visto bueno final'),
+                isAdmin && !ESTATUS_FINALES.includes(item.status) && h('button', { disabled:busyId===item.id, onClick:()=>accionar(item.id,'rechazado'), style:{ fontSize:12, padding:'6px 12px', background:'transparent', color:'var(--red)', border:'1px solid var(--red)', borderRadius:6, cursor:'pointer' } }, 'Rechazar'),
+                isAdmin && !ESTATUS_FINALES.includes(item.status) && h('button', { disabled:busyId===item.id, onClick:()=>accionar(item.id,'cambios_solicitados'), style:{ fontSize:12, padding:'6px 12px', background:'transparent', border:'1px solid var(--b2)', borderRadius:6, cursor:'pointer' } }, 'Pedir cambios'),
+              ),
+              // ── Botones admin genéricos -- ya NO se muestran para
+              // firma_documento (reemplazados por la fila específica de
+              // arriba) ──
+              isAdmin && item.type !== 'firma_documento' && !ESTATUS_FINALES.includes(item.status) && h('div', { onClick:e=>e.stopPropagation() },
                 h('input', { placeholder:'Comentario (opcional)', value:comentarios[item.id]||'', onChange:e=>setComentarios(p=>({...p,[item.id]:e.target.value})), style:{ fontSize:12, padding:'6px 10px', width:'100%', marginBottom:8, border:'1px solid var(--b2)', borderRadius:6, boxSizing:'border-box' } }),
                 h('div', { style:{ display:'flex', gap:8, flexWrap:'wrap' } },
                   h('button', { disabled:busyId===item.id, onClick:()=>accionar(item.id,'aprobado'), style:{ fontSize:12, padding:'6px 12px', background:'var(--green)', color:'#fff', border:'none', borderRadius:6, cursor:'pointer' } }, 'Aprobar'),

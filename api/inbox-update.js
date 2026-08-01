@@ -21,6 +21,16 @@ const ESTATUS_VALIDOS = ['pendiente', 'en_revision', 'aprobado', 'rechazado', 'c
 //      empleado solo en los suyos (created_by) o los que le asignen
 //      (assigned_to). El campo "visto" que se actualiza sale siempre del
 //      rol real de quien comenta.
+//   D) { firma: { id, documentoUrl, documentoNombre, documentoMime,
+//      firmaStatus, cerrar } } -- Fase 3D-B2, EXCLUSIVO de items
+//      type==='firma_documento'. Actualiza SOLO esos 4 campos dentro de
+//      `data` (allowlist estricta, nunca el resto de data). Empleado:
+//      solo puede fijar firmaStatus:'firmado' (subir documento firmado),
+//      solo en items donde es assigned_to o data.firmanteEmail coincide,
+//      y NUNCA puede pasar cerrar:true. Admin: puede fijar cualquier
+//      firmaStatus válido (uso real: 'visto_final') y opcionalmente
+//      cerrar:true para también fijar status:'cerrado' en la misma
+//      escritura atómica (evita un estado intermedio inconsistente).
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok:false, error:'Método no permitido' });
 
@@ -63,6 +73,14 @@ module.exports = async function handler(req, res) {
   // ── Modo C (Fase 2G): comentar/responder sin cambiar estatus -- ambos roles ──
   if (body.comment && typeof body.comment === 'object' && !Array.isArray(body.comment)) {
     return handleComment(res, profile, serviceKey, body.comment);
+  }
+
+  // ── Modo D (Fase 3D-B2): flujo de firma -- subir documento firmado /
+  // dar visto bueno final. Ambos roles pueden llamarlo, la seguridad real
+  // (qué firmaStatus puede fijar cada uno, ownership, cerrar) se valida
+  // DENTRO de handleFirma, nunca solo por quién puede invocar el modo. ──
+  if (body.firma && typeof body.firma === 'object' && !Array.isArray(body.firma)) {
+    return handleFirma(res, profile, serviceKey, body.firma);
   }
 
   // ── Modo B: cambio de estatus -- SOLO admin, sin cambios de Fase 2F3 ──
@@ -260,5 +278,118 @@ async function handleComment(res, profile, serviceKey, commentBody) {
   } catch(e) {
     console.error('[inbox-update:comment] Excepción al comentar:', e.message);
     return res.status(502).json({ ok:false, error:'No se pudo guardar el comentario' });
+  }
+}
+
+// Fase 3D-B2 — flujo específico de firma para items type==='firma_documento'.
+// Actualiza SOLO 4 campos dentro de `data` (allowlist estricta,
+// FIRMA_DATA_CAMPOS_PERMITIDOS abajo) -- nunca se acepta ni se toca
+// ningún otro campo de data (documentoTipo/documentoFolio/folioProyecto/
+// ocId/etc. se preservan tal cual, mergeando sobre el data original leído
+// de la base, nunca sobre lo que mande el cliente).
+const FIRMA_STATUS_VALIDOS = ['pendiente_firma', 'firmado', 'visto_final'];
+const FIRMA_DATA_CAMPOS_PERMITIDOS = ['documentoUrl', 'documentoNombre', 'documentoMime', 'firmaStatus'];
+
+async function handleFirma(res, profile, serviceKey, firmaBody) {
+  const { id } = firmaBody;
+  if (!id || typeof id !== 'string') return res.status(400).json({ ok:false, error:'Falta id del pendiente' });
+
+  const restHeaders = { apikey:serviceKey, Authorization:`Bearer ${serviceKey}` };
+  const isAdmin = profile.role === 'admin';
+
+  let original;
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/inbox_items?id=eq.${encodeURIComponent(id)}&select=*`, { headers:restHeaders });
+    if (!r.ok) return res.status(502).json({ ok:false, error:'No se pudo leer el pendiente' });
+    const rows = await r.json();
+    original = rows && rows[0];
+  } catch(e) {
+    console.error('[inbox-update:firma] Error leyendo pendiente:', e.message);
+    return res.status(502).json({ ok:false, error:'No se pudo leer el pendiente' });
+  }
+  if (!original) return res.status(404).json({ ok:false, error:'Pendiente no encontrado' });
+
+  // Este modo es EXCLUSIVO de firma_documento -- nunca se usa para colar
+  // cambios de data en ningún otro tipo de pendiente.
+  if (original.type !== 'firma_documento') {
+    return res.status(400).json({ ok:false, error:'Este pendiente no es de tipo firma_documento' });
+  }
+
+  const dataOriginal = (original.data && typeof original.data === 'object') ? original.data : {};
+
+  // ── Seguridad de ownership: empleado solo puede actuar si es el
+  // asignado o el firmante registrado -- verificado contra la base real. ──
+  const esFirmanteDeEsteItem = !isAdmin && (
+    original.assigned_to === profile.email || dataOriginal.firmanteEmail === profile.email
+  );
+  if (!isAdmin && !esFirmanteDeEsteItem) {
+    return res.status(403).json({ ok:false, error:'No puedes actuar sobre esta firma -- no eres el firmante asignado' });
+  }
+
+  // ── Construir el nuevo firmaStatus, con reglas distintas por rol ──
+  let nuevoFirmaStatus = dataOriginal.firmaStatus;
+  if (firmaBody.firmaStatus !== undefined) {
+    if (!FIRMA_STATUS_VALIDOS.includes(firmaBody.firmaStatus)) {
+      return res.status(400).json({ ok:false, error:'firmaStatus no válido' });
+    }
+    if (!isAdmin) {
+      // Empleado (firmante) SOLO puede marcar 'firmado' -- nunca
+      // 'visto_final' (exclusivo de admin) ni regresar a
+      // 'pendiente_firma'.
+      if (firmaBody.firmaStatus !== 'firmado') {
+        return res.status(403).json({ ok:false, error:'Solo un administrador puede dar el visto bueno final' });
+      }
+    }
+    nuevoFirmaStatus = firmaBody.firmaStatus;
+  }
+
+  // ── Allowlist estricta de los campos de subida del documento firmado --
+  // solo empleado (firmante) los usa en la práctica, pero no se restringe
+  // por rol aquí (admin también podría subirlo si hiciera falta). ──
+  const dataNueva = { ...dataOriginal, firmaStatus: nuevoFirmaStatus };
+  FIRMA_DATA_CAMPOS_PERMITIDOS.forEach(campo => {
+    if (campo === 'firmaStatus') return; // ya resuelto arriba
+    if (firmaBody[campo] !== undefined) {
+      if (typeof firmaBody[campo] !== 'string') return; // se descarta silenciosamente si no es string
+      dataNueva[campo] = firmaBody[campo].slice(0, 500);
+    }
+  });
+
+  // ── `cerrar`: SOLO admin puede pedir que esto también cierre el
+  // pendiente (status:'cerrado') en la MISMA escritura -- evita un estado
+  // intermedio donde firmaStatus ya es 'visto_final' pero status sigue
+  // 'pendiente'. Empleado nunca puede cerrar -- si lo manda, se ignora. ──
+  const debeCerrar = isAdmin && firmaBody.cerrar === true;
+
+  const ahora = new Date().toISOString();
+  const accionHistorial = debeCerrar ? 'visto_final' : (nuevoFirmaStatus === 'firmado' ? 'documento_firmado_subido' : 'firma_actualizada');
+  const historialNuevo = [
+    ...(Array.isArray(original.history) ? original.history : []),
+    { accion:accionHistorial, por:profile.email, fecha:ahora, comentario:'' },
+  ];
+
+  const patchBody = { data:dataNueva, history:historialNuevo, updated_at:ahora };
+  if (debeCerrar) patchBody.status = 'cerrado';
+  // El campo "visto" que se actualiza SIEMPRE sale del rol real de quien
+  // actúa -- mismo criterio que comment/mark_seen.
+  if (isAdmin) { patchBody.seen_by_admin_at = ahora; patchBody.seen_by_creator_at = null; }
+  else { patchBody.seen_by_creator_at = ahora; patchBody.seen_by_admin_at = null; }
+
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/inbox_items?id=eq.${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { ...restHeaders, 'Content-Type':'application/json', Prefer:'return=representation' },
+      body: JSON.stringify(patchBody),
+    });
+    if (!r.ok) {
+      const detalle = await r.text().catch(()=> '');
+      console.error('[inbox-update:firma] Error HTTP al actualizar:', r.status, detalle);
+      return res.status(502).json({ ok:false, error:'No se pudo actualizar la firma' });
+    }
+    const rows = await r.json();
+    return res.status(200).json({ ok:true, item: rows && rows[0] });
+  } catch(e) {
+    console.error('[inbox-update:firma] Excepción al actualizar:', e.message);
+    return res.status(502).json({ ok:false, error:'No se pudo actualizar la firma' });
   }
 }

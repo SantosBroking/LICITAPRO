@@ -135,7 +135,9 @@ export const INBOX_REFERENCIA_TIPOS = ['partida', 'equipo', 'documento', 'vehicu
 // se usan para VALIDAR en api/inbox-create.js -- ningún flujo real los crea
 // todavía (eso es Fase 3D-B, no autorizada).
 export const INBOX_DOCUMENTO_TIPOS = ['orden_compra', 'cotizacion', 'documento', 'otro'];
+export const INBOX_DOCUMENTO_TIPO_LABELS = { orden_compra:'Orden de compra', cotizacion:'Cotización', documento:'Documento', otro:'Otro' };
 export const INBOX_FIRMA_STATUS = ['pendiente_firma', 'firmado', 'visto_final'];
+export const INBOX_FIRMA_STATUS_LABELS = { pendiente_firma:'Pendiente de firma', firmado:'Firmado, en espera de visto final', visto_final:'Visto final dado' };
 
 // ── Ocultar proyectos perdidos/cancelados por default en UI (sin borrar
 // nada, sin tocar SQL/base de datos). El campo real es `project.status`

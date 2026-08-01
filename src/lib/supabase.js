@@ -348,6 +348,15 @@ export async function commentOnInboxItem(id, message) {
   return json.item;
 }
 
+// Fase 3D-B2 — flujo de firma dentro de Inbox (subir documento firmado /
+// dar visto bueno final). Mismo endpoint fusionado (api/inbox-update.js),
+// shape {firma:{...}}. `campos` es un objeto con cualquiera de:
+// documentoUrl, documentoNombre, documentoMime, firmaStatus, cerrar.
+export async function actualizarFirmaInboxItem(id, campos) {
+  const json = await postJsonWithSession('/api/inbox-update', { firma: { id, ...campos } });
+  return json.item;
+}
+
 export async function saveAuditLog(entry, userId) {
   if (!userId) return;
   await sb.from('audit_log').insert({ id: entry.id, user_id: userId, data: entry }).catch(()=>{});
