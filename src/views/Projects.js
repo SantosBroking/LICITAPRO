@@ -4,7 +4,7 @@ import { calcCotizacion } from '../lib/calc.js';
 // Projects.js — Lista, formulario y detalle de proyecto
 import { h, useState, useMemo, useCallback, useRef, useEffect } from '../lib/core.js';
 import { STATUSES, FINAL_STATUS, KANBAN_COLS, TIPOS_PROCEDIMIENTO, DEPENDENCIAS_COMUNES, TIPOS_PRODUCTO, esProyectoPerdido } from '../lib/constants.js';
-import { fmt, daysUntil, alertLevel, TODAY, NOW, uid, normalizeProjectName, generarFolioProyecto } from '../lib/utils.js';
+import { fmt, daysUntil, alertLevel, TODAY, NOW, uid, normalizeProjectName, generarFolioProyecto, generarFolioOC, generarFolioCotizacion } from '../lib/utils.js';
 import { Badge, AlertChip, Metric, Inp, EmptyState, ConfirmAction, NumInput, DeleteConfirmModal } from '../ui/primitives.js';
 import { getPermissions, canProjectTab, getAllowedSubTabs } from '../lib/permissions.js'; // Fase 1C + fix navegación + Fase 2A6 (sub-nav de Operación)
 import { sb } from '../lib/supabase.js'; // Fase 1C — directorio de usuarios activos
@@ -362,6 +362,15 @@ export function ProjectForm({ project, companies, config, onSave, onCancel, user
     // (isE===true) nunca se toca este campo, sea cual sea su valor.
     if (!isE && !pParaGuardar.folioProyecto) {
       pParaGuardar.folioProyecto = generarFolioProyecto(pParaGuardar.company, pParaGuardar.tipoOperacion, new Date().getFullYear(), projects);
+    }
+    // Fase 3C-2 -- folio DERIVADO de cotización: solo hay UNA cotización
+    // por proyecto en el modelo actual (sin historial de versiones, ver
+    // diagnóstico) -- así que siempre es {folioProyecto}-COT-01. Se
+    // persiste en cotizacion.folio SOLO si el proyecto acaba de recibir
+    // folioProyecto (creación nueva) Y cotizacion.folio todavía está
+    // vacío -- nunca se sobreescribe un folio ya tecleado manualmente.
+    if (!isE && pParaGuardar.folioProyecto && !(pParaGuardar.cotizacion && pParaGuardar.cotizacion.folio)) {
+      pParaGuardar.cotizacion = { ...(pParaGuardar.cotizacion||{}), folio: generarFolioCotizacion(pParaGuardar.folioProyecto, 1) };
     }
     // ¿Cambió el responsable? Si es uno nuevo (distinto al original), ofrecer avisarle
     const respAnterior = project?.responsable || '';
@@ -1211,7 +1220,27 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
   const generar = () => {
     const partidasSel = partidas.filter(p => selParts.includes(p.id));
     if (!partidasSel.length) { alert('Selecciona al menos una partida.'); return; }
-    const folio = 'OC-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-5);
+    // Fase 3C-2 -- si el proyecto tiene folioProyecto (folios maestros,
+    // Fase 3C-1), la OC usa el esquema derivado {folioProyecto}-OC-0N,
+    // consecutivo real contando las OC ya existentes de ESTE proyecto que
+    // ya sigan ese mismo prefijo. Si el proyecto NO tiene folioProyecto
+    // (legacy), se mantiene el comportamiento anterior tal cual, sin
+    // romper nada -- nunca se sobreescribe un folio ya asignado a una OC
+    // existente, esto solo aplica a una OC NUEVA.
+    let folio;
+    if (project.folioProyecto) {
+      const prefijoOC = project.folioProyecto + '-OC-';
+      let maxIdx = 0;
+      (project.ordenesCompra || []).forEach(o => {
+        if (o.folio && typeof o.folio === 'string' && o.folio.startsWith(prefijoOC)) {
+          const num = parseInt(o.folio.slice(prefijoOC.length), 10);
+          if (!isNaN(num) && num > maxIdx) maxIdx = num;
+        }
+      });
+      folio = generarFolioOC(project.folioProyecto, maxIdx + 1);
+    } else {
+      folio = 'OC-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-5);
+    }
     const proyConProv = { ...project, ocProveedor: prov, cotizacion:{ ...cot, agenciaProveedor:prov.name } };
     // Guardar OC en el expediente del proyecto
     const nuevaOC = {

@@ -240,7 +240,12 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
     // compacta, no una sub-pestaña (mismo criterio que el microfix de
     // limpieza de Cotización Operativa: nada de resúmenes repetidos).
     h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, flexWrap:'wrap', gap:8 } },
-      h('span', { style:{ fontSize:11, padding:'4px 12px', borderRadius:12, background:(ESTATUS_COLORES[estatusMostrado]||ESTATUS_COLORES.borrador).bg, color:(ESTATUS_COLORES[estatusMostrado]||ESTATUS_COLORES.borrador).tx, fontWeight:500 } }, 'Estatus: '+(ESTATUS_LABELS[estatusMostrado]||estatusMostrado)),
+      h('div', { style:{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' } },
+        h('span', { style:{ fontSize:11, padding:'4px 12px', borderRadius:12, background:(ESTATUS_COLORES[estatusMostrado]||ESTATUS_COLORES.borrador).bg, color:(ESTATUS_COLORES[estatusMostrado]||ESTATUS_COLORES.borrador).tx, fontWeight:500 } }, 'Estatus: '+(ESTATUS_LABELS[estatusMostrado]||estatusMostrado)),
+        // Fase 3C-2 -- referencia visible del folio derivado de esta
+        // cotización (si ya se generó -- ver doSave() en Projects.js).
+        cot.folio && h('span', { style:{ fontSize:11, color:'var(--t2)' } }, cot.folio),
+      ),
       h('button', { disabled:enviando, onClick:()=>setShowModalRevision(true), style:{ fontSize:12, padding:'7px 14px', background:'var(--blue)', color:'#fff', border:'none', borderRadius:'var(--r)', cursor:enviando?'wait':'pointer', opacity:enviando?.7:1 } }, enviando?'Enviando...':'Enviar a revisión'),
     ),
     h('div', { style:{ display:'flex', gap:0, marginBottom:20, borderBottom:'1px solid var(--b1)', overflowX:'auto' } },

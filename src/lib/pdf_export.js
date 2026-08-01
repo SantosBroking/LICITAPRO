@@ -352,6 +352,7 @@ export async function printCotizacionCliente({ project, cot, calc, config, compa
   <div class="cot-title" style="flex-shrink:0">
     <h1>COTIZACIÓN</h1>
     <div style="font-size:12px;font-weight:500;color:#3b6cf4;margin-top:3px;letter-spacing:.5px">${cot.folio||'—'}</div>
+    ${project.folioProyecto ? `<div style="font-size:9.5px;color:#6b6862;margin-top:2px">Folio proyecto: ${project.folioProyecto}</div>` : ''}
   </div>
 </div>
 
@@ -895,6 +896,7 @@ ${BASE_CSS}
     <div class="oc-folio" style="flex-shrink:0">
       <div class="lbl">Orden de Compra</div>
       <div class="num">${esc(folio)}</div>
+      ${project.folioProyecto ? `<div style="font-size:9.5px;color:#6b6862;margin-top:2px">Folio proyecto: ${esc(project.folioProyecto)}</div>` : ''}
       <div style="font-size:10px;color:#6b6862;margin-top:2px">${hoy}</div>
     </div>
   </div>
