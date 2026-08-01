@@ -7,7 +7,7 @@ import { STATUSES, FINAL_STATUS, KANBAN_COLS, TIPOS_PROCEDIMIENTO, DEPENDENCIAS_
 import { fmt, daysUntil, alertLevel, TODAY, NOW, uid, normalizeProjectName, generarFolioProyecto, generarFolioOC, generarFolioCotizacion } from '../lib/utils.js';
 import { Badge, AlertChip, Metric, Inp, EmptyState, ConfirmAction, NumInput, DeleteConfirmModal } from '../ui/primitives.js';
 import { getPermissions, canProjectTab, getAllowedSubTabs } from '../lib/permissions.js'; // Fase 1C + fix navegación + Fase 2A6 (sub-nav de Operación)
-import { sb } from '../lib/supabase.js'; // Fase 1C — directorio de usuarios activos
+import { sb, createInboxItem } from '../lib/supabase.js'; // Fase 1C — directorio de usuarios activos; Fase 3D-B1 — creación de firma_documento
 import CotizacionTab from './Cotizacion.js';
 import CotizacionOperativa from './CotizacionOperativa.js'; // Fase 2A4
 import BasesPreparacion from './Bases.js';
@@ -836,18 +836,37 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
             if (!soloAdmins[idx]) { alert('Opción no válida.'); return; }
             respNombre = soloAdmins[idx].name; respEmail = soloAdmins[idx].email;
           }
-          const doc = nuevoDocFlujo({
-            tipo:'oc', titulo:'Orden de compra · '+(oc.proveedor||''), folio:oc.folio, proyectoId:project.id,
-            creadoPorNombre:(user?.name||user?.email||''), creadoPorEmail:(user?.email||''),
-            responsableNombre:respNombre, responsableEmail:respEmail,
-            ocId:oc.id, empresaId:(company&&company.id)||null,
-          });
-          updProject({ ...project, firmas:[...(project.firmas||[]), doc] });
-          // Avisar al jefe (aprobador único)
+          // Fase 3D-B1 -- ya NO se crea una entrada en project.firmas[]
+          // (legacy, project.firmas[] queda intacto para las firmas
+          // existentes). Se crea un inbox_item tipo firma_documento en su
+          // lugar -- corte limpio, nunca ambos a la vez. Nombres de campo
+          // de `data` exactamente los que ya acepta api/inbox-create.js
+          // desde Fase 3D-A, sin tocar ese endpoint.
+          // Nota: el correo legacy avisarAprobacion() (a
+          // santiago@brokingroup.com) se dejó de llamar a propósito --
+          // "no correo de firma todavía" era instrucción explícita de esta
+          // fase. Reportado en la entrega, no se decidió en silencio.
           try {
-            await avisarAprobacion({ doc, proyectoNombre:project.name, jefeEmail:'santiago@brokingroup.com', linkApp:'https://licitapro-beta.vercel.app/?view=firmas' });
-            alert('✅ Enviado a aprobación. Santiago debe aprobarlo antes de que vaya a firma con '+respNombre+'.');
-          } catch(e) { alert('Documento creado y en aprobación, pero el correo no se pudo enviar: '+e.message); }
+            await createInboxItem({
+              type: 'firma_documento',
+              title: 'Firma de OC ' + (oc.folio || ''),
+              message: 'Se requiere firma de la Orden de Compra ' + (oc.folio||'') + ' (proveedor: ' + (oc.proveedor||'—') + ').',
+              project_id: project.id,
+              assigned_to: respEmail,
+              data: {
+                documentoTipo: 'orden_compra',
+                documentoFolio: oc.folio || '',
+                folioProyecto: project.folioProyecto || '',
+                firmante: respNombre,
+                firmanteEmail: respEmail,
+                firmaStatus: 'pendiente_firma',
+                accionSolicitada: 'firmar',
+                source: 'orden_compra',
+                ocId: oc.id,
+              },
+            });
+            alert('✅ Firma de OC ' + (oc.folio||'') + ' enviada al Centro de aprobaciones. ' + respNombre + ' debe firmarla.');
+          } catch(e) { alert('No se pudo enviar la solicitud de firma: ' + e.message); }
         };
         const ocsList = [...(project.ordenesCompra||[])].reverse();
         const vehTxt = oc => (oc.partidas||[]).map(p=>`${p.id} · ${p.vehiculo||''} ×${p.cantidad}`).join(' | ');
