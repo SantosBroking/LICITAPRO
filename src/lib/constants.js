@@ -87,9 +87,15 @@ export const DEFAULT_CONFIG = {
 // renombrar -- ya existen pendientes reales en producción con esos valores
 // de `type`, renombrarlos rompería su visualización histórica. Los nuevos
 // se agregan como tipos adicionales, no reemplazos.
+// Fase 3D-A: 'firma_documento' agregado al final -- convivencia con Firmas
+// (ver diagnóstico 3D-0). NO reemplaza ni toca project.firmas[]/Firmas.js/
+// src/lib/firmas.js -- es solo el tipo nuevo para que, en una fase futura
+// (3D-B, no autorizada todavía), las firmas NUEVAS puedan crearse como
+// inbox_items en vez de entradas de project.firmas[].
 export const INBOX_TIPOS = [
   'proyecto_nuevo', 'cotizacion_revision', 'documento_cargado', 'cambios_solicitados',
   'aprobar_precio', 'revisar_documento', 'aprobar_factura_proveedor', 'cambio_operativo', 'duda_admin', 'alta_proveedor', 'otro',
+  'firma_documento',
 ];
 export const INBOX_TIPO_LABELS = {
   proyecto_nuevo: 'Proyecto nuevo',
@@ -103,6 +109,7 @@ export const INBOX_TIPO_LABELS = {
   duda_admin: 'Duda para admin',
   alta_proveedor: 'Alta de proveedor',
   otro: 'Otro',
+  firma_documento: 'Firma de documento',
 };
 // 'cerrado' es NUEVO en esta fase -- se agrega al final, no se reordena ni
 // se quita ninguno de los 6 existentes (compatibilidad con pendientes ya
@@ -114,9 +121,17 @@ export const INBOX_ESTATUS_LABELS = {
 };
 export const INBOX_PRIORIDADES = ['baja', 'media', 'alta', 'urgente'];
 export const INBOX_PRIORIDAD_LABELS = { baja:'Baja', media:'Media', alta:'Alta', urgente:'Urgente' };
-export const INBOX_ACCIONES = ['aprobar', 'revisar', 'corregir', 'comentar', 'confirmar'];
-export const INBOX_ACCION_LABELS = { aprobar:'Aprobar', revisar:'Revisar', corregir:'Corregir', comentar:'Comentar', confirmar:'Confirmar' };
+// Fase 3D-A: 'firmar' agregado al final -- misma convivencia, sin tocar los 5 existentes.
+export const INBOX_ACCIONES = ['aprobar', 'revisar', 'corregir', 'comentar', 'confirmar', 'firmar'];
+export const INBOX_ACCION_LABELS = { aprobar:'Aprobar', revisar:'Revisar', corregir:'Corregir', comentar:'Comentar', confirmar:'Confirmar', firmar:'Firmar' };
 export const INBOX_REFERENCIA_TIPOS = ['partida', 'equipo', 'documento', 'vehiculo'];
+
+// Fase 3D-A — valores válidos para los campos específicos de
+// firma_documento dentro de inbox_items.data (ver diagnóstico 3D-0). Solo
+// se usan para VALIDAR en api/inbox-create.js -- ningún flujo real los crea
+// todavía (eso es Fase 3D-B, no autorizada).
+export const INBOX_DOCUMENTO_TIPOS = ['orden_compra', 'cotizacion', 'documento', 'otro'];
+export const INBOX_FIRMA_STATUS = ['pendiente_firma', 'firmado', 'visto_final'];
 
 // ── Ocultar proyectos perdidos/cancelados por default en UI (sin borrar
 // nada, sin tocar SQL/base de datos). El campo real es `project.status`

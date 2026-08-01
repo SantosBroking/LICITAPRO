@@ -13,6 +13,8 @@ async function cargarConstantesInbox() {
     PRIORIDADES_VALIDAS: mod.INBOX_PRIORIDADES,
     ACCIONES_VALIDAS: mod.INBOX_ACCIONES,
     REFERENCIA_TIPOS_VALIDOS: mod.INBOX_REFERENCIA_TIPOS,
+    DOCUMENTO_TIPOS_VALIDOS: mod.INBOX_DOCUMENTO_TIPOS,
+    FIRMA_STATUS_VALIDOS: mod.INBOX_FIRMA_STATUS,
   };
 }
 
@@ -22,9 +24,15 @@ async function cargarConstantesInbox() {
 // existentes desde 2F2/2F3 (folio, proyectoNombre, partidasActivas,
 // equipoCount, categorias, cantidad) como los nuevos de la petición robusta
 // (prioridad, accionSolicitada, referenciaTipo/Id/Label, dueDate, source).
+// Fase 3D-A: campos de firma_documento agregados (ver diagnóstico 3D-0) --
+// SOLO se permite que se GUARDEN si vienen en el body; ningún flujo real
+// los crea todavía (Firmas.js/project.firmas[] siguen siendo la única vía
+// real de firmas hoy, sin tocar).
 const CAMPOS_DATA_PERMITIDOS = [
   'folio', 'proyectoNombre', 'partidasActivas', 'equipoCount', 'categorias', 'cantidad',
   'prioridad', 'accionSolicitada', 'referenciaTipo', 'referenciaId', 'referenciaLabel', 'dueDate', 'source',
+  'documentoTipo', 'documentoFolio', 'folioProyecto', 'documentoUrl', 'documentoNombre', 'documentoMime',
+  'firmante', 'firmanteEmail', 'firmaStatus', 'ocId', 'cotizacionId', 'docId',
 ];
 
 // Fase 2F3 — endpoint de ESCRITURA para CREAR un pendiente nuevo. Ambos
@@ -71,7 +79,7 @@ module.exports = async function handler(req, res) {
     console.error('[inbox-create] No se pudieron cargar las constantes:', e.message);
     return res.status(500).json({ ok:false, error:'No se pudo procesar la solicitud' });
   }
-  const { TIPOS_VALIDOS, PRIORIDADES_VALIDAS, ACCIONES_VALIDAS, REFERENCIA_TIPOS_VALIDOS } = constantesInbox;
+  const { TIPOS_VALIDOS, PRIORIDADES_VALIDAS, ACCIONES_VALIDAS, REFERENCIA_TIPOS_VALIDOS, DOCUMENTO_TIPOS_VALIDOS, FIRMA_STATUS_VALIDOS } = constantesInbox;
 
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch(e) { body = null; } }
@@ -109,6 +117,27 @@ module.exports = async function handler(req, res) {
   if (typeof dataLimitada.dueDate !== 'string' || isNaN(Date.parse(dataLimitada.dueDate))) delete dataLimitada.dueDate;
   if (typeof dataLimitada.source !== 'string') delete dataLimitada.source;
   else dataLimitada.source = dataLimitada.source.slice(0, 100);
+  // Fase 3D-A -- validaciones de los campos de firma_documento, mismo
+  // patrón: si no son válidos, se descarta solo ese campo puntual.
+  if (dataLimitada.documentoTipo !== undefined && !DOCUMENTO_TIPOS_VALIDOS.includes(dataLimitada.documentoTipo)) delete dataLimitada.documentoTipo;
+  if (dataLimitada.firmaStatus !== undefined && !FIRMA_STATUS_VALIDOS.includes(dataLimitada.firmaStatus)) delete dataLimitada.firmaStatus;
+  if (typeof dataLimitada.documentoFolio !== 'string') delete dataLimitada.documentoFolio;
+  else dataLimitada.documentoFolio = dataLimitada.documentoFolio.slice(0, 100);
+  if (typeof dataLimitada.folioProyecto !== 'string') delete dataLimitada.folioProyecto;
+  else dataLimitada.folioProyecto = dataLimitada.folioProyecto.slice(0, 100);
+  if (typeof dataLimitada.documentoUrl !== 'string') delete dataLimitada.documentoUrl;
+  else dataLimitada.documentoUrl = dataLimitada.documentoUrl.slice(0, 500);
+  if (typeof dataLimitada.documentoNombre !== 'string') delete dataLimitada.documentoNombre;
+  else dataLimitada.documentoNombre = dataLimitada.documentoNombre.slice(0, 200);
+  if (typeof dataLimitada.documentoMime !== 'string') delete dataLimitada.documentoMime;
+  else dataLimitada.documentoMime = dataLimitada.documentoMime.slice(0, 100);
+  if (typeof dataLimitada.firmante !== 'string') delete dataLimitada.firmante;
+  else dataLimitada.firmante = dataLimitada.firmante.slice(0, 200);
+  if (typeof dataLimitada.firmanteEmail !== 'string') delete dataLimitada.firmanteEmail;
+  else dataLimitada.firmanteEmail = dataLimitada.firmanteEmail.slice(0, 200);
+  if (typeof dataLimitada.ocId !== 'string') delete dataLimitada.ocId;
+  if (typeof dataLimitada.cotizacionId !== 'string') delete dataLimitada.cotizacionId;
+  if (typeof dataLimitada.docId !== 'string') delete dataLimitada.docId;
   // Default silencioso: si no se mandó prioridad válida, queda 'media' --
   // nunca ausente, para que la UI siempre tenga algo consistente que mostrar.
   if (!dataLimitada.prioridad) dataLimitada.prioridad = 'media';
