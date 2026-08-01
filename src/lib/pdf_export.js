@@ -485,7 +485,19 @@ ${(cot.condicionesLista||[]).length > 0 ? `<div style="background:#f6f6f4;paddin
 </div>
 </div></body></html>`;
 
-  const nombreArchivo = (cot.folio || ('Cotizacion ' + (project.name || ''))).trim() || 'Cotizacion';
+  // Fase 3C-3 -- nombre de archivo de descarga, con la cadena de fallback
+  // exacta pedida: 1) cot.folio real si existe; 2) si no, pero el
+  // proyecto SÍ tiene folioProyecto (folios maestros, Fase 3C-1), se
+  // deriva {folioProyecto}-COT-01 al vuelo (nunca se sobreescribe
+  // cot.folio en la base, esto es solo para nombrar ESTE archivo
+  // descargado); 3) si tampoco hay folioProyecto (proyecto legacy), cae
+  // al nombre del proyecto, exactamente como antes -- nunca se usa
+  // numLicitacion para nombrar el archivo. Prefijo "Cotizacion " en TODOS
+  // los casos (antes solo el caso legacy lo tenía) -- openPrint()
+  // convierte el espacio en "_" automáticamente, produciendo
+  // "Cotizacion_{FOLIO}.pdf" de forma consistente.
+  const folioParaArchivo = cot.folio || (project.folioProyecto ? project.folioProyecto + '-COT-01' : '');
+  const nombreArchivo = ('Cotizacion ' + (folioParaArchivo || project.name || '')).trim() || 'Cotizacion';
   openPrint(html, nombreArchivo);
 }
 
