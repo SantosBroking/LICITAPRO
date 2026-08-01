@@ -109,7 +109,11 @@ export const INBOX_TIPO_LABELS = {
   duda_admin: 'Duda para admin',
   alta_proveedor: 'Alta de proveedor',
   otro: 'Otro',
-  firma_documento: 'Firma de documento',
+  // Fase 3D-B1.2 -- label acortada a 'Firmas' (antes 'Firma de documento')
+  // para que se vea claro y corto en el filtro/pestaña de Inbox, tal como
+  // se pidió explícitamente. Mismo criterio en tarjeta/detalle (usa la
+  // misma constante) -- se ve consistente en ambos lugares.
+  firma_documento: 'Firmas',
 };
 // 'cerrado' es NUEVO en esta fase -- se agrega al final, no se reordena ni
 // se quita ninguno de los 6 existentes (compatibilidad con pendientes ya

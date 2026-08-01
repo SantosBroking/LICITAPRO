@@ -21,7 +21,14 @@ const NAV_ITEMS = [
   { id:'dashboard', label:'Dashboard', icon:'◈' },
   { id:'projects',  label:'Proyectos', icon:'◉' },
   { id:'inbox',     label:'Inbox',     icon:'📥' },
-  { id:'firmas',    label:'Firmas',    icon:'◫' },
+  // Fase 3D-B1.2 -- 'firmas' se quitó de la navegación principal (Opción C
+  // del diagnóstico: no quiero dos módulos principales visibles). La
+  // VISTA (FirmasView), el archivo src/views/Firmas.js, src/lib/firmas.js
+  // y project.firmas[] NO se tocaron -- 'firmas' sigue en VISTAS_ADMIN/
+  // VISTAS_EMPLEADO (permissions.js, sin cambio) y en el mapa de rutas de
+  // App.js (sin cambio), así que sigue siendo 100% accesible navegando
+  // directo (?view=firmas) -- solo deja de ser un botón visible en el
+  // menú, para que las firmas legacy nunca queden inaccesibles.
   { id:'companies', label:'Empresas',  icon:'◎' },
   { id:'catalog',   label:'Catálogo',  icon:'◳' },
   { id:'reports',   label:'Reportes',  icon:'◑' },
