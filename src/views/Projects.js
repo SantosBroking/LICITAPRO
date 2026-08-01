@@ -7,7 +7,7 @@ import { STATUSES, FINAL_STATUS, KANBAN_COLS, TIPOS_PROCEDIMIENTO, DEPENDENCIAS_
 import { fmt, daysUntil, alertLevel, TODAY, NOW, uid, normalizeProjectName, generarFolioProyecto, generarFolioOC, generarFolioCotizacion } from '../lib/utils.js';
 import { Badge, AlertChip, Metric, Inp, EmptyState, ConfirmAction, NumInput, DeleteConfirmModal } from '../ui/primitives.js';
 import { getPermissions, canProjectTab, getAllowedSubTabs } from '../lib/permissions.js'; // Fase 1C + fix navegación + Fase 2A6 (sub-nav de Operación)
-import { sb, createInboxItem } from '../lib/supabase.js'; // Fase 1C — directorio de usuarios activos; Fase 3D-B1 — creación de firma_documento
+import { sb, createInboxItem, listInboxItems } from '../lib/supabase.js'; // Fase 1C — directorio de usuarios activos; Fase 3D-B1 — creación de firma_documento; Fase 3D-B1.1 — reconocer firmas de OC en Inbox
 import CotizacionTab from './Cotizacion.js';
 import CotizacionOperativa from './CotizacionOperativa.js'; // Fase 2A4
 import BasesPreparacion from './Bases.js';
@@ -515,6 +515,28 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
     });
     return () => { cancel = true; };
   }, []);
+  // Fase 3D-B1.1 -- las firmas de OC NUEVAS ya no se guardan en
+  // project.firmas[] (Fase 3D-B1), sino como inbox_items. Para que
+  // ocAprobada()/enFlujo() (más abajo) reconozcan AMBOS mundos sin romper
+  // el legacy, se consulta Inbox UNA vez por proyecto -- mismo patrón ya
+  // usado en CotizacionOperativa.js para su badge de estatus (reutiliza
+  // listInboxItems(), sin endpoint nuevo). Solo se filtra localmente por
+  // type/source/ocId -- nunca se piden ni se muestran datos financieros
+  // aquí, es la misma respuesta ya sanitizada de siempre.
+  const [inboxFirmasOC, setInboxFirmasOC] = useState([]);
+  useEffect(() => {
+    let cancel = false;
+    listInboxItems()
+      .then(({ items }) => {
+        if (cancel) return;
+        const propias = (items||[]).filter(i =>
+          i.type==='firma_documento' && i.data && i.data.source==='orden_compra' && i.project_id===project.id
+        );
+        setInboxFirmasOC(propias);
+      })
+      .catch(e => console.error('[ProjectDetail] No se pudo consultar firmas de OC en Inbox:', e));
+    return () => { cancel = true; };
+  }, [project.id]);
   const company = companies.find(c=>c.name===project.company);
   // Fase 0C: solo admin ve costos/utilidad/márgenes (pestaña Cotización) y
   // puede borrar proyectos definitivamente.
@@ -796,7 +818,26 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
       // Órdenes de Compra generadas
       (project.ordenesCompra||[]).length > 0 && (() => {
         const esJefeDetalle = getPermissions(user).isAdmin;
-        const ocAprobada = oc => (project.firmas||[]).some(f => f.ocId===oc.id && (f.estatus==='en_firma' || f.estatus==='en_visto' || f.estatus==='completado'));
+        // Fase 3D-B1.1 -- ambos "mundos" reconocidos: legacy
+        // (project.firmas[], sin tocar, sigue funcionando exactamente
+        // igual para firmas viejas) + nuevo (inbox_items tipo
+        // firma_documento con data.source==='orden_compra', creados desde
+        // Fase 3D-B1). Match por data.ocId si existe; si faltara (no
+        // debería, pero por si acaso), fallback a data.documentoFolio===
+        // oc.folio -- nunca se inventan nombres de status: los valores
+        // reales de INBOX_ESTATUS son pendiente/en_revision/
+        // cambios_solicitados/aprobado/rechazado/revisado/cerrado.
+        const inboxFirmaDeOC = oc => inboxFirmasOC.find(i =>
+          (i.data && i.data.ocId === oc.id) || (i.data && !i.data.ocId && i.data.documentoFolio === oc.folio)
+        );
+        const ocAprobada = oc => {
+          if ((project.firmas||[]).some(f => f.ocId===oc.id && (f.estatus==='en_firma' || f.estatus==='en_visto' || f.estatus==='completado'))) return true;
+          const item = inboxFirmaDeOC(oc);
+          if (!item) return false;
+          if (['aprobado', 'cerrado'].includes(item.status)) return true;
+          if (item.data && ['firmado', 'visto_final'].includes(item.data.firmaStatus)) return true;
+          return false;
+        };
         const reimprimir = oc => {
           // Los empleados solo pueden imprimir OC ya aprobadas por el jefe
           if (!esJefeDetalle && !ocAprobada(oc)) {
@@ -811,7 +852,15 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
           printOrdenCompra({ project:{...project,ocProveedor:{name:oc.proveedor,rfc:oc.proveedorRfc,address:oc.proveedorAddress},cotizacion:{...cot2,agenciaProveedor:oc.proveedor}}, partidas:parts, condiciones:oc.condiciones||[], folio:oc.folio, companyObj:company });
         };
         const eliminar = oc => { if(confirm('¿Eliminar OC '+oc.folio+'?')) updProject({...project,ordenesCompra:(project.ordenesCompra||[]).filter(o=>o.id!==oc.id)}); };
-        const enFlujo = oc => (project.firmas||[]).find(f => f.ocId===oc.id && f.estatus!=='completado');
+        const enFlujo = oc => {
+          const legacy = (project.firmas||[]).find(f => f.ocId===oc.id && f.estatus!=='completado');
+          if (legacy) return legacy;
+          const item = inboxFirmaDeOC(oc);
+          if (!item) return undefined;
+          if (['pendiente', 'en_revision', 'cambios_solicitados'].includes(item.status)) return item;
+          if (item.data && item.data.firmaStatus === 'pendiente_firma') return item;
+          return undefined;
+        };
         const equipo = usuariosActivosDetalle;
         const enviarAprobacion = async (oc) => {
           // Fase mini Firmas/OC: una Orden de Compra siempre contiene
