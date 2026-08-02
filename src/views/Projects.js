@@ -1,5 +1,6 @@
 import { printCotizacionCliente, printResumenRetornos, printResumenInterno, printOrdenCompra } from '../lib/pdf_export.js';
 import { nuevoDocFlujo, avisarAprobacion, avisarAsignacionProyecto, avisarCambioEstatus } from '../lib/firmas.js';
+import { avisarFirmaRequeridaInbox } from '../lib/inbox_firma_emails.js'; // Fase 3D-B3
 import { calcCotizacion } from '../lib/calc.js';
 // Projects.js — Lista, formulario y detalle de proyecto
 import { h, useState, useMemo, useCallback, useRef, useEffect } from '../lib/core.js';
@@ -914,6 +915,17 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
                 ocId: oc.id,
               },
             });
+            // Fase 3D-B3 -- correo al firmante, disparado desde el
+            // CLIENTE tras la creación exitosa del inbox_item (sin tocar
+            // api/inbox-update.js ni api/inbox-create.js). Si el correo
+            // falla, la solicitud YA quedó creada en Inbox -- se avisa
+            // aparte, sin revertir nada.
+            try {
+              await avisarFirmaRequeridaInbox({
+                documentoFolio: oc.folio || '', folioProyecto: project.folioProyecto || '', proyectoNombre: project.name,
+                firmanteEmail: respEmail, firmanteNombre: respNombre,
+              });
+            } catch(eCorreo) { console.error('[3D-B3] Firma creada en Inbox, pero el correo al firmante no se pudo enviar:', eCorreo); }
             alert('✅ Firma de OC ' + (oc.folio||'') + ' enviada al Centro de aprobaciones. ' + respNombre + ' debe firmarla.');
           } catch(e) { alert('No se pudo enviar la solicitud de firma: ' + e.message); }
         };

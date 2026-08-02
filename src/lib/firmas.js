@@ -78,9 +78,15 @@ export function devolver(doc, porNombre, comentario) {
   return { ...sanitizeFirmaBeforePersist(doc), estatus:'en_firma', historial:[...(doc.historial||[]), { accion:'devuelto', por:porNombre, fecha:ahora(), comentario:comentario||'' }] };
 }
 
-function esc(s) { return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+// Fase 3D-B3 -- estos 5 helpers se exportan (antes privados del módulo)
+// para reutilizarse desde src/lib/inbox_firma_emails.js, el nuevo flujo
+// de firma dentro de Inbox. NINGUNO depende de project.firmas[] ni del
+// shape `doc` -- son genéricos (reciben strings/HTML planos), por eso es
+// seguro reutilizarlos sin acoplar el nuevo flujo al legacy. Cero cambio
+// de lógica, solo se agregó la palabra `export`.
+export function esc(s) { return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-function wrapEmail(titulo, cuerpoHtml) {
+export function wrapEmail(titulo, cuerpoHtml) {
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>'
     + '<body style="margin:0;background:#f0ede8;font-family:\'Helvetica Neue\',Arial,sans-serif;color:#1a1917">'
     + '<div style="max-width:560px;margin:0 auto;padding:24px">'
@@ -93,7 +99,7 @@ function wrapEmail(titulo, cuerpoHtml) {
     + '</div></div></body></html>';
 }
 
-function tablaDoc(doc, proyectoNombre) {
+export function tablaDoc(doc, proyectoNombre) {
   return '<div style="background:#f7f5f1;border-radius:10px;padding:16px;margin:16px 0">'
     + '<table style="width:100%;font-size:13px;border-collapse:collapse">'
     + '<tr><td style="color:#888;padding:4px 0;width:120px">Documento</td><td style="font-weight:600">' + esc(doc.titulo) + '</td></tr>'
@@ -102,11 +108,11 @@ function tablaDoc(doc, proyectoNombre) {
     + '</table></div>';
 }
 
-function btnLink(linkApp, texto) {
+export function btnLink(linkApp, texto) {
   return linkApp?'<div style="text-align:center;margin-top:20px"><a href="' + esc(linkApp) + '" style="display:inline-block;background:#1a1917;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600">' + texto + '</a></div>':'';
 }
 
-async function enviar(to, subject, html, attachments) {
+export async function enviar(to, subject, html, attachments) {
   if (!to) throw new Error('Falta destinatario');
   const res = await fetch('/api/send-email', {
     method:'POST', headers:{ 'Content-Type':'application/json' },

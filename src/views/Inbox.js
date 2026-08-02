@@ -1,5 +1,6 @@
 import { h, useState, useEffect, useRef } from '../lib/core.js';
 import { listInboxItems, updateInboxItem, markInboxSeen, createInboxItem, commentOnInboxItem, actualizarFirmaInboxItem, uploadFileToStorage, abrirArchivo } from '../lib/supabase.js';
+import { avisarDocumentoFirmadoSubidoInbox, avisarVistoBuenoFinalInbox, avisarFirmaRechazadaInbox } from '../lib/inbox_firma_emails.js'; // Fase 3D-B3
 import { getPermissions } from '../lib/permissions.js';
 import { normalizeProjectName } from '../lib/utils.js';
 import {
@@ -135,6 +136,16 @@ export function Inbox({ user, onNav, projects, onSeenChange }) {
       const url = await uploadFileToStorage(path, file);
       if (!url) { alert('No se pudo subir el archivo (tipo o tamaño no permitido).'); setSubiendoFirmaId(null); return; }
       await actualizarFirmaInboxItem(item.id, { documentoUrl:url, documentoNombre:file.name, documentoMime:file.type||'', firmaStatus:'firmado' });
+      // Fase 3D-B3 -- correo a quien creó la solicitud (created_by),
+      // disparado desde el CLIENTE tras la escritura exitosa. Si el
+      // correo falla, el documento YA quedó guardado -- no se revierte.
+      try {
+        await avisarDocumentoFirmadoSubidoInbox({
+          documentoFolio: item.data?.documentoFolio||'', folioProyecto: item.data?.folioProyecto||'',
+          proyectoNombre: (projects||[]).find(p=>p.id===item.project_id)?.name,
+          subidoPorEmail: user?.email, subidoPorNombre: user?.name, creadorEmail: item.created_by,
+        });
+      } catch(eCorreo) { console.error('[3D-B3] Documento firmado guardado, pero el correo no se pudo enviar:', eCorreo); }
       await cargar();
       if (onSeenChange) onSeenChange();
       alert('✅ Documento firmado subido correctamente.');
@@ -149,10 +160,35 @@ export function Inbox({ user, onNav, projects, onSeenChange }) {
     setBusyId(item.id);
     try {
       await actualizarFirmaInboxItem(item.id, { firmaStatus:'visto_final', cerrar:true });
+      // Fase 3D-B3 -- correo a creador y firmante (deduplicado si
+      // coinciden), disparado desde el CLIENTE tras el cierre exitoso.
+      try {
+        await avisarVistoBuenoFinalInbox({
+          documentoFolio: item.data?.documentoFolio||'', folioProyecto: item.data?.folioProyecto||'',
+          proyectoNombre: (projects||[]).find(p=>p.id===item.project_id)?.name,
+          creadorEmail: item.created_by, firmanteEmail: item.assigned_to || item.data?.firmanteEmail,
+        });
+      } catch(eCorreo) { console.error('[3D-B3] Visto bueno final guardado, pero el correo no se pudo enviar:', eCorreo); }
       await cargar();
       if (onSeenChange) onSeenChange();
     } catch(e) { alert('Error al dar visto bueno final: ' + e.message); }
     setBusyId(null);
+  };
+
+  // Fase 3D-B3 -- rechazar/pedir cambios EXCLUSIVO del bloque de botones
+  // de firma_documento (no toca la fila genérica de admin usada por el
+  // resto de tipos de pendiente, ni accionar() en sí). Reutiliza
+  // accionar() tal cual, y ADEMÁS envía el correo D a quien creó la
+  // solicitud.
+  const rechazarFirmaConCorreo = async (item, status) => {
+    await accionar(item.id, status);
+    try {
+      await avisarFirmaRechazadaInbox({
+        documentoFolio: item.data?.documentoFolio||'', folioProyecto: item.data?.folioProyecto||'',
+        proyectoNombre: (projects||[]).find(p=>p.id===item.project_id)?.name,
+        creadorEmail: item.created_by, comentario: comentarios[item.id]||'', esRechazo: status==='rechazado',
+      });
+    } catch(eCorreo) { console.error('[3D-B3] Estatus actualizado, pero el correo no se pudo enviar:', eCorreo); }
   };
 
   const verDocumentoFirmado = (item) => { if (item.data && item.data.documentoUrl) abrirArchivo(item.data.documentoUrl); };
@@ -279,8 +315,8 @@ export function Inbox({ user, onNav, projects, onSeenChange }) {
                   h('button', { disabled:subiendoFirmaId===item.id, onClick:()=>fileInputRefs.current[item.id]&&fileInputRefs.current[item.id].click(), style:{ fontSize:12, padding:'6px 12px', background:'var(--blue)', color:'#fff', border:'none', borderRadius:6, cursor:'pointer' } }, subiendoFirmaId===item.id?'Subiendo...':'📎 Subir documento firmado'),
                 ),
                 isAdmin && item.data?.firmaStatus==='firmado' && h('button', { disabled:busyId===item.id, onClick:()=>darVistoBuenoFinal(item), style:{ fontSize:12, padding:'6px 12px', background:'var(--green)', color:'#fff', border:'none', borderRadius:6, cursor:'pointer' } }, 'Dar visto bueno final'),
-                isAdmin && !ESTATUS_FINALES.includes(item.status) && h('button', { disabled:busyId===item.id, onClick:()=>accionar(item.id,'rechazado'), style:{ fontSize:12, padding:'6px 12px', background:'transparent', color:'var(--red)', border:'1px solid var(--red)', borderRadius:6, cursor:'pointer' } }, 'Rechazar'),
-                isAdmin && !ESTATUS_FINALES.includes(item.status) && h('button', { disabled:busyId===item.id, onClick:()=>accionar(item.id,'cambios_solicitados'), style:{ fontSize:12, padding:'6px 12px', background:'transparent', border:'1px solid var(--b2)', borderRadius:6, cursor:'pointer' } }, 'Pedir cambios'),
+                isAdmin && !ESTATUS_FINALES.includes(item.status) && h('button', { disabled:busyId===item.id, onClick:()=>rechazarFirmaConCorreo(item,'rechazado'), style:{ fontSize:12, padding:'6px 12px', background:'transparent', color:'var(--red)', border:'1px solid var(--red)', borderRadius:6, cursor:'pointer' } }, 'Rechazar'),
+                isAdmin && !ESTATUS_FINALES.includes(item.status) && h('button', { disabled:busyId===item.id, onClick:()=>rechazarFirmaConCorreo(item,'cambios_solicitados'), style:{ fontSize:12, padding:'6px 12px', background:'transparent', border:'1px solid var(--b2)', borderRadius:6, cursor:'pointer' } }, 'Pedir cambios'),
               ),
               // ── Botones admin genéricos -- ya NO se muestran para
               // firma_documento (reemplazados por la fila específica de
