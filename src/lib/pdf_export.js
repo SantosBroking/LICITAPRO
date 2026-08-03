@@ -317,6 +317,40 @@ export async function printCotizacionCliente({ project, cot, calc, config, compa
     return { p, qty, pvUnit, subtotal, eqItems, pi };
   });
 
+  // Fase 3F-1b -- si NO hay vehículos activos (activeParts.length===0),
+  // partRows queda vacío y el PDF no mostraría NADA aunque haya equipo
+  // real cotizado (caso Chimalhuacán). Se agrega UNA sección nueva y
+  // separada que lista el equipo directamente usando cantidadGlobal (el
+  // mismo campo ya agregado en Fase 3F-1) -- misma fórmula EXACTA que
+  // calcCotizacion (calc.js) para que el subtotal de esta sección
+  // coincida con calc.ventaSIVA/calc.ivaVenta/calc.ventaTotal (ya
+  // correctos desde 3F-1, sin tocar aquí). Cuando SÍ hay vehículos
+  // activos, este bloque produce un arreglo vacío y no afecta nada --
+  // comportamiento idéntico al de siempre.
+  const equipoSinVehiculo = activeParts.length === 0
+    ? (cot.equipo || []).map(liveEq).filter(e => e.usar && e.vis && Number(e.cantidadGlobal||0) > 0)
+    : [];
+  let totalUnidadesEquipoSinVeh = 0;
+  equipoSinVehiculo.forEach(e => { totalUnidadesEquipoSinVeh += Number(e.cantidadGlobal||0); });
+  const ventaUnitMontoEquipoSinVeh = (soloEq && modoEq === 'monto' && totalUnidadesEquipoSinVeh > 0)
+    ? (cot.montoGanar || 0) / totalUnidadesEquipoSinVeh : 0;
+  const equipoSinVehiculoRows = equipoSinVehiculo.map(e => {
+    const qty = Number(e.cantidadGlobal || 0);
+    const costoUnitSIVA = e.llevaIVA ? (e.costoConIVA||0)/(1+IVA) : (e.costoConIVA||0);
+    let pvUnitSIVA;
+    if (soloEq && modoEq === 'monto') {
+      pvUnitSIVA = ventaUnitMontoEquipoSinVeh;
+    } else {
+      const margen = (e.margenPropio != null) ? e.margenPropio : margenGeneral;
+      pvUnitSIVA = costoUnitSIVA * (1 + margen);
+    }
+    const subtotal = pvUnitSIVA * qty;
+    const liveProd = liveCatMap[e.productoId];
+    const img = (liveProd?.photo) || CATALOG_IMAGES[e.productoId];
+    return { e, qty, pvUnitSIVA, subtotal, img, liveProd };
+  });
+  const subtotalEquipoSinVeh = equipoSinVehiculoRows.reduce((s,r) => s + r.subtotal, 0);
+
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <title>Cotización ${cot.folio||''}</title>
 <style>${BASE_CSS}
@@ -448,6 +482,42 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
   </table>
 </div>
 `).join('')}
+
+${equipoSinVehiculoRows.length > 0 ? `
+<div class="section">
+  <div class="partida-header">PRODUCTOS / EQUIPO SOLICITADO &nbsp;•&nbsp; ${totalUnidadesEquipoSinVeh} unidad(es)</div>
+  <table>
+    <colgroup>
+      <col class="c-num"/><col class="c-img"/><col class="c-nom"/>
+      <col class="c-desc"/><col class="c-cant"/><col style="width:6%"/><col class="c-pu"/><col class="c-sub"/>
+    </colgroup>
+    <thead><tr>
+      <th>#</th><th></th><th>Concepto</th><th>Descripción</th>
+      <th style="text-align:center">Cant.</th>
+      <th style="text-align:center">Unidad</th>
+      <th style="text-align:right">P.Unit s/IVA</th>
+      <th style="text-align:right">Subtotal</th>
+    </tr></thead>
+    <tbody>
+      ${equipoSinVehiculoRows.map(({e,qty,pvUnitSIVA,subtotal,img,liveProd},i) => `
+      <tr>
+        <td style="text-align:center;color:#6b6862;font-size:10px">${i+1}</td>
+        <td style="text-align:center;padding:4px">${(()=>{const r=resolveImg(img);return r?`<img src="${r}" style="width:58px;height:58px;object-fit:contain;border-radius:3px;" />`:'';})()}</td>
+        <td style="font-weight:600;font-size:10px">${liveProd?.nom||e.nombre||''}</td>
+        <td class="desc-cell">${liveProd?.desc||e.descripcion||[e.marca,e.modelo].filter(Boolean).join(' ')||''}</td>
+        <td style="text-align:center">${qty}</td>
+        <td style="text-align:center;font-size:9.5px">${e.unidad||'pz'}</td>
+        <td style="text-align:right">${fmt(pvUnitSIVA)}</td>
+        <td style="text-align:right">${fmt(subtotal)}</td>
+      </tr>`).join('')}
+    </tbody>
+    <tfoot>
+      <tr class="total-row"><td colspan="6"></td><td style="text-align:right">Subtotal:</td><td style="text-align:right">${fmt(subtotalEquipoSinVeh)}</td></tr>
+      <tr class="total-row"><td colspan="6"></td><td style="text-align:right">IVA (16%):</td><td style="text-align:right">${fmt(subtotalEquipoSinVeh*IVA)}</td></tr>
+      <tr class="total-row"><td colspan="6"></td><td style="text-align:right"><strong>TOTAL c/IVA:</strong></td><td style="text-align:right"><strong style="color:#3b6cf4">${fmt(subtotalEquipoSinVeh*(1+IVA))}</strong></td></tr>
+    </tfoot>
+  </table>
+</div>` : ''}
 
 <div class="total-section">
   <div class="total-box" style="overflow:hidden;border-radius:8px;border:1px solid #e0ddd8">
