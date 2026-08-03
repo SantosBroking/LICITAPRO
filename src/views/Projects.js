@@ -6,7 +6,7 @@ import { avisarFirmaRequeridaInbox } from '../lib/inbox_firma_emails.js'; // Fas
 import { calcCotizacion } from '../lib/calc.js';
 // Projects.js — Lista, formulario y detalle de proyecto
 import { h, useState, useMemo, useCallback, useRef, useEffect } from '../lib/core.js';
-import { STATUSES, FINAL_STATUS, KANBAN_COLS, TIPOS_PROCEDIMIENTO, DEPENDENCIAS_COMUNES, TIPOS_PRODUCTO, esProyectoPerdido } from '../lib/constants.js';
+import { STATUSES, FINAL_STATUS, KANBAN_COLS, TIPOS_PROCEDIMIENTO, DEPENDENCIAS_COMUNES, TIPOS_PRODUCTO, esProyectoPerdido, categoriaProyecto, CATEGORIA_PROYECTO_LABELS } from '../lib/constants.js';
 import { fmt, daysUntil, alertLevel, TODAY, NOW, uid, normalizeProjectName, generarFolioProyecto, generarFolioOC, generarFolioCotizacion } from '../lib/utils.js';
 import { Badge, AlertChip, Metric, Inp, EmptyState, ConfirmAction, NumInput, DeleteConfirmModal } from '../ui/primitives.js';
 import { getPermissions, canProjectTab, getAllowedSubTabs } from '../lib/permissions.js'; // Fase 1C + fix navegación + Fase 2A6 (sub-nav de Operación)
@@ -38,6 +38,9 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate, user }) {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
   const [empresa, setEmpresa] = useState('all');
+  // Fase 3F -- filtro de categoría de proyecto (vehículos/equipo/servicios/
+  // mixto/etc.), mismo patrón que empresa/status. 'all' = sin filtrar.
+  const [categoria, setCategoria] = useState('all');
   const [sort, setSort]     = useState('etapa');
   const [grupo, setGrupo]   = useState('todos');
   const [soloMios, setSoloMios] = useState(false);
@@ -64,6 +67,7 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate, user }) {
     if(soloMios && miNombre) list=list.filter(p=>p.responsable===miNombre);
     if(search){const q=search.toLowerCase();list=list.filter(p=>(p.name||'').toLowerCase().includes(q)||(p.dependencia||'').toLowerCase().includes(q)||(p.numLicitacion||'').toLowerCase().includes(q));}
     if(empresa!=='all')list=list.filter(p=>p.company===empresa);
+    if(categoria!=='all')list=list.filter(p=>categoriaProyecto(p.productType)===categoria);
     if(status!=='all')list=list.filter(p=>p.status===status);
     if(sort==='recent')list.sort((a,b)=>b.id>a.id?1:-1);
     else if(sort==='amount')list.sort((a,b)=>(b.montoEstimado||0)-(a.montoEstimado||0));
@@ -124,6 +128,12 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate, user }) {
         h('option', { value:'all' }, '🏢 Todas las empresas'),
         empresasUnicas.map(c=>h('option',{key:c,value:c},c))
       ),
+      // Fase 3F -- filtro de categoría de proyecto (vehículos/equipo/
+      // servicios/mixto/etc.), mismo patrón visual que el de empresa.
+      h('select', { value:categoria, onChange:e=>setCategoria(e.target.value), style:{ maxWidth:190, minWidth:170 } },
+        h('option', { value:'all' }, '📦 Todas las categorías'),
+        Object.entries(CATEGORIA_PROYECTO_LABELS).map(([k,label])=>h('option',{key:k,value:k},label))
+      ),
       h('select', { value:status, onChange:e=>setStatus(e.target.value), style:{ maxWidth:170, minWidth:150 } },
         h('option', { value:'all' }, '— Todos los estados —'),
         STATUSES.map(s=>h('option',{key:s.id,value:s.id},s.label))
@@ -180,6 +190,10 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate, user }) {
           h('td', { style:{ padding:'10px 6px', fontWeight:500, maxWidth:220 } },
             h('div', { style:{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textTransform:'uppercase' } }, p.name),
             p.folioProyecto && h('div', { style:{ fontSize:10, color:'var(--t3)' } }, p.folioProyecto),
+            // Fase 3F -- insignia de categoría, solo si el proyecto ya
+            // está clasificado (categoria !== 'otro') -- no agrega ruido
+            // a proyectos legacy sin clasificar.
+            categoriaProyecto(p.productType)!=='otro' && h('div', { style:{ fontSize:9, color:'var(--t2)', background:'var(--bg2)', display:'inline-block', padding:'1px 6px', borderRadius:8, marginTop:2 } }, CATEGORIA_PROYECTO_LABELS[categoriaProyecto(p.productType)]),
             p.numLicitacion && h('div', { style:{ fontSize:11, color:'var(--t2)' } }, p.numLicitacion),
           ),
           h('td', { style:{ padding:'10px 6px', color:'var(--t2)', fontSize:12 } }, p.dependencia||'—'),
@@ -256,6 +270,7 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate, user }) {
             cols.map(p => h('div', { key:p.id, className:'card', style:{ marginBottom:8, cursor:'pointer', fontSize:13 }, onClick:()=>onNav('project_detail',p.id) },
               h('div', { style:{ fontWeight:500, marginBottom:4, lineHeight:1.3, textTransform:'uppercase' } }, p.name),
               p.folioProyecto && h('div', { style:{ fontSize:10, color:'var(--t3)', marginBottom:4 } }, p.folioProyecto),
+              categoriaProyecto(p.productType)!=='otro' && h('div', { style:{ fontSize:9, color:'var(--t2)', background:'var(--bg2)', display:'inline-block', padding:'1px 6px', borderRadius:8, marginBottom:4 } }, CATEGORIA_PROYECTO_LABELS[categoriaProyecto(p.productType)]),
               h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:6 } }, p.dependencia||'—'),
               h('div', { style:{ fontSize:12, fontWeight:500 } }, fmt(p.montoEstimado)),
               p.fechaFallo && h('div', { style:{ fontSize:10, color:alertLevel(p.fechaFallo)?'var(--red)':'var(--t3)', marginTop:4 } }, 'Fallo: ',p.fechaFallo),

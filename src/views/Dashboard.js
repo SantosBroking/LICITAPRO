@@ -1,6 +1,6 @@
 // Dashboard.js — Panel principal con KPIs y alertas
 import { h, useMemo } from '../lib/core.js';
-import { STATUSES, FINAL_STATUS, esProyectoPerdido } from '../lib/constants.js';
+import { STATUSES, FINAL_STATUS, esProyectoPerdido, categoriaProyecto, CATEGORIA_PROYECTO_LABELS } from '../lib/constants.js';
 import { fmt, fmtNum, daysUntil, alertLevel } from '../lib/utils.js';
 import { Metric, Badge, AlertChip, EmptyState } from '../ui/primitives.js';
 
@@ -96,7 +96,7 @@ export default function Dashboard({ projects, vehicles, companies, onNav, onUpda
           h('tbody', null, projectsVisibles.map(p => {
             const alF = alertLevel(p.fechaFallo);
             return h('tr', { key:p.id, onClick:()=>onNav('project_detail',p.id), style:{ borderBottom:'.5px solid var(--b3)', cursor:'pointer' } },
-              h('td', { style:{ padding:'10px 6px', fontWeight:500, textTransform:'uppercase' } }, p.name, p.folioProyecto && h('div', { style:{ fontSize:10, color:'var(--t3)', textTransform:'none', fontWeight:400 } }, p.folioProyecto)),
+              h('td', { style:{ padding:'10px 6px', fontWeight:500, textTransform:'uppercase' } }, p.name, p.folioProyecto && h('div', { style:{ fontSize:10, color:'var(--t3)', textTransform:'none', fontWeight:400 } }, p.folioProyecto), categoriaProyecto(p.productType)!=='otro' && h('div', { style:{ fontSize:9, color:'var(--t2)', textTransform:'none', fontWeight:400, background:'var(--bg2)', display:'inline-block', padding:'1px 6px', borderRadius:8, marginTop:2 } }, CATEGORIA_PROYECTO_LABELS[categoriaProyecto(p.productType)])),
               h('td', { style:{ padding:'10px 6px', color:'var(--t2)' } }, p.dependencia||'—'),
               h('td', { style:{ padding:'10px 6px', fontSize:12, color:'var(--t2)' } }, p.company||'—'),
               h('td', { style:{ padding:'10px 6px', fontWeight:500, whiteSpace:'nowrap' } }, fmt(p.montoEstimado)),

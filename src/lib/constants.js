@@ -31,10 +31,43 @@ export const DEPENDENCIAS_COMUNES = [
   'Iniciativa Privada','Paraestatal','Seguridad Pública',
 ];
 
+// Fase 3F -- categorías de proyecto/producto. Se AGREGAN las nuevas
+// (pedidas explícitamente) al final de la lista legacy -- ningún valor
+// viejo se quita ni se renombra, así que proyectos existentes con
+// 'Patrullas y vehículos'/'Uniformes'/etc. siguen mostrando exactamente
+// lo mismo en el dropdown y en cualquier resumen/exportación a Excel.
 export const TIPOS_PRODUCTO = [
   'Patrullas y vehículos','Uniformes','Chalecos balísticos',
   'Equipo táctico','Armamento','Tecnología','Construcción','Otro',
+  'Vehículos','Vehículos equipados','Equipamiento vehicular','Equipo / productos','Servicios','Mixto',
 ];
+
+// Normaliza CUALQUIER valor de project.productType (legacy o nuevo) a una
+// categoría funcional interna, usada para decidir lenguaje de PDFs y
+// filtros -- nunca para gates de seguridad ni cálculos financieros (esto
+// es puramente de presentación/clasificación). Valor desconocido/vacío
+// -> 'otro', nunca rompe con un valor legacy no contemplado.
+const MAPA_CATEGORIA_PROYECTO = {
+  'Patrullas y vehículos': 'vehiculos',
+  'Vehículos': 'vehiculos',
+  'Vehículos equipados': 'vehiculos_equipados',
+  'Equipamiento vehicular': 'equipamiento_vehicular',
+  'Equipo / productos': 'equipo',
+  'Servicios': 'servicios',
+  'Mixto': 'mixto',
+};
+export function categoriaProyecto(productType) {
+  return MAPA_CATEGORIA_PROYECTO[productType] || 'otro';
+}
+export const CATEGORIA_PROYECTO_LABELS = {
+  vehiculos: 'Vehículos',
+  vehiculos_equipados: 'Vehículos equipados',
+  equipamiento_vehicular: 'Equipamiento vehicular',
+  equipo: 'Equipo / productos',
+  servicios: 'Servicios',
+  mixto: 'Mixto',
+  otro: 'Otro',
+};
 
 export const ESTATUS_COSTO = ['Confirmado','Estimado','Heredado','Pendiente MSM','Vencido'];
 export const MODOS_PRECIO  = ['Utilidad deseada $','Utilidad deseada %','Techo presupuestal'];
