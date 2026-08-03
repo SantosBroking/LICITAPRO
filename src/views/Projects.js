@@ -1,4 +1,5 @@
 import { printCotizacionCliente, printResumenRetornos, printResumenInterno, printOrdenCompra } from '../lib/pdf_export.js';
+import { CATALOG_PRODUCTS } from '../lib/catalog.js'; // Fase 3E-0 — OC de equipo
 import { nuevoDocFlujo, avisarAprobacion, avisarAsignacionProyecto, avisarCambioEstatus } from '../lib/firmas.js';
 import { avisarFirmaRequeridaInbox } from '../lib/inbox_firma_emails.js'; // Fase 3D-B3
 import { calcCotizacion } from '../lib/calc.js';
@@ -1156,6 +1157,48 @@ function BorradorTab(props){
 }
 
 // ── Modal Orden de Compra ─────────────────────────────────────
+// Fase 3E-0 — OC de equipo/productos (no solo vehículos).
+// IVA: mismo valor que src/views/Cotizacion.js (0.16) -- no se importa de
+// ahí porque esa constante no está exportada; se duplica el valor, no la
+// lógica (mismo criterio ya usado en otras partes del sistema).
+const IVA_OC = 0.16;
+
+// Convierte cot.equipo[] (shape real: {id, productoId, nombre, marca,
+// modelo, cat, usar, costoConIVA, llevaIVA, cnts:[cantidad por partida
+// vehicular]}) en partidas COMPATIBLES con buildOrdenCompraHTML
+// (pdf_export.js) SIN TOCAR ESE ARCHIVO -- reutiliza exactamente los
+// mismos campos que ya lee para vehículos (tipo, marca/modelo/version/ano,
+// cantidad, costoMSMS), poniendo la descripción completa del equipo en
+// `marca` (los demás campos de "vehículo" quedan vacíos a propósito, el
+// join() de pdf_export.js ya filtra los vacíos). costoConIVA se usa
+// DIRECTO como costoMSMS -- confirmado en Cotizacion.js que costoConIVA
+// siempre representa el precio "con IVA o equivalente" que ya usa el
+// mismo cálculo de eqCIVA ahí, sin importar llevaIVA.
+function partidasDeEquipoParaOC(cot, cfg) {
+  const catalogo = {};
+  CATALOG_PRODUCTS.forEach(p => { catalogo[p.id] = p; });
+  ((cfg && cfg.customProducts) || []).forEach(p => { catalogo[p.id] = p; });
+  return (cot.equipo || [])
+    .filter(e => e.usar)
+    .map(e => {
+      const cantidadTotal = (e.cnts || []).reduce((s, c) => s + (c || 0), 0);
+      if (cantidadTotal <= 0) return null;
+      const prod = catalogo[e.productoId];
+      const descripcion = [e.nombre, e.marca, e.modelo].filter(Boolean).join(' — ') || 'Equipo sin nombre';
+      return {
+        id: e.id,
+        tipo: 'Equipo',
+        marca: descripcion, modelo: '', version: '', ano: '', color: '',
+        cantidad: cantidadTotal,
+        costoMSMS: e.costoConIVA || 0,
+        productoId: e.productoId,
+        proveedor: (prod && prod.prov) || '',
+        origen: 'cotizacion_equipo',
+      };
+    })
+    .filter(Boolean);
+}
+
 function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUpdate, onClose, user }) {
   const cot = project.cotizacion || {};
   const partidas = (cot.partidas || []).filter(p => p.activo && (p.cantidad||0) > 0);
@@ -1229,6 +1272,14 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
   const [selParts, setSelParts] = useState(partidas.map(p => p.id));
   const togglePart = id => setSelParts(s => s.includes(id) ? s.filter(x=>x!==id) : [...s, id]);
 
+  // Fase 3E-0 — fuente de partidas para la OC: 'vehiculos' (comportamiento
+  // ORIGINAL, sin cambio) o 'equipo' (nuevo). cot ya está definido arriba
+  // (const cot = project.cotizacion || {}), cfg también.
+  const [fuenteOC, setFuenteOC] = useState('vehiculos');
+  const equipoPartidas = partidasDeEquipoParaOC(cot, cfg);
+  const [selEquipo, setSelEquipo] = useState(equipoPartidas.map(p => p.id));
+  const toggleEquipo = id => setSelEquipo(s => s.includes(id) ? s.filter(x=>x!==id) : [...s, id]);
+
   // Direcciones guardadas en config global (+ migración desde localStorage viejo)
   const loadLegacyAddrs = () => { try { return JSON.parse(localStorage.getItem('lp_oc_addresses')||'[]'); } catch{ return []; } };
   const legacyAddrs = loadLegacyAddrs();
@@ -1298,8 +1349,16 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
   };
 
   const generar = () => {
-    const partidasSel = partidas.filter(p => selParts.includes(p.id));
-    if (!partidasSel.length) { alert('Selecciona al menos una partida.'); return; }
+    // Fase 3E-0 -- partidasSel viene de la fuente elegida (vehículos,
+    // comportamiento ORIGINAL sin cambio; o equipo, nuevo). El resto de
+    // generar() no distingue entre ambas -- partidasDeEquipoParaOC() ya
+    // devuelve partidas con el MISMO shape (tipo/marca/modelo/version/ano/
+    // cantidad/costoMSMS) que las de vehículo, compatibles con
+    // buildOrdenCompraHTML sin ningún cambio ahí.
+    const partidasSel = fuenteOC === 'vehiculos'
+      ? partidas.filter(p => selParts.includes(p.id))
+      : equipoPartidas.filter(p => selEquipo.includes(p.id));
+    if (!partidasSel.length) { alert(fuenteOC==='vehiculos' ? 'Selecciona al menos una partida.' : 'Selecciona al menos un equipo/producto.'); return; }
     // Fase 3C-2 -- si el proyecto tiene folioProyecto (folios maestros,
     // Fase 3C-1), la OC usa el esquema derivado {folioProyecto}-OC-0N,
     // consecutivo real contando las OC ya existentes de ESTE proyecto que
@@ -1330,7 +1389,25 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
       proveedor: prov.name,
       proveedorRfc: prov.rfc,
       proveedorAddress: prov.address,
-      partidas: partidasSel.map(p=>({ id:p.id, vehiculo:[p.marca,p.modelo,p.version].filter(Boolean).join(' '), tipo:p.tipo, cantidad:p.cantidad, precioUnit:p.costoMSMS||0 })),
+      partidas: partidasSel.map(p => {
+        const base = { id:p.id, vehiculo:[p.marca,p.modelo,p.version].filter(Boolean).join(' '), tipo:p.tipo, cantidad:p.cantidad, precioUnit:p.costoMSMS||0 };
+        // Fase 3E-0 -- para vehículo, `base` se queda TAL CUAL como
+        // siempre (ninguna clave nueva) -- la reimpresión sigue
+        // encontrando `orig` en cot2.partidas por el mismo id, de ahí saca
+        // marca/modelo/version/ano/color sin cambio. IMPORTANTE: no se
+        // agrega `marca:undefined` aquí -- el spread {...orig,...op} en
+        // reimprimir() SÍ sobreescribiría orig.marca con undefined si la
+        // clave existiera aunque su valor fuera undefined (comportamiento
+        // real de JS, no es lo mismo omitir una clave que ponerla en
+        // undefined). Para EQUIPO sí se agrega `marca` real, porque su id
+        // nunca hace match en cot2.partidas (son ids de equipo, no de
+        // vehículo) -- sin esto, la reimpresión no tendría de dónde sacar
+        // la descripción a mostrar.
+        if (p.origen === 'cotizacion_equipo') {
+          return { ...base, marca:p.marca, productoId:p.productoId, proveedor:p.proveedor, origen:p.origen };
+        }
+        return base;
+      }),
       condiciones: conds,
     };
     const ocs = [...(project.ordenesCompra||[]).filter(o=>o.id!==folio), nuevaOC];
@@ -1397,8 +1474,17 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
         }, '+ Guardar este proveedor para futuras OC'),
       ),
 
-      // Selector de partidas
+      // Fase 3E-0 — selector de fuente de partidas
       h('div', null,
+        h('div', { style:secLabel }, 'Fuente de partidas'),
+        h('div', { style:{ display:'flex', gap:8, marginBottom:12 } },
+          h('button', { onClick:()=>setFuenteOC('vehiculos'), style:{ flex:1, padding:'8px 12px', fontSize:12, fontWeight:500, borderRadius:'var(--r)', border:'1px solid var(--b2)', cursor:'pointer', background:fuenteOC==='vehiculos'?'var(--blue)':'transparent', color:fuenteOC==='vehiculos'?'#fff':'var(--t1)' } }, '🚓 Vehículos'),
+          h('button', { onClick:()=>setFuenteOC('equipo'), style:{ flex:1, padding:'8px 12px', fontSize:12, fontWeight:500, borderRadius:'var(--r)', border:'1px solid var(--b2)', cursor:'pointer', background:fuenteOC==='equipo'?'var(--blue)':'transparent', color:fuenteOC==='equipo'?'#fff':'var(--t1)' } }, '📦 Equipo / productos'),
+        ),
+      ),
+
+      // Selector de partidas
+      fuenteOC==='vehiculos' && h('div', null,
         h('div', { style:secLabel }, 'Vehículos a incluir'),
         partidas.length === 0
           ? h('div', { style:{ fontSize:12, color:'var(--t3)', padding:'10px 0' } }, 'No hay partidas activas con vehículos en esta cotización.')
@@ -1407,6 +1493,21 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
               h('div', null,
                 h('div', { style:{ fontSize:13, fontWeight:500 } }, p.id,' · ',[p.marca,p.modelo,p.version].filter(Boolean).join(' ')||'Vehículo sin definir'),
                 h('div', { style:{ fontSize:11, color:'var(--t2)' } }, (p.cantidad||0),' unidad(es) · ',(p.tipo||'')),
+              ),
+            ))
+      ),
+      // Fase 3E-0 — lista de equipo/productos, mismo patrón visual que
+      // vehículos. Solo se muestran los que ya tienen cantidad > 0
+      // asignada en la cotización (partidasDeEquipoParaOC ya filtra eso).
+      fuenteOC==='equipo' && h('div', null,
+        h('div', { style:secLabel }, 'Equipo / productos a incluir'),
+        equipoPartidas.length === 0
+          ? h('div', { style:{ fontSize:12, color:'var(--t3)', padding:'10px 0' } }, 'No hay equipo con cantidad asignada en esta cotización. Ve a la pestaña "Equipo" de Cotización para agregar y asignar cantidades.')
+          : equipoPartidas.map(p => h('label', { key:p.id, style:{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', marginBottom:6, borderRadius:'var(--r)', border:'.5px solid var(--b2)', cursor:'pointer', background: selEquipo.includes(p.id)?'var(--bg2)':'transparent' } },
+              h('input', { type:'checkbox', checked:selEquipo.includes(p.id), onChange:()=>toggleEquipo(p.id), style:{ width:15, height:15, accentColor:'var(--blue)', flexShrink:0 } }),
+              h('div', null,
+                h('div', { style:{ fontSize:13, fontWeight:500 } }, p.marca),
+                h('div', { style:{ fontSize:11, color:'var(--t2)' } }, p.cantidad,' unidad(es)', p.proveedor?' · Proveedor: '+p.proveedor:''),
               ),
             ))
       ),
