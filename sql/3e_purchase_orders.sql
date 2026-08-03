@@ -27,7 +27,7 @@ create table if not exists public.purchase_orders (
   user_id text not null,                    -- workspace id fijo (mismo criterio que projects/vehicles/companies/config/inbox_items)
   project_id text,                          -- NULL = OC independiente; string = ligada a un proyecto (mismo id que projects.id, sin FK dura -- mismo criterio que el resto del esquema)
   company_id text,                          -- empresa operadora (para el prefijo de folio) -- nullable, informativo
-  folio text not null,                      -- BRO-2026-LIC-001-OC-01 (ligada) o BRO-2026-OC-001 (independiente)
+  folio text not null,                      -- BRO-2026-LIC-001-OC-01 (ligada) o BRO-2026-OC-001 (independiente) -- unique por workspace, ver constraint al final de la tabla
   tipo text not null default 'orden_compra',
   status text not null default 'borrador',  -- borrador | en_aprobacion | en_firma | cerrada | cancelada (ver nota abajo)
   proveedor_nombre text,
@@ -51,7 +51,15 @@ create table if not exists public.purchase_orders (
   created_by text,
   assigned_to text,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  -- Fase 3E (revisión pedida por Santiago) -- unique POR WORKSPACE, no
+  -- global: dos folios iguales dentro del MISMO user_id (workspace) nunca
+  -- deben coexistir (blindaje real contra la ventana de carrera del
+  -- consecutivo calculado en el cliente, mismo riesgo ya aceptado en
+  -- folios de proyecto desde Fase 3C-1). Si algún día existe más de un
+  -- workspace, cada uno puede tener folios con el mismo texto sin
+  -- chocar entre sí -- un unique global no tendría sentido aquí.
+  constraint purchase_orders_user_id_folio_unique unique (user_id, folio)
 );
 
 comment on table public.purchase_orders is 'Fase 3E — Órdenes de Compra como módulo propio (ligadas a proyecto o independientes). Acceso real solo vía api/purchase-orders.js, RLS admin-only a nivel Postgres.';
@@ -95,9 +103,19 @@ create policy "solo admin actualiza purchase_orders"
 create index if not exists idx_purchase_orders_user_id     on public.purchase_orders(user_id);
 create index if not exists idx_purchase_orders_project_id  on public.purchase_orders(project_id);
 create index if not exists idx_purchase_orders_status      on public.purchase_orders(status);
-create index if not exists idx_purchase_orders_folio       on public.purchase_orders(folio);
 create index if not exists idx_purchase_orders_created_at  on public.purchase_orders(created_at desc);
 create index if not exists idx_purchase_orders_created_by  on public.purchase_orders(created_by);
+-- NOTA: el índice simple sobre `folio` (idx_purchase_orders_folio) se
+-- QUITÓ a propósito -- queda redundante ante el índice implícito que ya
+-- crea el constraint purchase_orders_user_id_folio_unique de arriba
+-- (compuesto sobre user_id+folio). Ese índice compuesto ya cubre
+-- perfectamente la única consulta real que existe en todo el sistema:
+-- "¿existe este folio EN ESTE workspace?" -- siempre filtrada por
+-- user_id primero (mismo patrón que cualquier otro endpoint de
+-- LicitaPro). No hay ningún punto del código que busque por folio SIN
+-- filtrar antes por user_id, así que un índice simple adicional sobre
+-- folio solo duplicaría espacio en disco sin aportar ninguna consulta
+-- nueva que no cubra ya el índice del unique.
 
 -- ============================================================
 -- 5. SQL DE VERIFICACIÓN (para correr después de aplicar, solo lectura)
@@ -113,6 +131,13 @@ create index if not exists idx_purchase_orders_created_by  on public.purchase_or
 -- select policyname, cmd from pg_policies
 -- where schemaname='public' and tablename='purchase_orders' order by cmd;
 --
+-- select conname, contype, pg_get_constraintdef(oid) as definicion
+-- from pg_constraint
+-- where conrelid = 'public.purchase_orders'::regclass
+-- order by conname;
+-- -- debe mostrar purchase_orders_user_id_folio_unique como 'u' (unique)
+-- -- con definición UNIQUE (user_id, folio)
+--
 -- select indexname from pg_indexes
 -- where schemaname='public' and tablename='purchase_orders' order by indexname;
 --
@@ -127,7 +152,9 @@ create index if not exists idx_purchase_orders_created_by  on public.purchase_or
 -- drop index if exists idx_purchase_orders_user_id;
 -- drop index if exists idx_purchase_orders_project_id;
 -- drop index if exists idx_purchase_orders_status;
--- drop index if exists idx_purchase_orders_folio;
 -- drop index if exists idx_purchase_orders_created_at;
 -- drop index if exists idx_purchase_orders_created_by;
--- drop table if exists public.purchase_orders;
+-- drop table if exists public.purchase_orders; -- esto también elimina el
+-- constraint purchase_orders_user_id_folio_unique (y su índice implícito),
+-- ya que ambos pertenecen a la tabla -- no requiere un DROP CONSTRAINT
+-- separado.
