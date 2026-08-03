@@ -428,7 +428,14 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
             h('td', { style:{ padding:'6px 8px', color:'var(--t2)', fontSize:10 } }, 'Producto'),
             h('td', { style:{ padding:'6px 4px', color:'var(--t2)', fontSize:10, width:95 } }, 'Costo c/IVA'),
             cot.soloEquipo && (cot.modoEquipo||'margen')==='margen' && h('td', { style:{ padding:'6px 4px', color:'#9B7EDE', fontSize:10, width:70, textAlign:'center' } }, 'Margen %'),
-            ...cot.partidas.filter(p=>p.activo).map(p=>h('td',{key:p.id,style:{padding:'6px 4px',color:'var(--blue)',fontSize:10,width:52,textAlign:'center'}},p.id,h('br'),h('span',{style:{fontSize:9,color:'var(--t3)'}},p.cantidad,' uds'))),
+            // Fase 3F-1 -- si NO hay partidas de vehículo activas, se
+            // muestra UNA sola columna "Cantidad" (captura global) en vez
+            // de una columna por partida -- el caso con vehículos activos
+            // se queda EXACTAMENTE igual, sin ningún cambio.
+            ...(cot.partidas.filter(p=>p.activo).length === 0
+              ? [h('td', { key:'cant-global-th', style:{ padding:'6px 4px', color:'var(--t2)', fontSize:10, width:70, textAlign:'center' } }, 'Cantidad')]
+              : cot.partidas.filter(p=>p.activo).map(p=>h('td',{key:p.id,style:{padding:'6px 4px',color:'var(--blue)',fontSize:10,width:52,textAlign:'center'}},p.id,h('br'),h('span',{style:{fontSize:9,color:'var(--t3)'}},p.cantidad,' uds')))
+            ),
             h('td', { style:{ padding:'6px 4px', color:'var(--t2)', fontSize:10, width:38, textAlign:'center' } }, 'IVA'),
             h('td', { style:{ padding:'6px 4px', color:'var(--t2)', fontSize:10, width:115 } }, 'Estatus'),
             h('td', { style:{ padding:'6px 4px', width:24 } }),
@@ -462,7 +469,10 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
                 h('input', { type:'number', value:e.margenPropio!=null?Math.round(e.margenPropio*100):'', placeholder:Math.round((cot.margenEquipo||0)*100),
                   onChange:ev=>{ const v=ev.target.value; updEquipo(e.id,'margenPropio', v===''?null:Number(v)/100); },
                   style:{ width:56, fontSize:11, padding:'3px 5px', textAlign:'center', border:'1px solid var(--b2)', borderRadius:6, color: e.margenPropio!=null?'#9B7EDE':'var(--t3)' } })),
-              ...cot.partidas.filter(p=>p.activo).map(p=>{ const pi=parseInt(p.id.replace('P',''))-1; return h('td',{key:p.id,style:{padding:'6px 4px',textAlign:'center'}},h(NumInput,{value:(e.cnts&&e.cnts[pi])||0,onChange:v=>updCnts(e.id,pi,v),style:{width:46,fontSize:11,padding:'3px 4px',textAlign:'center'}})); }),
+              ...(cot.partidas.filter(p=>p.activo).length === 0
+                ? [h('td', { key:'cant-global-td', style:{ padding:'6px 4px', textAlign:'center' } }, h(NumInput, { value:e.cantidadGlobal||0, onChange:v=>updEquipo(e.id,'cantidadGlobal',v), style:{ width:56, fontSize:11, padding:'3px 4px', textAlign:'center' } }))]
+                : cot.partidas.filter(p=>p.activo).map(p=>{ const pi=parseInt(p.id.replace('P',''))-1; return h('td',{key:p.id,style:{padding:'6px 4px',textAlign:'center'}},h(NumInput,{value:(e.cnts&&e.cnts[pi])||0,onChange:v=>updCnts(e.id,pi,v),style:{width:46,fontSize:11,padding:'3px 4px',textAlign:'center'}})); })
+              ),
               h('td', { style:{ padding:'6px 4px', textAlign:'center' } }, h('input', { type:'checkbox', checked:e.llevaIVA, onChange:ev=>updEquipo(e.id,'llevaIVA',ev.target.checked), style:{ width:14, height:14 } })),
               h('td', { style:{ padding:'6px 4px' } },
                 h('select', { value:e.est||'Estimado', onChange:ev=>updEquipo(e.id,'est',ev.target.value), style:{ fontSize:10, padding:'3px 5px', background:estBg, color:estTx, border:'none', borderRadius:8, cursor:'pointer', width:'100%' } },

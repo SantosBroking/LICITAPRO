@@ -1197,7 +1197,14 @@ function partidasDeEquipoParaOC(cot, cfg) {
   return (cot.equipo || [])
     .filter(e => e.usar)
     .map(e => {
-      const cantidadTotal = (e.cnts || []).reduce((s, c) => s + (c || 0), 0);
+      // Fase 3F-1 -- si la suma de cnts[] es 0 (caso "sin vehículos" o
+      // simplemente equipo que no está instalado por vehículo), se usa
+      // cantidadGlobal como fallback -- mismo criterio ya usado en
+      // calc.js/Cotizacion.js. Si AMBOS existen (caso raro, legacy mixto),
+      // se prioriza cnts[] tal cual ya se hacía, sin ningún cambio para
+      // proyectos de vehículos existentes.
+      const cantidadCnts = (e.cnts || []).reduce((s, c) => s + (c || 0), 0);
+      const cantidadTotal = cantidadCnts > 0 ? cantidadCnts : Number(e.cantidadGlobal || 0);
       if (cantidadTotal <= 0) return null;
       const prod = catalogo[e.productoId];
       const descripcion = [e.nombre, e.marca, e.modelo].filter(Boolean).join(' — ') || 'Equipo sin nombre';

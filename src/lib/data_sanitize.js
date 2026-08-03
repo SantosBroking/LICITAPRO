@@ -461,7 +461,13 @@ const PROJECT_OPERATIONAL_UPDATE_FIELDS = [
 // No es un campo financiero ni estratégico, cualquier rol puede escribirlo.
 const COTIZACION_OPERATIONAL_FIELDS = ['version', 'folio', 'municipio', 'fechaCotizacion', 'vigenciaDias', 'agenciaProveedor', 'vendedor', 'vendedorCorreo', 'estatusRevision'];
 const PARTIDA_OPERATIONAL_FIELDS = ['id', 'activo', 'tipo', 'marca', 'modelo', 'ano', 'version', 'color', 'cantidad', 'vehiculoId', 'foto'];
-const EQUIPO_OPERATIONAL_FIELDS = ['id', 'productoId', 'nombre', 'cat', 'marca', 'modelo', 'unidad', 'usar', 'vis', 'cnts', 'notas'];
+// Fase 3F-1 -- 'cantidadGlobal' agregado junto a 'cnts' -- es la MISMA
+// categoría de campo (cantidad de equipo, no financiero): cnts[] se usa
+// cuando hay vehículos activos, cantidadGlobal cuando no los hay (ver
+// Cotizacion.js/calc.js). Sin este agregado, cantidadGlobal se perdería
+// silenciosamente al guardar como empleado -- EQUIPO_OPERATIONAL_FIELDS
+// es un allowlist real, no un denylist.
+const EQUIPO_OPERATIONAL_FIELDS = ['id', 'productoId', 'nombre', 'cat', 'marca', 'modelo', 'unidad', 'usar', 'vis', 'cnts', 'cantidadGlobal', 'notas'];
 const VEHICLE_OPERATIONAL_UPDATE_FIELDS = ['id', 'vin', 'marca', 'modelo', 'version', 'ano', 'color', 'numMotor', 'numInventario', 'statusEntrega', 'statusDocs', 'ubicacion', 'equipamiento', 'observaciones', 'actaEntrega'];
 
 function copiarSoloPermitidos(origen, permitidos, base) {

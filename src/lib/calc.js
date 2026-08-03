@@ -64,6 +64,56 @@ export function calcCotizacion(cot) {
   let costoEqCIVA = 0,  costoEqSIVA = 0,  ivaEq = 0;
   let unidades = 0;
 
+  // Fase 3F-1 -- caso "equipo sin vehículos" (ej. Chimalhuacán: solo se
+  // vende equipamiento, no hay partidas de vehículo). El bucle ORIGINAL
+  // de abajo (por partida de vehículo, usando cnts[pi]) se PRESERVA
+  // INTACTO, byte por byte, sin ningún cambio -- solo se ejecuta cuando
+  // SÍ hay al menos una partida activa. Cuando NO hay ninguna, se usa
+  // esta rama nueva y separada, que calcula el equipo con
+  // `cantidadGlobal` (cantidad capturada directamente, sin depender de
+  // cnts[] por partida de vehículo). Nunca se mezclan ambos caminos en
+  // la misma cotización -- o hay vehículos activos (camino de siempre) o
+  // no los hay (camino nuevo), nunca los dos a la vez.
+  const activePartidas = partidas.filter(p => p.activo && p.cantidad > 0);
+
+  if (activePartidas.length === 0) {
+    // ── Equipo sin vehículos -- costoVeh queda en 0 (no hay vehículo que
+    // costear). unidades = suma de cantidadGlobal de todo el equipo
+    // usado -- es la mejor aproximación disponible para "unidades"
+    // cuando no hay un conteo de vehículos que sirva de base real (usado
+    // solo por retornos/fianzas "Monto fijo por unidad").
+    let totalUnidadesEquipo = 0;
+    equipo.filter(e => e.usar).forEach(e => { totalUnidadesEquipo += Number(e.cantidadGlobal || 0); });
+    const ventaUnitMontoEquipo = (soloEquipo && modoEquipo === 'monto' && totalUnidadesEquipo > 0)
+      ? (montoGanar || 0) / totalUnidadesEquipo : 0;
+
+    equipo.filter(e => e.usar).forEach(e => {
+      const qty = Number(e.cantidadGlobal || 0);
+      if (qty <= 0) return; // mismo criterio que cnts[pi]||0 -- sin cantidad, no aporta nada
+      const cost = (e.costoConIVA || 0) * qty;
+      const costSIVA = e.llevaIVA ? cost / (1 + IVA) : cost;
+      const iva = cost - costSIVA;
+      costoEqCIVA += cost;
+      costoEqSIVA += costSIVA;
+      ivaEq       += iva;
+      unidades    += qty;
+
+      // Precio de venta -- mismo criterio ya usado para equipo dentro
+      // del bucle de vehículo: margen individual (margenPropio) o
+      // general (margenEquipo), o monto fijo repartido entre unidades
+      // de equipo (en vez de entre vehículos, que no existen aquí).
+      let pvSIVA;
+      if (soloEquipo && modoEquipo === 'monto') {
+        pvSIVA = ventaUnitMontoEquipo * qty;
+      } else {
+        const margen = (e.margenPropio != null) ? e.margenPropio : margenEquipo;
+        pvSIVA = costSIVA * (1 + margen);
+      }
+      ventaSIVA += pvSIVA;
+      ivaVenta  += pvSIVA * IVA;
+    });
+    // costoVehCIVA/costoVehSIVA/ivaVeh quedan en 0 -- no hay vehículo que costear.
+  } else {
   partidas.filter(p => p.activo && p.cantidad > 0).forEach(p => {
     const pi = parseInt(p.id.replace('P', '')) - 1;
     const qty = p.cantidad || 0;
@@ -121,6 +171,7 @@ export function calcCotizacion(cot) {
     ivaEq        += ivaEqP;
     unidades     += qty;
   });
+  } // fin del else (bucle original de vehículo, sin ningún cambio de lógica)
 
   const ventaCIVA = ventaSIVA + ivaVenta;
 
