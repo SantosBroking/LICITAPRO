@@ -1,5 +1,6 @@
 import { printCotizacionCliente, printResumenRetornos, printResumenInterno, printOrdenCompra } from '../lib/pdf_export.js';
 import { CATALOG_PRODUCTS } from '../lib/catalog.js'; // Fase 3E-0 — OC de equipo
+import { CATALOG_IMAGES } from '../lib/catalog_images.js'; // Fase 3E-0.1 — foto de equipo en OC
 import { nuevoDocFlujo, avisarAprobacion, avisarAsignacionProyecto, avisarCambioEstatus } from '../lib/firmas.js';
 import { avisarFirmaRequeridaInbox } from '../lib/inbox_firma_emails.js'; // Fase 3D-B3
 import { calcCotizacion } from '../lib/calc.js';
@@ -1185,6 +1186,11 @@ function partidasDeEquipoParaOC(cot, cfg) {
       if (cantidadTotal <= 0) return null;
       const prod = catalogo[e.productoId];
       const descripcion = [e.nombre, e.marca, e.modelo].filter(Boolean).join(' — ') || 'Equipo sin nombre';
+      // Fase 3E-0.1 -- misma prioridad ya usada en Catalog.js/pdf_export.js:
+      // foto propia del producto (customProducts[].photo, base64) primero,
+      // luego CATALOG_IMAGES[id] (base64 estático del catálogo base). Si
+      // ninguna existe, imageUrl queda '' -- no rompe productos sin foto.
+      const imageUrl = (prod && prod.photo) || CATALOG_IMAGES[e.productoId] || '';
       return {
         id: e.id,
         tipo: 'Equipo',
@@ -1194,6 +1200,7 @@ function partidasDeEquipoParaOC(cot, cfg) {
         productoId: e.productoId,
         proveedor: (prod && prod.prov) || '',
         origen: 'cotizacion_equipo',
+        imageUrl,
       };
     })
     .filter(Boolean);
@@ -1404,7 +1411,7 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
         // vehículo) -- sin esto, la reimpresión no tendría de dónde sacar
         // la descripción a mostrar.
         if (p.origen === 'cotizacion_equipo') {
-          return { ...base, marca:p.marca, productoId:p.productoId, proveedor:p.proveedor, origen:p.origen };
+          return { ...base, marca:p.marca, productoId:p.productoId, proveedor:p.proveedor, origen:p.origen, imageUrl:p.imageUrl||'' };
         }
         return base;
       }),
@@ -1505,6 +1512,11 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
           ? h('div', { style:{ fontSize:12, color:'var(--t3)', padding:'10px 0' } }, 'No hay equipo con cantidad asignada en esta cotización. Ve a la pestaña "Equipo" de Cotización para agregar y asignar cantidades.')
           : equipoPartidas.map(p => h('label', { key:p.id, style:{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', marginBottom:6, borderRadius:'var(--r)', border:'.5px solid var(--b2)', cursor:'pointer', background: selEquipo.includes(p.id)?'var(--bg2)':'transparent' } },
               h('input', { type:'checkbox', checked:selEquipo.includes(p.id), onChange:()=>toggleEquipo(p.id), style:{ width:15, height:15, accentColor:'var(--blue)', flexShrink:0 } }),
+              // Fase 3E-0.1 -- miniatura si existe imageUrl (siempre
+              // base64 data:, ver partidasDeEquipoParaOC) -- si no hay
+              // imagen, simplemente no se renderiza nada, sin placeholder
+              // que ocupe espacio.
+              p.imageUrl && h('img', { src:p.imageUrl, style:{ width:36, height:36, objectFit:'contain', borderRadius:4, flexShrink:0, border:'1px solid var(--b1)' } }),
               h('div', null,
                 h('div', { style:{ fontSize:13, fontWeight:500 } }, p.marca),
                 h('div', { style:{ fontSize:11, color:'var(--t2)' } }, p.cantidad,' unidad(es)', p.proveedor?' · Proveedor: '+p.proveedor:''),

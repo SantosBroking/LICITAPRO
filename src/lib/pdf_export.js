@@ -850,6 +850,10 @@ function buildOrdenCompraHTML({ project, partidas, condiciones, folio: folioPara
   const hoy = new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'});
   const folio = folioParam || ('OC-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-5));
 
+  // Fase 3E-0.1 -- si ninguna partida trae imageUrl (caso 100% vehículos,
+  // el más común), esta columna no se agrega en absoluto -- cero cambio
+  // visual para OCs de vehículo existentes.
+  const hayImagenes = partidas.some(p => p.imageUrl);
   const filasVeh = partidas.map(p => {
     const qty    = p.cantidad || 0;
     const puCIVA = p.costoMSMS || 0;          // precio c/IVA que da el usuario
@@ -857,8 +861,19 @@ function buildOrdenCompraHTML({ project, partidas, condiciones, folio: folioPara
     const subCIVA = puCIVA * qty;
     const veh = [p.marca, p.modelo, p.version, p.ano].filter(Boolean).join(' ');
     const colorTxt = p.color ? ` <span style="color:#6b6862">— Color: ${esc(p.color)}</span>` : '';
+    // Fase 3E-0.1 -- celda de imagen SOLO si esta partida trae imageUrl
+    // (partidas de equipo con foto real, base64 -- ver
+    // partidasDeEquipoParaOC en Projects.js). Para vehículo, p.imageUrl
+    // nunca existe -- la celda queda vacía, sin romper nada. La COLUMNA
+    // completa (th+td) solo se agrega si AL MENOS una partida de la OC
+    // tiene imagen (ver hayImagenes más abajo) -- una OC 100% de
+    // vehículos no gana ninguna columna nueva, cero cambio visual.
+    const celdaImg = hayImagenes
+      ? `<td style="text-align:center;padding:4px">${p.imageUrl ? `<img src="${esc(p.imageUrl)}" style="width:48px;height:48px;object-fit:contain;border-radius:3px;" />` : ''}</td>`
+      : '';
     return `
       <tr>
+        ${celdaImg}
         <td style="font-size:11px;font-weight:500">${esc(p.tipo||'')}</td>
         <td style="font-size:11px">${esc(veh)}${colorTxt}</td>
         <td style="text-align:center;font-weight:600">${qty}</td>
@@ -939,6 +954,7 @@ ${BASE_CSS}
   <table>
     <thead>
       <tr>
+        ${hayImagenes ? '<th style="width:56px">Foto</th>' : ''}
         <th>Tipo</th><th>Vehículo</th><th style="text-align:center;width:50px">Cant.</th>
         <th style="text-align:right;width:100px">P. Unit s/IVA</th>
         <th style="text-align:right;width:110px">Subtotal s/IVA</th>
