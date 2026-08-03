@@ -850,10 +850,34 @@ function buildOrdenCompraHTML({ project, partidas, condiciones, folio: folioPara
   const hoy = new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'});
   const folio = folioParam || ('OC-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-5));
 
-  // Fase 3E-0.1 -- si ninguna partida trae imageUrl (caso 100% vehículos,
+  // Fase 3E-0.2 -- si ninguna partida trae imageUrl (caso 100% vehículos,
   // el más común), esta columna no se agrega en absoluto -- cero cambio
   // visual para OCs de vehículo existentes.
   const hayImagenes = partidas.some(p => p.imageUrl);
+  // Clasificación vehículo/equipo/mixto -- usa `origen` (no `tipo`) como
+  // discriminador: `origen==='cotizacion_equipo'` se guarda EXCLUSIVAMENTE
+  // en partidas de equipo (Fase 3E-0), tanto en creación como en
+  // reimpresión (el spread {...orig,...op} en Projects.js lo conserva).
+  // `tipo` en cambio es un texto libre real para vehículo (Pickup, Sedán,
+  // etc.) -- usar `origen` evita cualquier coincidencia rara si alguien
+  // hubiera escrito "Equipo" como tipo de vehículo.
+  const esPartidaEquipo = p => p.origen === 'cotizacion_equipo';
+  const todosEquipo    = partidas.length > 0 && partidas.every(esPartidaEquipo);
+  const todosVehiculo  = partidas.length > 0 && partidas.every(p => !esPartidaEquipo(p));
+  const tituloTabla = todosEquipo ? 'Productos / equipo solicitado' : todosVehiculo ? 'Vehículos solicitados' : 'Partidas solicitadas';
+  const colTitulo   = todosVehiculo ? 'Vehículo' : 'Descripción';
+  // Número real de columnas ANTES de la de Subtotal (usada para el
+  // colspan del bloque de totales, ver más abajo) -- Foto(opcional) +
+  // Tipo + Vehículo/Descripción + Cant. = 3 columnas, o 4 si hay Foto.
+  const colspanTotales = hayImagenes ? 4 : 3;
+  // Fase 3E-0.2 -- bloque de firmas simétrico: "Recibe y acepta" ahora usa
+  // el mismo par (Nombre, Empresa) que "Autoriza", en vez de dejar el
+  // nombre vacío (&nbsp;) y poner el proveedor en el lugar de "empresa".
+  // project.ocProveedor viene siempre poblado desde OCModal (creación) y
+  // desde reimprimir() (Projects.js) -- name/rfc ya son los campos reales
+  // usados en toda la OC, no se inventa ningún campo nuevo.
+  const nombreRecibe  = project.ocProveedor?.name || project.cotizacion?.agenciaProveedor || '';
+  const empresaRecibe = project.ocProveedor?.rfc ? ('RFC: ' + project.ocProveedor.rfc) : '';
   const filasVeh = partidas.map(p => {
     const qty    = p.cantidad || 0;
     const puCIVA = p.costoMSMS || 0;          // precio c/IVA que da el usuario
@@ -908,6 +932,7 @@ ${BASE_CSS}
 .sign-box   { border-top:1.5px solid #1a1917; padding-top:8px; }
 .sign-label { font-size:10px; color:#6b6862; text-transform:uppercase; letter-spacing:.5px; }
 .sign-name  { font-size:11px; font-weight:500; margin-top:4px; }
+.sign-company { font-size:10px; color:#6b6862; margin-top:2px; }
 </style></head><body>
 <div class="sheet">
 
@@ -950,12 +975,12 @@ ${BASE_CSS}
     </div>
   </div>
 
-  <h2>Vehículos solicitados</h2>
+  <h2>${esc(tituloTabla)}</h2>
   <table>
     <thead>
       <tr>
         ${hayImagenes ? '<th style="width:56px">Foto</th>' : ''}
-        <th>Tipo</th><th>Vehículo</th><th style="text-align:center;width:50px">Cant.</th>
+        <th>Tipo</th><th>${esc(colTitulo)}</th><th style="text-align:center;width:50px">Cant.</th>
         <th style="text-align:right;width:100px">P. Unit s/IVA</th>
         <th style="text-align:right;width:110px">Subtotal s/IVA</th>
       </tr>
@@ -963,17 +988,17 @@ ${BASE_CSS}
     <tbody>${filasVeh}</tbody>
     <tfoot>
       <tr class="total-row">
-        <td colspan="3"></td>
+        <td colspan="${colspanTotales}"></td>
         <td style="text-align:right;font-size:10px;color:#6b6862">Subtotal s/IVA</td>
         <td style="text-align:right">${fmt(totalSIVA)}</td>
       </tr>
       <tr>
-        <td colspan="3"></td>
+        <td colspan="${colspanTotales}"></td>
         <td style="text-align:right;font-size:10px;color:#6b6862">IVA (16%)</td>
         <td style="text-align:right">${fmt(totalIVA)}</td>
       </tr>
       <tr class="total-row">
-        <td colspan="3"></td>
+        <td colspan="${colspanTotales}"></td>
         <td style="text-align:right;font-size:12px">TOTAL c/IVA</td>
         <td style="text-align:right;font-size:14px;color:#3b6cf4">${fmt(total)}</td>
       </tr>
@@ -987,12 +1012,12 @@ ${BASE_CSS}
     <div class="sign-box">
       <div class="sign-label">Autoriza</div>
       <div class="sign-name">${esc(project.responsable||'Santiago Mansur')}</div>
-      <div style="font-size:10px;color:#6b6862">Broking and Brands Group</div>
+      <div class="sign-company">${esc(project.company||'Broking and Brands Group')}</div>
     </div>
     <div class="sign-box">
       <div class="sign-label">Recibe y acepta</div>
-      <div class="sign-name">&nbsp;</div>
-      <div style="font-size:10px;color:#6b6862">${esc(project.cotizacion?.agenciaProveedor||'Proveedor')}</div>
+      <div class="sign-name">${esc(nombreRecibe) || '&nbsp;'}</div>
+      <div class="sign-company">${esc(empresaRecibe) || '&nbsp;'}</div>
     </div>
   </div>
 
