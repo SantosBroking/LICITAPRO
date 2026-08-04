@@ -79,8 +79,8 @@ export function getPermissions(user) {
 //
 // 'project_new' está en ambas listas: cualquier rol autenticado puede crear
 // proyectos (operarProyectos en getPermissions ya lo confirma).
-const VISTAS_ADMIN    = ['dashboard','projects','project_new','firmas','companies','catalog','reports','settings','audit','project_detail','inbox'];
-const VISTAS_EMPLEADO = ['dashboard','projects','project_new','firmas','companies','catalog','project_detail','inbox'];
+const VISTAS_ADMIN    = ['dashboard','projects','project_new','firmas','companies','catalog','reports','settings','audit','project_detail','inbox','purchase_orders'];
+const VISTAS_EMPLEADO = ['dashboard','projects','project_new','firmas','companies','catalog','project_detail','inbox','purchase_orders'];
 
 export function getAllowedViews(user) {
   return getPermissions(user).isAdmin ? VISTAS_ADMIN : VISTAS_EMPLEADO;

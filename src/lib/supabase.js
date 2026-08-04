@@ -514,3 +514,29 @@ export async function abrirArchivo(urlOrPath) {
   const url = await signedUrl(urlOrPath, 3600);
   window.open(url, '_blank');
 }
+
+// ── Fase 3G-B — módulo "Órdenes de Compra" (purchase_orders) ────────────
+// Un solo endpoint consolidado (api/purchase-orders.js), mismo patrón de
+// sesión/auth que el resto del sistema. No confunde con
+// saveProjectViaEndpoint/OC legacy dentro de project.ordenesCompra[] --
+// esto es exclusivamente para el módulo global nuevo.
+export async function listPurchaseOrders() {
+  const json = await postJsonWithSession('/api/purchase-orders', { action:'list' });
+  return json.items || [];
+}
+export async function getPurchaseOrder(id) {
+  const json = await postJsonWithSession('/api/purchase-orders', { action:'get', id });
+  return json.item;
+}
+export async function createPurchaseOrder(payload) {
+  const json = await postJsonWithSession('/api/purchase-orders', { action:'create', payload });
+  return json.item;
+}
+export async function updatePurchaseOrder(id, payload) {
+  const json = await postJsonWithSession('/api/purchase-orders', { action:'update', id, payload });
+  return json.item;
+}
+export async function cancelPurchaseOrder(id) {
+  const json = await postJsonWithSession('/api/purchase-orders', { action:'cancel', id });
+  return json.item;
+}

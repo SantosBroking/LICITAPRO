@@ -15,12 +15,17 @@ import Companies   from './views/Companies.js';
 import { ProjectsList, ProjectForm, ProjectDetail } from './views/Projects.js';
 import { Reports, Settings, AuditLogView } from './views/Admin.js';
 import { Inbox } from './views/Inbox.js';
+import { PurchaseOrders } from './views/PurchaseOrders.js'; // Fase 3G-B
 import FirmasView from './views/Firmas.js';
 
 const NAV_ITEMS = [
   { id:'dashboard', label:'Dashboard', icon:'◈' },
   { id:'projects',  label:'Proyectos', icon:'◉' },
   { id:'inbox',     label:'Inbox',     icon:'📥' },
+  // Fase 3G-B -- nuevo módulo principal para purchase_orders (OC como
+  // módulo propio, ligadas o independientes). No reemplaza el generador
+  // legacy dentro de proyecto (Projects.js sigue igual, sin tocar).
+  { id:'purchase_orders', label:'Órdenes de Compra', icon:'🧾' },
   // Fase 3D-B1.2 -- 'firmas' se quitó de la navegación principal (Opción C
   // del diagnóstico: no quiero dos módulos principales visibles). La
   // VISTA (FirmasView), el archivo src/views/Firmas.js, src/lib/firmas.js
@@ -586,6 +591,8 @@ export default function App() {
     settings:       h(Settings,      { config, user, onSave:handleSaveConfig }),
     audit:          h(AuditLogView,  { audit }),
     inbox:          h(Inbox,         { user, onNav:nav, projects: isAdmin?projects:visibleProjects, onSeenChange:refreshInboxUnread }),
+    // Fase 3G-B -- módulo global de Órdenes de Compra (purchase_orders).
+    purchase_orders: h(PurchaseOrders, { user, onNav:nav, projects: isAdmin?projects:visibleProjects, companies, config: window._lpConfig }),
   })[effectiveView] || h(Dashboard, { projects: isAdmin?projects:visibleProjects, vehicles: isAdmin?vehicles:visibleVehicles, companies, onNav:nav, onUpdate:upProject });
 
 
