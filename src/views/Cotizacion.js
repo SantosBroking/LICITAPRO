@@ -63,7 +63,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
       margenEquipo:c.margenEquipo!=null?c.margenEquipo:0.30,
       montoGanar:c.montoGanar!=null?c.montoGanar:0,
       partidas:c.partidas||[makeP('P1',true),makeP('P2',false),makeP('P3',false),makeP('P4',false),makeP('P5',false)],
-      equipo:c.equipo||[], retornos:c.retornos||[], fianzas:c.fianzas||[],
+      equipo:c.equipo||[], servicios:c.servicios||[], retornos:c.retornos||[], fianzas:c.fianzas||[],
     };
   },[project.cotizacion]);
 
