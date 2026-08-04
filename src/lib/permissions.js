@@ -163,7 +163,14 @@ export function sanitizeProjectTab(tab, user) {
 // nunca los incluyó); se preserva exactamente ese mismo acceso, ahora como
 // sub-pestañas: admin y empleado ven las 3 por igual.
 const SUBTABS_POR_SCOPE_ADMIN = {
-  cotizacion: ['partidas', 'equipo', 'extras', 'finanzas', 'agente'],
+  // Fase 3G -- 'servicios' agregado (Cotizacion.js ya lo tenía en su
+  // propio TABS desde el commit anterior, pero esta lista -- la que
+  // realmente controla si la transición de sub-pestaña se acepta o se
+  // revierte -- nunca se actualizó. Causa exacta del bug reportado: cada
+  // clic en "Servicios" pasaba por sanitizeSubTab/canSubTab, que lo
+  // rechazaba por no estar aquí, y lo revertía silenciosamente a
+  // 'partidas' en el siguiente render.
+  cotizacion: ['partidas', 'equipo', 'servicios', 'extras', 'finanzas', 'agente'],
   operacion: ['vehiculos', 'facturacion', 'flujo'],
   docs: ['documentos', 'bases', 'preguntas'],
 };
@@ -173,7 +180,8 @@ const SUBTABS_POR_SCOPE_ADMIN = {
 // no una pestaña propia (evita el "Resumen" duplicado con el tab principal
 // del proyecto).
 const SUBTABS_POR_SCOPE_EMPLEADO = {
-  cotizacion: ['partidas', 'equipo'],
+  // Fase 3G -- 'servicios' agregado, mismo motivo que arriba.
+  cotizacion: ['partidas', 'equipo', 'servicios'],
   operacion: ['vehiculos'],
   docs: ['documentos', 'bases', 'preguntas'],
 };
