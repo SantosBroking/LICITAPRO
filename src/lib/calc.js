@@ -24,6 +24,8 @@ export function calcCotizacion(cot) {
     // Costos
     costoVehCIVA: 0, costoVehSIVA: 0, ivaVeh: 0,
     costoEqCIVA: 0,  costoEqSIVA: 0,  ivaEq: 0,
+    // Fase 3G -- servicios formales, independientes del eje vehículo/equipo.
+    costoServCIVA: 0, costoServSIVA: 0, ivaServ: 0,
     costoInternosSIVA: 0,
     costoRetornosSIVA: 0, ivaRetornos: 0,
     costoFianzasSIVA: 0,  ivaFianzas: 0,
@@ -43,7 +45,7 @@ export function calcCotizacion(cot) {
   if (!cot) return empty;
 
   const {
-    partidas = [], equipo = [], retornos = [], fianzas = [],
+    partidas = [], equipo = [], servicios = [], retornos = [], fianzas = [],
     pctIvaSat = 0.5, pctIvaUtil = 0.5,
     ivaSelectivo = true,
     soloEquipo = false, margenEquipo = 0.30,
@@ -173,6 +175,30 @@ export function calcCotizacion(cot) {
   });
   } // fin del else (bucle original de vehículo, sin ningún cambio de lógica)
 
+  // Fase 3G -- Servicios formales (instalación/mantenimiento/
+  // configuración/capacitación/etc.), COMPLETAMENTE INDEPENDIENTES del eje
+  // vehículo/equipo -- se suman SIEMPRE, sin importar si hay vehículos
+  // activos o no, ni si estamos en el camino "equipo sin vehículos" de
+  // arriba. Nunca se mezclan con costoVeh/costoEq -- variables propias.
+  // Se suman a ventaSIVA/ivaVenta ANTES de calcular ventaCIVA, para que
+  // retornos/fianzas (calculados más abajo sobre venta) ya las incluyan
+  // correctamente de forma automática.
+  let costoServCIVA = 0, costoServSIVA = 0, ivaServ = 0;
+  servicios.filter(s => s.usar).forEach(s => {
+    const qty = Number(s.cantidad || 0);
+    if (qty <= 0) return;
+    const costoCIVA = (s.costoUnitario || 0) * qty;
+    const costoSIVA = s.llevaIVA ? costoCIVA / (1 + IVA) : costoCIVA;
+    costoServCIVA += costoCIVA;
+    costoServSIVA += costoSIVA;
+    ivaServ       += costoCIVA - costoSIVA;
+
+    const ventaCIVA_item = (s.precioUnitario || 0) * qty;
+    const ventaSIVA_item = s.llevaIVA ? ventaCIVA_item / (1 + IVA) : ventaCIVA_item;
+    ventaSIVA += ventaSIVA_item;
+    ivaVenta  += ventaSIVA_item * IVA;
+  });
+
   const ventaCIVA = ventaSIVA + ivaVenta;
 
   // ── Costos internos (bloque 08 mano de obra sin retornos) ─
@@ -234,8 +260,8 @@ export function calcCotizacion(cot) {
 
   // ── COSTO TOTAL (fórmula C39 del Excel) ──────────────────
   // C39 = costoVehSIVA + costoEqSIVA + costoInternosSIVA + costoRetornosSIVA + costoFianzasSIVA
-  const costoTotalSIVA = costoVehSIVA + costoEqSIVA + costoInternosSIVA + costoRetornosSIVA + costoFianzasSIVA;
-  const costoTotalCIVA = costoVehCIVA + costoEqCIVA + totalRetornos + totalFianzas;
+  const costoTotalSIVA = costoVehSIVA + costoEqSIVA + costoServSIVA + costoInternosSIVA + costoRetornosSIVA + costoFianzasSIVA;
+  const costoTotalCIVA = costoVehCIVA + costoEqCIVA + costoServCIVA + totalRetornos + totalFianzas;
 
   // ── ESTRATEGIA IVA (fórmulas C46-C49 del Excel) ──────────
   // IVA acreditable = ivaVeh + ivaEq + ivaRetornos + ivaFianzas
@@ -260,6 +286,7 @@ export function calcCotizacion(cot) {
     ventaTotal: ventaCIVA, ventaSIVA, ivaVenta,
     costoVehCIVA, costoVehSIVA, ivaVeh,
     costoEqCIVA,  costoEqSIVA,  ivaEq,
+    costoServCIVA, costoServSIVA, ivaServ,
     costoInternosSIVA,
     costoRetornosSIVA, ivaRetornos,
     costoFianzasSIVA,  ivaFianzas,
@@ -299,6 +326,7 @@ export function newCotizacion(folio) {
       makePartida('P5', false),
     ],
     equipo: [],
+    servicios: [],
     retornos: [],
     fianzas: [],
   };

@@ -27,8 +27,8 @@ function liveEquipo(e) {
 // 'finanzas' -- ambos bloques de render (líneas más abajo) ahora
 // disparan con el mismo id, uno después del otro, sin tocar ninguna
 // fórmula ni cálculo de ninguno de los dos.
-const TABS = ['partidas','equipo','extras','finanzas','agente'];
-const TAB_LABELS = { partidas:'1 · Partidas', equipo:'2 · Equipo', extras:'3 · Retornos y condiciones', finanzas:'4 · Finanzas', agente:'5 · Agente Claude' };
+const TABS = ['partidas','equipo','servicios','extras','finanzas','agente'];
+const TAB_LABELS = { partidas:'1 · Partidas', equipo:'2 · Equipo', servicios:'3 · Servicios', extras:'4 · Retornos y condiciones', finanzas:'5 · Finanzas', agente:'6 · Agente Claude' };
 const BASES_RETORNO = ['% sobre venta c/IVA','% sobre venta s/IVA','Monto fijo total','Monto fijo por unidad'];
 const BASES_FIANZA  = ['% sobre venta c/IVA','% sobre venta s/IVA','Monto fijo total','Monto fijo por unidad'];
 const IVA = 0.16;
@@ -107,6 +107,15 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
     updCot({...cot,equipo:[...cot.equipo,{id:uid('EQ'),productoId:prod.id,nombre:prod.nom,cat:prod.cat,marca:prod.marca||'',modelo:prod.modelo||'',unidad:'pz',usar:true,vis:prod.vis,costoConIVA:prod.price||0,llevaIVA:prod.cat!=='08 Mano de obra',cnts:new Array(cot.partidas.length).fill(0),est:'Estimado',fechaCosto:TODAY(),notas:''}]});
   };
   const removeEquipo  = eid => updCot({...cot,equipo:cot.equipo.filter(e=>e.id!==eid)});
+  // Fase 3G — Servicios formales (instalación/mantenimiento/
+  // configuración/capacitación/etc.), independientes de equipo/vehículo.
+  // Mismo patrón exacto que equipo: addX/updX/removeX + updCot().
+  const addServicio = () => updCot({...cot, servicios:[...(cot.servicios||[]), {
+    id:uid('SRV'), tipo:'servicio', nombre:'', descripcion:'', unidad:'servicio', cantidad:1,
+    costoUnitario:0, precioUnitario:0, proveedor:'', llevaIVA:true, notas:'', usar:true, origen:'servicio_manual',
+  }]});
+  const updServicio = (sid,k,v) => updCot({...cot, servicios:(cot.servicios||[]).map(s=>s.id===sid?{...s,[k]:v}:s)});
+  const removeServicio = sid => updCot({...cot, servicios:(cot.servicios||[]).filter(s=>s.id!==sid)});
   const addRetorno    = ()  => updCot({...cot,retornos:[...cot.retornos,{id:uid('RET'),nombre:'Retorno',base:'% sobre venta c/IVA',valor:0,activo:true,llevaIVA:false}]});
   const updRetorno    = (id,k,v) => updCot({...cot,retornos:cot.retornos.map(r=>r.id===id?{...r,[k]:v}:r)});
   const removeRetorno = id  => updCot({...cot,retornos:cot.retornos.filter(r=>r.id!==id)});
@@ -484,6 +493,41 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
           }))
         )
       )),
+      h(NavButtons),
+    ),
+
+    // ══ Fase 3G — SERVICIOS FORMALES (instalación/mantenimiento/
+    // configuración/capacitación/etc.) — independiente de partidas de
+    // vehículo y de equipo/catálogo. Lista manual editable, mismo patrón
+    // visual que retornos (extras). ══
+    tab==='servicios' && h('div', null,
+      h('div', { className:'card', style:{ marginBottom:14 } },
+        h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 } },
+          h('div', { style:{ fontSize:13, fontWeight:600 } }, 'Servicios (instalación, mantenimiento, capacitación, etc.)'),
+          h('button', { className:'bp', onClick:addServicio }, '+ Agregar servicio'),
+        ),
+        (cot.servicios||[]).length===0
+          ? h('div', { style:{ fontSize:12, color:'var(--t3)', padding:'14px 0', textAlign:'center' } }, 'Sin servicios agregados. Usa "+ Agregar servicio" para capturar instalación, configuración, mantenimiento, capacitación, u otro servicio manual.')
+          : (cot.servicios||[]).map(s => h('div', { key:s.id, style:{ display:'flex', flexDirection:'column', gap:8, padding:'12px 14px', marginBottom:10, borderRadius:'var(--r)', border:'.5px solid var(--b2)', background:s.usar?'transparent':'var(--bg2)', opacity:s.usar?1:.6 } },
+            h('div', { style:{ display:'flex', gap:8, alignItems:'center' } },
+              h('input', { type:'checkbox', checked:s.usar, onChange:e=>updServicio(s.id,'usar',e.target.checked), style:{ width:16, height:16, cursor:'pointer', flexShrink:0 } }),
+              h('input', { value:s.nombre, onChange:e=>updServicio(s.id,'nombre',e.target.value), placeholder:'Nombre del servicio (ej. Instalación de cámaras)', style:{ flex:2, fontSize:12, fontWeight:500 } }),
+              h('button', { onClick:()=>removeServicio(s.id), style:{ fontSize:11, color:'var(--red)', background:'transparent', border:'none', cursor:'pointer', flexShrink:0 } }, '✕ Quitar'),
+            ),
+            h('input', { value:s.descripcion, onChange:e=>updServicio(s.id,'descripcion',e.target.value), placeholder:'Descripción (opcional)', style:{ fontSize:11 } }),
+            h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))', gap:8 } },
+              h('div', null, h('div', { style:{ fontSize:10, color:'var(--t3)', marginBottom:3 } }, 'Unidad'), h('input', { value:s.unidad, onChange:e=>updServicio(s.id,'unidad',e.target.value), style:{ fontSize:12, width:'100%', boxSizing:'border-box' } })),
+              h('div', null, h('div', { style:{ fontSize:10, color:'var(--t3)', marginBottom:3 } }, 'Cantidad'), h(NumInput, { value:s.cantidad, onChange:v=>updServicio(s.id,'cantidad',Number(v)||0), style:{ fontSize:12, width:'100%', boxSizing:'border-box' } })),
+              h('div', null, h('div', { style:{ fontSize:10, color:'var(--t3)', marginBottom:3 } }, 'Proveedor'), h('input', { value:s.proveedor, onChange:e=>updServicio(s.id,'proveedor',e.target.value), style:{ fontSize:12, width:'100%', boxSizing:'border-box' } })),
+              h('div', null, h('div', { style:{ fontSize:10, color:'var(--t3)', marginBottom:3 } }, 'Costo unitario'), h(NumInput, { value:s.costoUnitario, onChange:v=>updServicio(s.id,'costoUnitario',Number(v)||0), style:{ fontSize:12, width:'100%', boxSizing:'border-box' } })),
+              h('div', null, h('div', { style:{ fontSize:10, color:'var(--t3)', marginBottom:3 } }, 'Precio unitario'), h(NumInput, { value:s.precioUnitario, onChange:v=>updServicio(s.id,'precioUnitario',Number(v)||0), style:{ fontSize:12, width:'100%', boxSizing:'border-box' } })),
+            ),
+            h('label', { style:{ display:'flex', alignItems:'center', gap:6, fontSize:11, color:'var(--t2)' } },
+              h('input', { type:'checkbox', checked:s.llevaIVA, onChange:e=>updServicio(s.id,'llevaIVA',e.target.checked), style:{ width:14, height:14 } }), 'Lleva IVA',
+            ),
+            h('input', { value:s.notas, onChange:e=>updServicio(s.id,'notas',e.target.value), placeholder:'Notas (opcional)', style:{ fontSize:11 } }),
+          )),
+      ),
       h(NavButtons),
     ),
 

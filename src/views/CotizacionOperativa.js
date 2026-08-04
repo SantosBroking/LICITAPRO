@@ -23,7 +23,7 @@
 import { h, useState, useEffect } from '../lib/core.js';
 import { StorageImg, NumInput } from '../ui/primitives.js';
 import { CATALOG_PRODUCTS } from '../lib/catalog.js';
-import { TODAY } from '../lib/utils.js';
+import { TODAY, uid } from '../lib/utils.js';
 import { createInboxItem, listInboxItems } from '../lib/supabase.js';
 import { INBOX_PRIORIDADES, INBOX_PRIORIDAD_LABELS, INBOX_ACCIONES, INBOX_ACCION_LABELS } from '../lib/constants.js';
 
@@ -31,8 +31,8 @@ import { INBOX_PRIORIDADES, INBOX_PRIORIDAD_LABELS, INBOX_ACCIONES, INBOX_ACCION
 // informativa aparte -- se eliminó por completo (repetía el encabezado del
 // proyecto ya visible arriba, en Projects.js). Cotización Operativa muestra
 // solo tabs → Partidas/Equipo → contenido, sin resumen propio.
-const SUBTABS = ['partidas', 'equipo'];
-const SUBTAB_LABELS = { partidas: 'Partidas', equipo: 'Equipo' };
+const SUBTABS = ['partidas', 'equipo', 'servicios'];
+const SUBTAB_LABELS = { partidas: 'Partidas', equipo: 'Equipo', servicios: 'Servicios' };
 
 // Partida nueva — Fase 2F1A: se agrega costoMSMS/precioLista (costo de
 // origen/proveedor, ahora visible/editable para empleado operativo) y
@@ -76,6 +76,7 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
   const cot = project?.cotizacion || {};
   const partidas = Array.isArray(cot.partidas) ? cot.partidas : [];
   const equipo = Array.isArray(cot.equipo) ? cot.equipo : [];
+  const servicios = Array.isArray(cot.servicios) ? cot.servicios : [];
 
   // Fase 2F3: el estatus REAL de revisión vive en inbox_items (fuente de
   // verdad), no en cot.estatusRevision (que es solo un eco local para
@@ -210,6 +211,16 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
   })});
 
   const updEquipo = (eid, k, v) => updCot({ ...cot, equipo: equipo.map(e => e.id===eid ? {...e,[k]:v} : e) });
+  // Fase 3G -- servicios formales, mismo patrón exacto que equipo, pero
+  // sin catálogo (son entradas manuales) -- empleado puede capturar
+  // cantidad/proveedor/costo operativo si ya tiene permiso (ya abierto
+  // desde 2F1B), nunca ve margen/utilidad/flujo/corrida.
+  const addServicio = () => updCot({...cot, servicios:[...servicios, {
+    id:uid('SRV'), tipo:'servicio', nombre:'', descripcion:'', unidad:'servicio', cantidad:1,
+    costoUnitario:0, precioUnitario:0, proveedor:'', llevaIVA:true, notas:'', usar:true, origen:'servicio_manual',
+  }]});
+  const updServicio = (sid,k,v) => updCot({...cot, servicios:servicios.map(s=>s.id===sid?{...s,[k]:v}:s)});
+  const removeServicio = sid => updCot({...cot, servicios:servicios.filter(s=>s.id!==sid)});
   const updCnts = (eid, pi, v) => updCot({ ...cot, equipo: equipo.map(e => {
     if (e.id!==eid) return e;
     const cnts = [...(e.cnts||new Array(partidas.length).fill(0))];
@@ -393,6 +404,34 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
           })),
         ),
       )),
+    ),
+    // Fase 3G -- pestaña de servicios formales, sin catálogo (entradas
+    // manuales), mismo patrón simplificado ya usado en Cotizacion.js
+    // admin. Empleado puede capturar cantidad/proveedor/costo operativo
+    // (ya abierto desde 2F1B) -- nunca ve margen/utilidad/flujo/corrida
+    // (esos ni siquiera existen a nivel servicio, viven en el motor
+    // financiero, sanitizados aparte).
+    tab==='servicios' && h('div', null,
+      h('div', { className:'card', style:{ marginBottom:12 } },
+        h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 } },
+          h('div', { style:{ fontSize:13, fontWeight:600 } }, 'Servicios (instalación, mantenimiento, capacitación, etc.)'),
+          h('button', { className:'bp', onClick:addServicio }, '+ Agregar servicio'),
+        ),
+        servicios.length===0
+          ? h('div', { style:{ fontSize:12, color:'var(--t3)', padding:'14px 0', textAlign:'center' } }, 'Sin servicios agregados.')
+          : servicios.map(s => h('div', { key:s.id, style:{ display:'flex', flexDirection:'column', gap:8, padding:'12px 14px', marginBottom:10, borderRadius:'var(--r)', border:'.5px solid var(--b2)', opacity:s.usar?1:.6 } },
+            h('div', { style:{ display:'flex', gap:8, alignItems:'center' } },
+              h('input', { type:'checkbox', checked:s.usar, onChange:e=>updServicio(s.id,'usar',e.target.checked), style:{ width:16, height:16, cursor:'pointer', flexShrink:0 } }),
+              h('input', { value:s.nombre, onChange:e=>updServicio(s.id,'nombre',e.target.value), placeholder:'Nombre del servicio', style:{ flex:2, fontSize:12, fontWeight:500 } }),
+              h('button', { onClick:()=>removeServicio(s.id), style:{ fontSize:11, color:'var(--red)', background:'transparent', border:'none', cursor:'pointer', flexShrink:0 } }, '✕ Quitar'),
+            ),
+            h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))', gap:8 } },
+              h('div', null, h('div', { style:{ fontSize:10, color:'var(--t3)', marginBottom:3 } }, 'Cantidad'), h(NumInput, { value:s.cantidad, onChange:v=>updServicio(s.id,'cantidad',Number(v)||0), style:{ fontSize:12, width:'100%', boxSizing:'border-box' } })),
+              h('div', null, h('div', { style:{ fontSize:10, color:'var(--t3)', marginBottom:3 } }, 'Proveedor'), h('input', { value:s.proveedor, onChange:e=>updServicio(s.id,'proveedor',e.target.value), style:{ fontSize:12, width:'100%', boxSizing:'border-box' } })),
+              h('div', null, h('div', { style:{ fontSize:10, color:'var(--t3)', marginBottom:3 } }, 'Costo proveedor'), h(NumInput, { value:s.costoUnitario, onChange:v=>updServicio(s.id,'costoUnitario',Number(v)||0), style:{ fontSize:12, width:'100%', boxSizing:'border-box' } })),
+            ),
+          )),
+      ),
     ),
     showModalRevision && h(ModalEnviarRevision, {
       partidasActivas: partidas.filter(p=>p.activo), equipo, enviando,

@@ -1228,6 +1228,28 @@ function partidasDeEquipoParaOC(cot, cfg) {
     .filter(Boolean);
 }
 
+// Fase 3G -- servicios formales (instalación/mantenimiento/config/
+// capacitación/etc.) como partida de OC. Mismo patrón exacto que
+// partidasDeEquipoParaOC, pero: (a) sin imageUrl obligatoria (los
+// servicios no tienen foto de producto), (b) costoMSMS se toma de
+// costoUnitario (costo real a pagar al proveedor de ese servicio, mismo
+// significado que costoConIVA de equipo).
+function partidasDeServiciosParaOC(cot) {
+  return (cot.servicios || [])
+    .filter(s => s.usar && Number(s.cantidad || 0) > 0)
+    .map(s => ({
+      id: s.id,
+      tipo: 'Servicio',
+      marca: [s.nombre, s.descripcion].filter(Boolean).join(' — ') || 'Servicio sin nombre',
+      modelo: '', version: '', ano: '', color: '',
+      cantidad: Number(s.cantidad || 0),
+      costoMSMS: s.costoUnitario || 0,
+      proveedor: s.proveedor || '',
+      origen: 'servicio_manual',
+      imageUrl: '', // los servicios no tienen foto de producto -- nunca obligatoria
+    }));
+}
+
 function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUpdate, onClose, user }) {
   const cot = project.cotizacion || {};
   const partidas = (cot.partidas || []).filter(p => p.activo && (p.cantidad||0) > 0);
@@ -1308,6 +1330,10 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
   const equipoPartidas = partidasDeEquipoParaOC(cot, cfg);
   const [selEquipo, setSelEquipo] = useState(equipoPartidas.map(p => p.id));
   const toggleEquipo = id => setSelEquipo(s => s.includes(id) ? s.filter(x=>x!==id) : [...s, id]);
+  // Fase 3G -- misma estructura que equipo, para servicios formales.
+  const serviciosPartidas = partidasDeServiciosParaOC(cot);
+  const [selServicios, setSelServicios] = useState(serviciosPartidas.map(p => p.id));
+  const toggleServicio = id => setSelServicios(s => s.includes(id) ? s.filter(x=>x!==id) : [...s, id]);
 
   // Direcciones guardadas en config global (+ migración desde localStorage viejo)
   const loadLegacyAddrs = () => { try { return JSON.parse(localStorage.getItem('lp_oc_addresses')||'[]'); } catch{ return []; } };
@@ -1380,14 +1406,16 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
   const generar = () => {
     // Fase 3E-0 -- partidasSel viene de la fuente elegida (vehículos,
     // comportamiento ORIGINAL sin cambio; o equipo, nuevo). El resto de
-    // generar() no distingue entre ambas -- partidasDeEquipoParaOC() ya
-    // devuelve partidas con el MISMO shape (tipo/marca/modelo/version/ano/
-    // cantidad/costoMSMS) que las de vehículo, compatibles con
-    // buildOrdenCompraHTML sin ningún cambio ahí.
+    // generar() no distingue entre las 3 fuentes -- partidasDeEquipoParaOC()/
+    // partidasDeServiciosParaOC() ya devuelven partidas con el MISMO shape
+    // (tipo/marca/modelo/version/ano/cantidad/costoMSMS) que las de
+    // vehículo, compatibles con buildOrdenCompraHTML sin ningún cambio ahí.
     const partidasSel = fuenteOC === 'vehiculos'
       ? partidas.filter(p => selParts.includes(p.id))
-      : equipoPartidas.filter(p => selEquipo.includes(p.id));
-    if (!partidasSel.length) { alert(fuenteOC==='vehiculos' ? 'Selecciona al menos una partida.' : 'Selecciona al menos un equipo/producto.'); return; }
+      : fuenteOC === 'equipo'
+      ? equipoPartidas.filter(p => selEquipo.includes(p.id))
+      : serviciosPartidas.filter(p => selServicios.includes(p.id));
+    if (!partidasSel.length) { alert(fuenteOC==='vehiculos' ? 'Selecciona al menos una partida.' : fuenteOC==='equipo' ? 'Selecciona al menos un equipo/producto.' : 'Selecciona al menos un servicio.'); return; }
     // Fase 3C-2 -- si el proyecto tiene folioProyecto (folios maestros,
     // Fase 3C-1), la OC usa el esquema derivado {folioProyecto}-OC-0N,
     // consecutivo real contando las OC ya existentes de ESTE proyecto que
@@ -1432,7 +1460,13 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
         // nunca hace match en cot2.partidas (son ids de equipo, no de
         // vehículo) -- sin esto, la reimpresión no tendría de dónde sacar
         // la descripción a mostrar.
-        if (p.origen === 'cotizacion_equipo') {
+        // Fase 3G -- la condición se amplió de 'p.origen===cotizacion_equipo'
+        // a 'p.origen' (cualquier valor truthy) para cubrir también
+        // 'servicio_manual' con el mismo criterio exacto: su id tampoco
+        // hace match en cot2.partidas (son ids de servicio, no de
+        // vehículo), así que necesita los mismos campos guardados
+        // explícitamente para que la reimpresión funcione.
+        if (p.origen) {
           return { ...base, marca:p.marca, productoId:p.productoId, proveedor:p.proveedor, origen:p.origen, imageUrl:p.imageUrl||'' };
         }
         return base;
@@ -1509,6 +1543,7 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
         h('div', { style:{ display:'flex', gap:8, marginBottom:12 } },
           h('button', { onClick:()=>setFuenteOC('vehiculos'), style:{ flex:1, padding:'8px 12px', fontSize:12, fontWeight:500, borderRadius:'var(--r)', border:'1px solid var(--b2)', cursor:'pointer', background:fuenteOC==='vehiculos'?'var(--blue)':'transparent', color:fuenteOC==='vehiculos'?'#fff':'var(--t1)' } }, '🚓 Vehículos'),
           h('button', { onClick:()=>setFuenteOC('equipo'), style:{ flex:1, padding:'8px 12px', fontSize:12, fontWeight:500, borderRadius:'var(--r)', border:'1px solid var(--b2)', cursor:'pointer', background:fuenteOC==='equipo'?'var(--blue)':'transparent', color:fuenteOC==='equipo'?'#fff':'var(--t1)' } }, '📦 Equipo / productos'),
+          h('button', { onClick:()=>setFuenteOC('servicios'), style:{ flex:1, padding:'8px 12px', fontSize:12, fontWeight:500, borderRadius:'var(--r)', border:'1px solid var(--b2)', cursor:'pointer', background:fuenteOC==='servicios'?'var(--blue)':'transparent', color:fuenteOC==='servicios'?'#fff':'var(--t1)' } }, '🛠️ Servicios'),
         ),
       ),
 
@@ -1539,6 +1574,20 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
               // imagen, simplemente no se renderiza nada, sin placeholder
               // que ocupe espacio.
               p.imageUrl && h('img', { src:p.imageUrl, style:{ width:36, height:36, objectFit:'contain', borderRadius:4, flexShrink:0, border:'1px solid var(--b1)' } }),
+              h('div', null,
+                h('div', { style:{ fontSize:13, fontWeight:500 } }, p.marca),
+                h('div', { style:{ fontSize:11, color:'var(--t2)' } }, p.cantidad,' unidad(es)', p.proveedor?' · Proveedor: '+p.proveedor:''),
+              ),
+            ))
+      ),
+      // Fase 3G -- lista de servicios, mismo patrón que equipo, sin
+      // imagen (los servicios no tienen foto de producto).
+      fuenteOC==='servicios' && h('div', null,
+        h('div', { style:secLabel }, 'Servicios a incluir'),
+        serviciosPartidas.length === 0
+          ? h('div', { style:{ fontSize:12, color:'var(--t3)', padding:'10px 0' } }, 'No hay servicios con cantidad asignada en esta cotización. Ve a la pestaña "Servicios" de Cotización para agregarlos.')
+          : serviciosPartidas.map(p => h('label', { key:p.id, style:{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', marginBottom:6, borderRadius:'var(--r)', border:'.5px solid var(--b2)', cursor:'pointer', background: selServicios.includes(p.id)?'var(--bg2)':'transparent' } },
+              h('input', { type:'checkbox', checked:selServicios.includes(p.id), onChange:()=>toggleServicio(p.id), style:{ width:15, height:15, accentColor:'var(--blue)', flexShrink:0 } }),
               h('div', null,
                 h('div', { style:{ fontSize:13, fontWeight:500 } }, p.marca),
                 h('div', { style:{ fontSize:11, color:'var(--t2)' } }, p.cantidad,' unidad(es)', p.proveedor?' · Proveedor: '+p.proveedor:''),

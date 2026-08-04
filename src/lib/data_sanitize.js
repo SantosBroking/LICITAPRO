@@ -61,6 +61,14 @@ const PARTIDA_CAMPOS_PRECIO_PROPUESTO = ['precioPropuesto'];
 // margenEquipo/modoEquipo, vive a nivel cotización, arriba).
 const EQUIPO_CAMPOS_COSTO_PROVEEDOR = ['costoConIVA', 'llevaIVA', 'est', 'fechaCosto'];
 const EQUIPO_CAMPOS_PRECIO_PROPUESTO = ['precioPropuesto'];
+// Fase 3G -- servicios formales, misma categoría de sensibilidad que
+// equipo: costoUnitario/llevaIVA = costo proveedor real (gate
+// verCostosProveedor, ya abierto a empleado desde 2F1B); precioUnitario =
+// precio de venta propuesto (gate verPreciosVentaPropuestos). El resto
+// (nombre/descripcion/unidad/cantidad/proveedor/notas/usar) es operativo,
+// visible a cualquier rol autenticado.
+const SERVICIO_CAMPOS_COSTO_PROVEEDOR = ['costoUnitario', 'llevaIVA'];
+const SERVICIO_CAMPOS_PRECIO_PROPUESTO = ['precioUnitario'];
 
 export function sanitizeCotizacionForRole(cotizacion, user) {
   if (getPermissions(user).verCostosInternos) return cotizacion; // admin: sin cambios, mismo objeto
@@ -82,6 +90,13 @@ export function sanitizeCotizacionForRole(cotizacion, user) {
     if (!perms.verCostosProveedor) EQUIPO_CAMPOS_COSTO_PROVEEDOR.forEach(campo => { delete eLimpio[campo]; });
     if (!perms.verPreciosVentaPropuestos) EQUIPO_CAMPOS_PRECIO_PROPUESTO.forEach(campo => { delete eLimpio[campo]; });
     return eLimpio;
+  });
+  // Fase 3G -- servicios formales, misma sanitización que equipo.
+  limpia.servicios = (cotizacion.servicios || []).map(s => {
+    const sLimpio = { ...s };
+    if (!perms.verCostosProveedor) SERVICIO_CAMPOS_COSTO_PROVEEDOR.forEach(campo => { delete sLimpio[campo]; });
+    if (!perms.verPreciosVentaPropuestos) SERVICIO_CAMPOS_PRECIO_PROPUESTO.forEach(campo => { delete sLimpio[campo]; });
+    return sLimpio;
   });
 
   return limpia;
@@ -468,6 +483,9 @@ const PARTIDA_OPERATIONAL_FIELDS = ['id', 'activo', 'tipo', 'marca', 'modelo', '
 // silenciosamente al guardar como empleado -- EQUIPO_OPERATIONAL_FIELDS
 // es un allowlist real, no un denylist.
 const EQUIPO_OPERATIONAL_FIELDS = ['id', 'productoId', 'nombre', 'cat', 'marca', 'modelo', 'unidad', 'usar', 'vis', 'cnts', 'cantidadGlobal', 'notas'];
+// Fase 3G -- campos operativos base de un servicio (todo lo que NO es
+// costo/precio, que se gatea aparte igual que equipo).
+const SERVICIO_OPERATIONAL_FIELDS = ['id', 'tipo', 'nombre', 'descripcion', 'unidad', 'cantidad', 'proveedor', 'notas', 'usar', 'origen'];
 const VEHICLE_OPERATIONAL_UPDATE_FIELDS = ['id', 'vin', 'marca', 'modelo', 'version', 'ano', 'color', 'numMotor', 'numInventario', 'statusEntrega', 'statusDocs', 'ubicacion', 'equipamiento', 'observaciones', 'actaEntrega'];
 
 function copiarSoloPermitidos(origen, permitidos, base) {
@@ -510,6 +528,19 @@ function construirEquipoOperativo(eEmpleado, eOriginal, user) {
   ];
   const nuevo = copiarSoloPermitidos(eEmpleado, permitidos, eOriginal ? copiarSoloPermitidos(eOriginal, permitidos) : {});
   if (!perms.verCostosProveedor) EQUIPO_CAMPOS_COSTO_PROVEEDOR.forEach(campo => { if (eOriginal) nuevo[campo] = eOriginal[campo]; });
+  return nuevo;
+}
+
+// Fase 3G -- mismo patrón exacto que construirEquipoOperativo.
+function construirServicioOperativo(sEmpleado, sOriginal, user) {
+  const perms = getPermissions(user);
+  const permitidos = [
+    ...SERVICIO_OPERATIONAL_FIELDS,
+    ...(perms.verCostosProveedor ? SERVICIO_CAMPOS_COSTO_PROVEEDOR : []),
+    ...(perms.verPreciosVentaPropuestos ? SERVICIO_CAMPOS_PRECIO_PROPUESTO : []),
+  ];
+  const nuevo = copiarSoloPermitidos(sEmpleado, permitidos, sOriginal ? copiarSoloPermitidos(sOriginal, permitidos) : {});
+  if (!perms.verCostosProveedor) SERVICIO_CAMPOS_COSTO_PROVEEDOR.forEach(campo => { if (sOriginal) nuevo[campo] = sOriginal[campo]; });
   return nuevo;
 }
 
@@ -608,6 +639,14 @@ export function sanitizeProjectUpdateForRole(originalProject, incomingProject, u
       construirEquipoOperativo(eEmpleado, (cotOriginal.equipo || []).find(e => e.id === eEmpleado.id), user)
     );
     nuevaCot.equipo = [...equipoPreservado, ...equipoNuevo];
+
+    // Fase 3G -- mismo patrón exacto que partidas/equipo.
+    const idsServiciosEntrantes = new Set((cotEntrante.servicios || []).map(s => s.id));
+    const serviciosPreservados = (cotOriginal.servicios || []).filter(s => !idsServiciosEntrantes.has(s.id));
+    const serviciosNuevos = (cotEntrante.servicios || []).map(sEmpleado =>
+      construirServicioOperativo(sEmpleado, (cotOriginal.servicios || []).find(s => s.id === sEmpleado.id), user)
+    );
+    nuevaCot.servicios = [...serviciosPreservados, ...serviciosNuevos];
 
     base.cotizacion = nuevaCot;
   } else if (originalProject && originalProject.cotizacion) {

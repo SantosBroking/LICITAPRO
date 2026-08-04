@@ -351,6 +351,22 @@ export async function printCotizacionCliente({ project, cot, calc, config, compa
   });
   const subtotalEquipoSinVeh = equipoSinVehiculoRows.reduce((s,r) => s + r.subtotal, 0);
 
+  // Fase 3G -- servicios formales (instalación/mantenimiento/config/
+  // capacitación/etc.), COMPLETAMENTE INDEPENDIENTES del eje vehículo/
+  // equipo -- se listan siempre que existan, sin importar si hay
+  // vehículos o equipo en la cotización. Misma fórmula EXACTA que
+  // calcCotizacion (calc.js) para que coincida con calc.ventaSIVA/
+  // calc.ventaTotal (ya correctos, sin tocar calc.js en este commit
+  // salvo lo ya hecho para agregar el soporte de servicios).
+  const serviciosRows = (cot.servicios || []).filter(s => s.usar && Number(s.cantidad||0) > 0).map(s => {
+    const qty = Number(s.cantidad || 0);
+    const costoUnitSIVA = s.llevaIVA ? (s.costoUnitario||0)/(1+IVA) : (s.costoUnitario||0);
+    const pvUnitSIVA = s.llevaIVA ? (s.precioUnitario||0)/(1+IVA) : (s.precioUnitario||0);
+    const subtotal = pvUnitSIVA * qty;
+    return { s, qty, pvUnitSIVA, subtotal };
+  });
+  const subtotalServicios = serviciosRows.reduce((s,r) => s + r.subtotal, 0);
+
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <title>Cotización ${cot.folio||''}</title>
 <style>${BASE_CSS}
@@ -515,6 +531,41 @@ ${equipoSinVehiculoRows.length > 0 ? `
       <tr class="total-row"><td colspan="6"></td><td style="text-align:right">Subtotal:</td><td style="text-align:right">${fmt(subtotalEquipoSinVeh)}</td></tr>
       <tr class="total-row"><td colspan="6"></td><td style="text-align:right">IVA (16%):</td><td style="text-align:right">${fmt(subtotalEquipoSinVeh*IVA)}</td></tr>
       <tr class="total-row"><td colspan="6"></td><td style="text-align:right"><strong>TOTAL c/IVA:</strong></td><td style="text-align:right"><strong style="color:#3b6cf4">${fmt(subtotalEquipoSinVeh*(1+IVA))}</strong></td></tr>
+    </tfoot>
+  </table>
+</div>` : ''}
+
+${serviciosRows.length > 0 ? `
+<div class="section">
+  <div class="partida-header">SERVICIOS SOLICITADOS</div>
+  <table>
+    <colgroup>
+      <col class="c-num"/><col class="c-nom"/>
+      <col class="c-desc"/><col class="c-cant"/><col style="width:6%"/><col class="c-pu"/><col class="c-sub"/>
+    </colgroup>
+    <thead><tr>
+      <th>#</th><th>Concepto</th><th>Descripción</th>
+      <th style="text-align:center">Cant.</th>
+      <th style="text-align:center">Unidad</th>
+      <th style="text-align:right">P.Unit s/IVA</th>
+      <th style="text-align:right">Subtotal</th>
+    </tr></thead>
+    <tbody>
+      ${serviciosRows.map(({s,qty,pvUnitSIVA,subtotal},i) => `
+      <tr>
+        <td style="text-align:center;color:#6b6862;font-size:10px">${i+1}</td>
+        <td style="font-weight:600;font-size:10px">${s.nombre||''}</td>
+        <td class="desc-cell">${s.descripcion||''}</td>
+        <td style="text-align:center">${qty}</td>
+        <td style="text-align:center;font-size:9.5px">${s.unidad||'servicio'}</td>
+        <td style="text-align:right">${fmt(pvUnitSIVA)}</td>
+        <td style="text-align:right">${fmt(subtotal)}</td>
+      </tr>`).join('')}
+    </tbody>
+    <tfoot>
+      <tr class="total-row"><td colspan="5"></td><td style="text-align:right">Subtotal:</td><td style="text-align:right">${fmt(subtotalServicios)}</td></tr>
+      <tr class="total-row"><td colspan="5"></td><td style="text-align:right">IVA (16%):</td><td style="text-align:right">${fmt(subtotalServicios*IVA)}</td></tr>
+      <tr class="total-row"><td colspan="5"></td><td style="text-align:right"><strong>TOTAL c/IVA:</strong></td><td style="text-align:right"><strong style="color:#3b6cf4">${fmt(subtotalServicios*(1+IVA))}</strong></td></tr>
     </tfoot>
   </table>
 </div>` : ''}
@@ -931,7 +982,11 @@ function buildOrdenCompraHTML({ project, partidas, condiciones, folio: folioPara
   // `tipo` en cambio es un texto libre real para vehículo (Pickup, Sedán,
   // etc.) -- usar `origen` evita cualquier coincidencia rara si alguien
   // hubiera escrito "Equipo" como tipo de vehículo.
-  const esPartidaEquipo = p => p.origen === 'cotizacion_equipo';
+  // Fase 3G -- ampliado para reconocer también 'servicio_manual' (antes
+  // solo 'cotizacion_equipo'). Cualquier origen distinto de vehículo debe
+  // clasificarse igual para el título/columna del PDF de OC -- una OC de
+  // solo servicios NUNCA debe decir "Vehículos solicitados"/"Vehículo".
+  const esPartidaEquipo = p => p.origen === 'cotizacion_equipo' || p.origen === 'servicio_manual';
   const todosEquipo    = partidas.length > 0 && partidas.every(esPartidaEquipo);
   const todosVehiculo  = partidas.length > 0 && partidas.every(p => !esPartidaEquipo(p));
   const tituloTabla = todosEquipo ? 'Productos / equipo solicitado' : todosVehiculo ? 'Vehículos solicitados' : 'Partidas solicitadas';
