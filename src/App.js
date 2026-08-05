@@ -603,8 +603,6 @@ export default function App() {
           const active = effectiveView===item.id || (item.id==='projects' && effectiveView.startsWith('project'));
           return h('button', { key:item.id, onClick:()=>nav(item.id), className:'nav-item' + (active?' active':''), style:{ display:'flex', alignItems:'center', justifyContent:'space-between' } },
             h('span', null, h('span', { className:'nav-icon' }, item.icon), item.label),
-            // Fase 2F4 -- badge rojo con contador, solo en Inbox, solo si > 0.
-            item.id==='inbox' && inboxUnreadCount>0 && h('span', { style:{ background:'var(--red)', color:'#fff', fontSize:10, fontWeight:600, borderRadius:10, padding:'1px 6px', minWidth:16, textAlign:'center' } }, inboxUnreadCount>99?'99+':inboxUnreadCount),
           );
         })
       ),
@@ -634,7 +632,6 @@ export default function App() {
           const active = effectiveView===item.id || (item.id==='projects' && effectiveView.startsWith('project'));
           return h('button', { key:item.id, onClick:()=>{ nav(item.id); setMobileMenuOpen(false); }, className:'nav-item' + (active?' active':''), style:{ marginBottom:2, display:'flex', alignItems:'center', justifyContent:'space-between' } },
             h('span', null, h('span', { className:'nav-icon' }, item.icon), item.label),
-            item.id==='inbox' && inboxUnreadCount>0 && h('span', { style:{ background:'var(--red)', color:'#fff', fontSize:10, fontWeight:600, borderRadius:10, padding:'1px 6px', minWidth:16, textAlign:'center' } }, inboxUnreadCount>99?'99+':inboxUnreadCount),
           );
         }),
         h('div', { style:{ marginTop:20, paddingTop:16, borderTop:'1px solid var(--b1)' } },
@@ -652,7 +649,6 @@ export default function App() {
           return h('button', { key:item.id, onClick:()=>nav(item.id), className:'mobile-nav-btn' + (active?' active':''), style:{ position:'relative' } },
             h('span', { className:'nav-dot' }, item.icon),
             item.label,
-            item.id==='inbox' && inboxUnreadCount>0 && h('span', { style:{ position:'absolute', top:2, right:'28%', background:'var(--red)', color:'#fff', fontSize:9, fontWeight:600, borderRadius:8, padding:'0 4px', minWidth:14, textAlign:'center', lineHeight:'14px' } }, inboxUnreadCount>9?'9+':inboxUnreadCount),
           );
         })
       ),
