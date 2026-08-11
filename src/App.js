@@ -20,7 +20,10 @@ import FirmasView from './views/Firmas.js';
 const NAV_ITEMS = [
   { id:'dashboard', label:'Dashboard', icon:'◈' },
   { id:'projects',  label:'Proyectos', icon:'◉' },
-  { id:'inbox',     label:'Inbox',     icon:'📥' },
+  // Fase: se quitó el ícono visual de Inbox a pedido explícito (queda
+  // solo el texto "Inbox" en la navegación) -- el id/label/ruta/
+  // funcionalidad NO cambian, solo esta propiedad decorativa.
+  { id:'inbox',     label:'Inbox',     icon:'' },
   // Fase 3D-B1.2 -- 'firmas' se quitó de la navegación principal (Opción C
   // del diagnóstico: no quiero dos módulos principales visibles). La
   // VISTA (FirmasView), el archivo src/views/Firmas.js, src/lib/firmas.js
@@ -602,7 +605,7 @@ export default function App() {
         navItemsPermitidos.map(item => {
           const active = effectiveView===item.id || (item.id==='projects' && effectiveView.startsWith('project'));
           return h('button', { key:item.id, onClick:()=>nav(item.id), className:'nav-item' + (active?' active':''), style:{ display:'flex', alignItems:'center', justifyContent:'space-between' } },
-            h('span', null, h('span', { className:'nav-icon' }, item.icon), item.label),
+            h('span', null, item.icon && h('span', { className:'nav-icon' }, item.icon), item.label),
           );
         })
       ),
@@ -631,7 +634,7 @@ export default function App() {
         navItemsPermitidos.map(item => {
           const active = effectiveView===item.id || (item.id==='projects' && effectiveView.startsWith('project'));
           return h('button', { key:item.id, onClick:()=>{ nav(item.id); setMobileMenuOpen(false); }, className:'nav-item' + (active?' active':''), style:{ marginBottom:2, display:'flex', alignItems:'center', justifyContent:'space-between' } },
-            h('span', null, h('span', { className:'nav-icon' }, item.icon), item.label),
+            h('span', null, item.icon && h('span', { className:'nav-icon' }, item.icon), item.label),
           );
         }),
         h('div', { style:{ marginTop:20, paddingTop:16, borderTop:'1px solid var(--b1)' } },
@@ -647,7 +650,7 @@ export default function App() {
         MOBILE_NAV.map(item => {
           const active = effectiveView===item.id || (item.id==='projects' && effectiveView.startsWith('project'));
           return h('button', { key:item.id, onClick:()=>nav(item.id), className:'mobile-nav-btn' + (active?' active':''), style:{ position:'relative' } },
-            h('span', { className:'nav-dot' }, item.icon),
+            item.icon && h('span', { className:'nav-dot' }, item.icon),
             item.label,
           );
         })
