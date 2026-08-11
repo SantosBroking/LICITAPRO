@@ -17,12 +17,17 @@ import { Reports, Settings, AuditLogView } from './views/Admin.js';
 import { Inbox } from './views/Inbox.js';
 import FirmasView from './views/Firmas.js';
 
+// Fase: se quitaron TODOS los íconos visuales de la navegación principal
+// a pedido explícito (identidad visual uniforme, solo texto) -- ningún
+// id/label/ruta/permiso/funcionalidad cambia, solo esta propiedad
+// decorativa. El render de los 3 lugares donde se pinta la navegación
+// (sidebar desktop, drawer móvil, barra inferior móvil) ya es condicional
+// desde el fix anterior (`item.icon && h('span',...)`) -- con icon:''
+// en todos los items, ese render simplemente deja de pintar ningún ícono
+// en ningún lugar, sin necesitar tocar la lógica de render en absoluto.
 const NAV_ITEMS = [
-  { id:'dashboard', label:'Dashboard', icon:'◈' },
-  { id:'projects',  label:'Proyectos', icon:'◉' },
-  // Fase: se quitó el ícono visual de Inbox a pedido explícito (queda
-  // solo el texto "Inbox" en la navegación) -- el id/label/ruta/
-  // funcionalidad NO cambian, solo esta propiedad decorativa.
+  { id:'dashboard', label:'Dashboard', icon:'' },
+  { id:'projects',  label:'Proyectos', icon:'' },
   { id:'inbox',     label:'Inbox',     icon:'' },
   // Fase 3D-B1.2 -- 'firmas' se quitó de la navegación principal (Opción C
   // del diagnóstico: no quiero dos módulos principales visibles). La
@@ -32,11 +37,11 @@ const NAV_ITEMS = [
   // App.js (sin cambio), así que sigue siendo 100% accesible navegando
   // directo (?view=firmas) -- solo deja de ser un botón visible en el
   // menú, para que las firmas legacy nunca queden inaccesibles.
-  { id:'companies', label:'Empresas',  icon:'◎' },
-  { id:'catalog',   label:'Catálogo',  icon:'◳' },
-  { id:'reports',   label:'Reportes',  icon:'◑' },
-  { id:'settings',  label:'Config.',   icon:'⚙' },
-  { id:'audit',     label:'Bitácora',  icon:'◷' },
+  { id:'companies', label:'Empresas',  icon:'' },
+  { id:'catalog',   label:'Catálogo',  icon:'' },
+  { id:'reports',   label:'Reportes',  icon:'' },
+  { id:'settings',  label:'Config.',   icon:'' },
+  { id:'audit',     label:'Bitácora',  icon:'' },
 ];
 
 // Fix Persistencia + Seguridad de Navegación — calcula una navegación EFECTIVA
