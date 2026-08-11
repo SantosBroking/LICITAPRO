@@ -947,14 +947,23 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
           } catch(e) { alert('No se pudo enviar la solicitud de firma: ' + e.message); }
         };
         const ocsList = [...(project.ordenesCompra||[])].reverse();
-        const vehTxt = oc => (oc.partidas||[]).map(p=>`${p.id} · ${p.vehiculo||''} ×${p.cantidad}`).join(' | ');
+        // Fase 3H -- descripción que reconoce los 3 tipos de partida
+        // (antes solo mostraba `vehiculo`, quedando vacío para equipo/
+        // servicios, que guardan su descripción en `marca`).
+        const vehTxt = oc => (oc.partidas||[]).map(p=>`${p.vehiculo || p.marca || p.id} ×${p.cantidad}`).join(' | ');
+        // Total de la OC -- solo admin (precioUnit es costo interno, mismo
+        // criterio que sanitizeOrdenCompraForRole ya aplica).
+        const totalOC = oc => (oc.partidas||[]).reduce((s,p)=>s+(Number(p.precioUnit)||0)*(Number(p.cantidad)||0),0);
+        // Estatus de firma legible, derivado de las MISMAS funciones ya
+        // existentes (ocAprobada/enFlujo) -- no inventa ningún estado nuevo.
+        const estatusFirma = oc => ocAprobada(oc) ? '✅ Firmada' : enFlujo(oc) ? '⏳ En firma' : '— Sin enviar';
         return h('div', { className:'card', style:{ marginBottom:14 } },
           h('div', { style:{ fontSize:13, fontWeight:500, marginBottom:10 } }, '🛒 Órdenes de Compra'),
           // Tabla (desktop)
           h('div', { className:'tbl-scroll hide-mobile', style:{ overflowX:'auto' } },
             h('table', { style:{ fontSize:12, width:'100%', borderCollapse:'collapse', minWidth:560 } },
               h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b2)' } },
-                ['Folio','Fecha','Proveedor','Vehículos','Acciones'].map(h2=>h('th',{key:h2,style:{padding:'6px 8px',textAlign:'left',fontSize:10,fontWeight:500,color:'var(--t2)',letterSpacing:'.4px',whiteSpace:'nowrap'}},h2))
+                ['Folio','Fecha','Proveedor','Partidas','Total','Firma','Acciones'].map(h2=>h('th',{key:h2,style:{padding:'6px 8px',textAlign:'left',fontSize:10,fontWeight:500,color:'var(--t2)',letterSpacing:'.4px',whiteSpace:'nowrap'}},h2))
               )),
               h('tbody', null, ocsList.map(oc=>
                 h('tr', { key:oc.id, style:{ borderBottom:'.5px solid var(--b3)' } },
@@ -962,6 +971,8 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
                   h('td', { style:{ padding:'9px 8px', color:'var(--t2)', fontSize:11, whiteSpace:'nowrap' } }, oc.fecha),
                   h('td', { style:{ padding:'9px 8px' } }, oc.proveedor||'—'),
                   h('td', { style:{ padding:'9px 8px', fontSize:11, color:'var(--t2)' } }, vehTxt(oc)),
+                  h('td', { style:{ padding:'9px 8px', fontSize:11, whiteSpace:'nowrap', textAlign:'right' } }, esJefeDetalle ? fmt(totalOC(oc)) : '—'),
+                  h('td', { style:{ padding:'9px 8px', fontSize:11, whiteSpace:'nowrap' } }, estatusFirma(oc)),
                   h('td', { style:{ padding:'9px 8px', whiteSpace:'nowrap' } },
                     h('button', { style:{ fontSize:11, color:'var(--blue)', padding:'3px 8px' }, onClick:()=>reimprimir(oc) }, '📄 Reimprimir'),
                     (()=>{ const fl=enFlujo(oc); return h('button', { style:{ fontSize:11, color:fl?'var(--t3)':'var(--green)', padding:'3px 8px', marginLeft:4 }, onClick:()=>enviarAprobacion(oc) }, fl?'⏳ En flujo':'✍ A aprobación'); })(),
@@ -979,6 +990,7 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
                 h('span', { style:{ fontSize:11, color:'var(--t3)' } }, oc.fecha),
               ),
               h('div', { style:{ fontSize:13, fontWeight:500, marginBottom:2 } }, oc.proveedor||'—'),
+              h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:2 } }, estatusFirma(oc), esJefeDetalle ? ' · '+fmt(totalOC(oc)) : ''),
               vehTxt(oc) && h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:8, lineHeight:1.4 } }, vehTxt(oc)),
               h('div', { style:{ display:'flex', gap:8, flexWrap:'wrap' } },
                 h('button', { style:{ fontSize:12, color:'var(--blue)', padding:'6px 12px', border:'1px solid var(--blue-border)', borderRadius:'var(--r)', background:'var(--bg1)', flex:1 }, onClick:()=>reimprimir(oc) }, '📄 Reimprimir'),
@@ -1252,6 +1264,11 @@ function partidasDeServiciosParaOC(cot) {
 
 function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUpdate, onClose, user }) {
   const cot = project.cotizacion || {};
+  // Fase 3H -- mismo criterio ya usado en generar() (getPermissions(user)
+  // .isAdmin): el precio unitario es costoMSMS, dato de costo interno, y
+  // solo admin puede verlo/editarlo en el modal. Empleado edita cantidad
+  // y descripción (operativo), nunca precio.
+  const esAdmin = getPermissions(user).isAdmin;
   const partidas = (cot.partidas || []).filter(p => p.activo && (p.cantidad||0) > 0);
 
   // Config global (Supabase) — compartida entre proyectos y dispositivos
@@ -1323,17 +1340,47 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
   const [selParts, setSelParts] = useState(partidas.map(p => p.id));
   const togglePart = id => setSelParts(s => s.includes(id) ? s.filter(x=>x!==id) : [...s, id]);
 
-  // Fase 3E-0 — fuente de partidas para la OC: 'vehiculos' (comportamiento
-  // ORIGINAL, sin cambio) o 'equipo' (nuevo). cot ya está definido arriba
-  // (const cot = project.cotizacion || {}), cfg también.
+  // Fase 3H -- OC dentro de proyecto v2. La fuente deja de ser EXCLUYENTE
+  // (antes: o vehículos, o equipo, o servicios) y pasa a ser una pestaña
+  // de NAVEGACIÓN sobre un único carrito acumulativo: se puede seleccionar
+  // de las 3 fuentes y crear UNA SOLA OC mixta. `fuenteOC` ahora solo
+  // controla qué lista se está viendo, nunca qué se incluye en la OC --
+  // eso lo determina exclusivamente lo seleccionado en cada lista.
   const [fuenteOC, setFuenteOC] = useState('vehiculos');
   const equipoPartidas = partidasDeEquipoParaOC(cot, cfg);
-  const [selEquipo, setSelEquipo] = useState(equipoPartidas.map(p => p.id));
+  const [selEquipo, setSelEquipo] = useState([]);
   const toggleEquipo = id => setSelEquipo(s => s.includes(id) ? s.filter(x=>x!==id) : [...s, id]);
-  // Fase 3G -- misma estructura que equipo, para servicios formales.
   const serviciosPartidas = partidasDeServiciosParaOC(cot);
-  const [selServicios, setSelServicios] = useState(serviciosPartidas.map(p => p.id));
+  const [selServicios, setSelServicios] = useState([]);
   const toggleServicio = id => setSelServicios(s => s.includes(id) ? s.filter(x=>x!==id) : [...s, id]);
+
+  // Fase 3H -- overrides editables ANTES de crear la OC. Nunca mutan la
+  // cotización original: son un mapa {idPartida: {cantidad?, costoMSMS?,
+  // marca?, proveedor?}} que se aplica encima al construir partidasSel.
+  // Si un campo no está en el override, se usa el valor original tal cual.
+  const [overrides, setOverrides] = useState({});
+  const setOverride = (id, campo, valor) => setOverrides(o => ({ ...o, [id]: { ...(o[id]||{}), [campo]: valor } }));
+  const aplicarOverride = p => {
+    const ov = overrides[p.id];
+    if (!ov) return p;
+    return {
+      ...p,
+      cantidad: ov.cantidad !== undefined ? ov.cantidad : p.cantidad,
+      costoMSMS: ov.costoMSMS !== undefined ? ov.costoMSMS : p.costoMSMS,
+      marca: ov.marca !== undefined ? ov.marca : p.marca,
+      proveedor: ov.proveedor !== undefined ? ov.proveedor : p.proveedor,
+    };
+  };
+
+  // Carrito unificado -- lo que REALMENTE va a la OC, de las 3 fuentes a
+  // la vez (mixta). Es la única fuente de verdad para generar() y para el
+  // resumen de subtotal.
+  const partidasSeleccionadas = [
+    ...partidas.filter(p => selParts.includes(p.id)),
+    ...equipoPartidas.filter(p => selEquipo.includes(p.id)),
+    ...serviciosPartidas.filter(p => selServicios.includes(p.id)),
+  ].map(aplicarOverride);
+  const subtotalOC = partidasSeleccionadas.reduce((s,p) => s + (Number(p.costoMSMS)||0) * (Number(p.cantidad)||0), 0);
 
   // Direcciones guardadas en config global (+ migración desde localStorage viejo)
   const loadLegacyAddrs = () => { try { return JSON.parse(localStorage.getItem('lp_oc_addresses')||'[]'); } catch{ return []; } };
@@ -1410,12 +1457,11 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
     // partidasDeServiciosParaOC() ya devuelven partidas con el MISMO shape
     // (tipo/marca/modelo/version/ano/cantidad/costoMSMS) que las de
     // vehículo, compatibles con buildOrdenCompraHTML sin ningún cambio ahí.
-    const partidasSel = fuenteOC === 'vehiculos'
-      ? partidas.filter(p => selParts.includes(p.id))
-      : fuenteOC === 'equipo'
-      ? equipoPartidas.filter(p => selEquipo.includes(p.id))
-      : serviciosPartidas.filter(p => selServicios.includes(p.id));
-    if (!partidasSel.length) { alert(fuenteOC==='vehiculos' ? 'Selecciona al menos una partida.' : fuenteOC==='equipo' ? 'Selecciona al menos un equipo/producto.' : 'Selecciona al menos un servicio.'); return; }
+    // Fase 3H -- partidasSel viene del carrito unificado (las 3 fuentes a
+    // la vez, con overrides ya aplicados) en vez de la fuente excluyente
+    // que estaba activa. Esto es lo que habilita la OC MIXTA.
+    const partidasSel = partidasSeleccionadas;
+    if (!partidasSel.length) { alert('Selecciona al menos una partida (vehículos, equipo o servicios).'); return; }
     // Fase 3C-2 -- si el proyecto tiene folioProyecto (folios maestros,
     // Fase 3C-1), la OC usa el esquema derivado {folioProyecto}-OC-0N,
     // consecutivo real contando las OC ya existentes de ESTE proyecto que
@@ -1537,62 +1583,71 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
         }, '+ Guardar este proveedor para futuras OC'),
       ),
 
-      // Fase 3E-0 — selector de fuente de partidas
+      // Fase 3H -- pestañas de navegación (no excluyentes): se puede
+      // seleccionar de las 3 a la vez para una OC mixta. El contador
+      // muestra cuántas partidas de cada fuente ya están en el carrito.
       h('div', null,
-        h('div', { style:secLabel }, 'Fuente de partidas'),
+        h('div', { style:secLabel }, 'Partidas de la orden'),
         h('div', { style:{ display:'flex', gap:8, marginBottom:12 } },
-          h('button', { onClick:()=>setFuenteOC('vehiculos'), style:{ flex:1, padding:'8px 12px', fontSize:12, fontWeight:500, borderRadius:'var(--r)', border:'1px solid var(--b2)', cursor:'pointer', background:fuenteOC==='vehiculos'?'var(--blue)':'transparent', color:fuenteOC==='vehiculos'?'#fff':'var(--t1)' } }, '🚓 Vehículos'),
-          h('button', { onClick:()=>setFuenteOC('equipo'), style:{ flex:1, padding:'8px 12px', fontSize:12, fontWeight:500, borderRadius:'var(--r)', border:'1px solid var(--b2)', cursor:'pointer', background:fuenteOC==='equipo'?'var(--blue)':'transparent', color:fuenteOC==='equipo'?'#fff':'var(--t1)' } }, '📦 Equipo / productos'),
-          h('button', { onClick:()=>setFuenteOC('servicios'), style:{ flex:1, padding:'8px 12px', fontSize:12, fontWeight:500, borderRadius:'var(--r)', border:'1px solid var(--b2)', cursor:'pointer', background:fuenteOC==='servicios'?'var(--blue)':'transparent', color:fuenteOC==='servicios'?'#fff':'var(--t1)' } }, '🛠️ Servicios'),
+          [['vehiculos','🚓 Vehículos',selParts.length],['equipo','📦 Equipo',selEquipo.length],['servicios','🛠️ Servicios',selServicios.length]].map(([id,label,n]) =>
+            h('button', { key:id, onClick:()=>setFuenteOC(id), style:{ flex:1, padding:'8px 12px', fontSize:12, fontWeight:500, borderRadius:'var(--r)', border:'1px solid var(--b2)', cursor:'pointer', background:fuenteOC===id?'var(--blue)':'transparent', color:fuenteOC===id?'#fff':'var(--t1)' } },
+              label, n>0 ? ' ('+n+')' : '')
+          ),
         ),
       ),
 
-      // Selector de partidas
-      fuenteOC==='vehiculos' && h('div', null,
-        h('div', { style:secLabel }, 'Vehículos a incluir'),
-        partidas.length === 0
-          ? h('div', { style:{ fontSize:12, color:'var(--t3)', padding:'10px 0' } }, 'No hay partidas activas con vehículos en esta cotización.')
-          : partidas.map(p => h('label', { key:p.id, style:{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', marginBottom:6, borderRadius:'var(--r)', border:'.5px solid var(--b2)', cursor:'pointer', background: selParts.includes(p.id)?'var(--bg2)':'transparent' } },
-              h('input', { type:'checkbox', checked:selParts.includes(p.id), onChange:()=>togglePart(p.id), style:{ width:15, height:15, accentColor:'var(--blue)', flexShrink:0 } }),
-              h('div', null,
-                h('div', { style:{ fontSize:13, fontWeight:500 } }, p.id,' · ',[p.marca,p.modelo,p.version].filter(Boolean).join(' ')||'Vehículo sin definir'),
-                h('div', { style:{ fontSize:11, color:'var(--t2)' } }, (p.cantidad||0),' unidad(es) · ',(p.tipo||'')),
-              ),
-            ))
-      ),
-      // Fase 3E-0 — lista de equipo/productos, mismo patrón visual que
-      // vehículos. Solo se muestran los que ya tienen cantidad > 0
-      // asignada en la cotización (partidasDeEquipoParaOC ya filtra eso).
-      fuenteOC==='equipo' && h('div', null,
-        h('div', { style:secLabel }, 'Equipo / productos a incluir'),
-        equipoPartidas.length === 0
-          ? h('div', { style:{ fontSize:12, color:'var(--t3)', padding:'10px 0' } }, 'No hay equipo con cantidad asignada en esta cotización. Ve a la pestaña "Equipo" de Cotización para agregar y asignar cantidades.')
-          : equipoPartidas.map(p => h('label', { key:p.id, style:{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', marginBottom:6, borderRadius:'var(--r)', border:'.5px solid var(--b2)', cursor:'pointer', background: selEquipo.includes(p.id)?'var(--bg2)':'transparent' } },
-              h('input', { type:'checkbox', checked:selEquipo.includes(p.id), onChange:()=>toggleEquipo(p.id), style:{ width:15, height:15, accentColor:'var(--blue)', flexShrink:0 } }),
-              // Fase 3E-0.1 -- miniatura si existe imageUrl (siempre
-              // base64 data:, ver partidasDeEquipoParaOC) -- si no hay
-              // imagen, simplemente no se renderiza nada, sin placeholder
-              // que ocupe espacio.
+      // Fase 3H -- fila editable reutilizable para las 3 fuentes.
+      // Cantidad y descripción son editables para cualquier rol (operativo);
+      // el PRECIO UNITARIO solo para admin -- es costoMSMS, dato de costo
+      // interno, mismo criterio que sanitizeOrdenCompraForRole ya aplica
+      // sobre precioUnit en las OC guardadas.
+      (() => {
+        const lista = fuenteOC==='vehiculos' ? partidas : fuenteOC==='equipo' ? equipoPartidas : serviciosPartidas;
+        const sel   = fuenteOC==='vehiculos' ? selParts : fuenteOC==='equipo' ? selEquipo : selServicios;
+        const toggle= fuenteOC==='vehiculos' ? togglePart : fuenteOC==='equipo' ? toggleEquipo : toggleServicio;
+        const vacio = fuenteOC==='vehiculos' ? 'No hay partidas activas con vehículos en esta cotización.'
+                    : fuenteOC==='equipo'    ? 'No hay equipo con cantidad asignada. Ve a la pestaña "Equipo" de Cotización.'
+                    :                          'No hay servicios con cantidad asignada. Ve a la pestaña "Servicios" de Cotización.';
+        if (lista.length === 0) return h('div', { style:{ fontSize:12, color:'var(--t3)', padding:'10px 0' } }, vacio);
+        return h('div', null, lista.map(p => {
+          const activo = sel.includes(p.id);
+          const v = aplicarOverride(p);
+          const desc = fuenteOC==='vehiculos' ? (p.id+' · '+([p.marca,p.modelo,p.version].filter(Boolean).join(' ')||'Vehículo sin definir')) : v.marca;
+          return h('div', { key:p.id, style:{ padding:'9px 12px', marginBottom:6, borderRadius:'var(--r)', border:'.5px solid '+(activo?'var(--blue)':'var(--b2)'), background: activo?'var(--bg2)':'transparent' } },
+            h('label', { style:{ display:'flex', alignItems:'center', gap:10, cursor:'pointer' } },
+              h('input', { type:'checkbox', checked:activo, onChange:()=>toggle(p.id), style:{ width:15, height:15, accentColor:'var(--blue)', flexShrink:0 } }),
               p.imageUrl && h('img', { src:p.imageUrl, style:{ width:36, height:36, objectFit:'contain', borderRadius:4, flexShrink:0, border:'1px solid var(--b1)' } }),
-              h('div', null,
-                h('div', { style:{ fontSize:13, fontWeight:500 } }, p.marca),
-                h('div', { style:{ fontSize:11, color:'var(--t2)' } }, p.cantidad,' unidad(es)', p.proveedor?' · Proveedor: '+p.proveedor:''),
+              h('div', { style:{ flex:1, minWidth:0 } },
+                h('div', { style:{ fontSize:13, fontWeight:500 } }, desc),
+                h('div', { style:{ fontSize:11, color:'var(--t2)' } }, v.cantidad,' unidad(es)', v.proveedor?' · '+v.proveedor:'', esAdmin?' · '+fmt((Number(v.costoMSMS)||0)*(Number(v.cantidad)||0)):''),
               ),
-            ))
-      ),
-      // Fase 3G -- lista de servicios, mismo patrón que equipo, sin
-      // imagen (los servicios no tienen foto de producto).
-      fuenteOC==='servicios' && h('div', null,
-        h('div', { style:secLabel }, 'Servicios a incluir'),
-        serviciosPartidas.length === 0
-          ? h('div', { style:{ fontSize:12, color:'var(--t3)', padding:'10px 0' } }, 'No hay servicios con cantidad asignada en esta cotización. Ve a la pestaña "Servicios" de Cotización para agregarlos.')
-          : serviciosPartidas.map(p => h('label', { key:p.id, style:{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', marginBottom:6, borderRadius:'var(--r)', border:'.5px solid var(--b2)', cursor:'pointer', background: selServicios.includes(p.id)?'var(--bg2)':'transparent' } },
-              h('input', { type:'checkbox', checked:selServicios.includes(p.id), onChange:()=>toggleServicio(p.id), style:{ width:15, height:15, accentColor:'var(--blue)', flexShrink:0 } }),
-              h('div', null,
-                h('div', { style:{ fontSize:13, fontWeight:500 } }, p.marca),
-                h('div', { style:{ fontSize:11, color:'var(--t2)' } }, p.cantidad,' unidad(es)', p.proveedor?' · Proveedor: '+p.proveedor:''),
-              ),
-            ))
+            ),
+            // Campos editables -- solo se muestran si la partida está
+            // seleccionada, para no saturar la lista.
+            activo && h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))', gap:8, marginTop:8, paddingTop:8, borderTop:'.5px solid var(--b3)' } },
+              h('div', null, h('div', { style:{ fontSize:10, color:'var(--t3)', marginBottom:3 } }, 'Cantidad'),
+                h('input', { type:'number', value:v.cantidad, onChange:e=>setOverride(p.id,'cantidad',Number(e.target.value)||0), style:{ ...inputStyle, width:'100%', boxSizing:'border-box' } })),
+              esAdmin && h('div', null, h('div', { style:{ fontSize:10, color:'var(--t3)', marginBottom:3 } }, 'Precio unitario'),
+                h('input', { type:'number', value:v.costoMSMS, onChange:e=>setOverride(p.id,'costoMSMS',Number(e.target.value)||0), style:{ ...inputStyle, width:'100%', boxSizing:'border-box' } })),
+              fuenteOC!=='vehiculos' && h('div', { style:{ gridColumn:'1/-1' } }, h('div', { style:{ fontSize:10, color:'var(--t3)', marginBottom:3 } }, 'Descripción'),
+                h('input', { value:v.marca, onChange:e=>setOverride(p.id,'marca',e.target.value), style:{ ...inputStyle, width:'100%', boxSizing:'border-box' } })),
+              fuenteOC!=='vehiculos' && h('div', { style:{ gridColumn:'1/-1' } }, h('div', { style:{ fontSize:10, color:'var(--t3)', marginBottom:3 } }, 'Proveedor de esta partida (opcional)'),
+                h('input', { value:v.proveedor||'', onChange:e=>setOverride(p.id,'proveedor',e.target.value), style:{ ...inputStyle, width:'100%', boxSizing:'border-box' } })),
+            ),
+          );
+        }));
+      })(),
+
+      // Fase 3H -- resumen del carrito (las 3 fuentes juntas), para que
+      // quede claro qué va a salir en la OC antes de crearla.
+      partidasSeleccionadas.length > 0 && h('div', { style:{ padding:'10px 12px', borderRadius:'var(--r)', background:'var(--bg2)', border:'.5px solid var(--b2)' } },
+        h('div', { style:{ fontSize:12, fontWeight:600, marginBottom:4 } }, 'En esta orden: ', partidasSeleccionadas.length, ' partida(s)'),
+        h('div', { style:{ fontSize:11, color:'var(--t2)' } },
+          selParts.length>0 ? selParts.length+' vehículo(s). ' : '',
+          selEquipo.length>0 ? selEquipo.length+' de equipo. ' : '',
+          selServicios.length>0 ? selServicios.length+' servicio(s). ' : '',
+        ),
+        esAdmin && h('div', { style:{ fontSize:13, fontWeight:600, marginTop:6 } }, 'Subtotal: ', fmt(subtotalOC)),
       ),
 
       // Condiciones
