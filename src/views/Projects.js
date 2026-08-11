@@ -1588,12 +1588,23 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
       // muestra cuántas partidas de cada fuente ya están en el carrito.
       h('div', null,
         h('div', { style:secLabel }, 'Partidas de la orden'),
-        h('div', { style:{ display:'flex', gap:8, marginBottom:12 } },
+        // Fase 3H-1 -- ayuda visual: explica que se pueden combinar
+        // fuentes en una sola OC (el cambio de comportamiento más
+        // importante de la Fase 3H, que no era evidente en la UI).
+        h('div', { style:{ fontSize:11.5, color:'var(--t2)', lineHeight:1.5, marginBottom:10 } },
+          'Selecciona una o varias partidas para armar la orden de compra. Puedes combinar vehículos, equipo y servicios en una misma OC.'),
+        h('div', { style:{ display:'flex', gap:8, marginBottom:8 } },
           [['vehiculos','🚓 Vehículos',selParts.length],['equipo','📦 Equipo',selEquipo.length],['servicios','🛠️ Servicios',selServicios.length]].map(([id,label,n]) =>
             h('button', { key:id, onClick:()=>setFuenteOC(id), style:{ flex:1, padding:'8px 12px', fontSize:12, fontWeight:500, borderRadius:'var(--r)', border:'1px solid var(--b2)', cursor:'pointer', background:fuenteOC===id?'var(--blue)':'transparent', color:fuenteOC===id?'#fff':'var(--t1)' } },
               label, n>0 ? ' ('+n+')' : '')
           ),
         ),
+        // Fase 3H-1 -- explicación corta debajo de las pestañas: aclara
+        // que cambiar de pestaña NO pierde lo ya seleccionado.
+        h('div', { style:{ fontSize:11, color:'var(--t3)', lineHeight:1.5, marginBottom:12 } },
+          'Las partidas seleccionadas se acumulan en el resumen. Puedes ajustar cantidad, descripción, proveedor',
+          esAdmin ? ' y precio' : '',
+          ' antes de crear la OC.'),
       ),
 
       // Fase 3H -- fila editable reutilizable para las 3 fuentes.
@@ -1638,16 +1649,22 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
         }));
       })(),
 
-      // Fase 3H -- resumen del carrito (las 3 fuentes juntas), para que
-      // quede claro qué va a salir en la OC antes de crearla.
-      partidasSeleccionadas.length > 0 && h('div', { style:{ padding:'10px 12px', borderRadius:'var(--r)', background:'var(--bg2)', border:'.5px solid var(--b2)' } },
-        h('div', { style:{ fontSize:12, fontWeight:600, marginBottom:4 } }, 'En esta orden: ', partidasSeleccionadas.length, ' partida(s)'),
-        h('div', { style:{ fontSize:11, color:'var(--t2)' } },
-          selParts.length>0 ? selParts.length+' vehículo(s). ' : '',
-          selEquipo.length>0 ? selEquipo.length+' de equipo. ' : '',
-          selServicios.length>0 ? selServicios.length+' servicio(s). ' : '',
-        ),
-        esAdmin && h('div', { style:{ fontSize:13, fontWeight:600, marginTop:6 } }, 'Subtotal: ', fmt(subtotalOC)),
+      // Fase 3H-1 -- resumen del carrito SIEMPRE visible (antes solo
+      // aparecía con partidas), para que el estado vacío sea explícito y
+      // no parezca que falta algo por cargar.
+      h('div', { style:{ padding:'10px 12px', borderRadius:'var(--r)', background:'var(--bg2)', border:'.5px solid '+(partidasSeleccionadas.length>0?'var(--b2)':'var(--b3)') } },
+        h('div', { style:secLabel }, 'Partidas seleccionadas'),
+        partidasSeleccionadas.length === 0
+          ? h('div', { style:{ fontSize:12, color:'var(--t3)' } }, 'Aún no has seleccionado partidas para esta OC.')
+          : h('div', null,
+              h('div', { style:{ fontSize:12, fontWeight:600, marginBottom:4 } }, partidasSeleccionadas.length, ' partida(s) seleccionada(s)'),
+              h('div', { style:{ fontSize:11, color:'var(--t2)' } },
+                selParts.length>0 ? selParts.length+' vehículo(s). ' : '',
+                selEquipo.length>0 ? selEquipo.length+' de equipo. ' : '',
+                selServicios.length>0 ? selServicios.length+' servicio(s). ' : '',
+              ),
+              esAdmin && h('div', { style:{ fontSize:13, fontWeight:600, marginTop:6 } }, 'Subtotal estimado: ', fmt(subtotalOC)),
+            ),
       ),
 
       // Condiciones
@@ -1694,10 +1711,22 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
           h('button', { onClick:guardarPredeterminado, style:{ fontSize:11, color:'var(--blue)', background:'transparent', border:'.5px solid var(--blue)44', padding:'5px 10px', borderRadius:'var(--r)' } }, '★ Guardar condiciones como predeterminadas'),
           savedMsg && h('span', { style:{ fontSize:10, color:'#1D9E75' } }, savedMsg),
         ),
-        h('div', { style:{ display:'flex', gap:8 } },
+        h('div', { style:{ display:'flex', gap:8, alignItems:'center' } },
           h('button', { onClick:onClose }, 'Cancelar'),
-          h('button', { className:'bp', onClick:generar }, '📄 Generar OC'),
+          // Fase 3H-1 -- el botón se deshabilita visual y funcionalmente
+          // con el carrito vacío. La validación dentro de generar()
+          // (alert) SE MANTIENE como respaldo -- este disabled es una
+          // capa de UX encima, no la reemplaza.
+          h('button', {
+            className:'bp',
+            onClick:generar,
+            disabled: partidasSeleccionadas.length === 0,
+            title: partidasSeleccionadas.length === 0 ? 'Selecciona al menos una partida para crear la OC' : '',
+            style: partidasSeleccionadas.length === 0 ? { opacity:.5, cursor:'not-allowed' } : {},
+          }, '📄 Generar OC'),
         ),
+        partidasSeleccionadas.length === 0 && h('div', { style:{ fontSize:11, color:'var(--t3)', textAlign:'right', marginTop:6 } },
+          'Selecciona al menos una partida para crear la OC'),
       ),
     ),
   );
