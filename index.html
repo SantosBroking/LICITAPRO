@@ -517,8 +517,19 @@
       .hide-mobile { display: none !important; }
 
       /* Cards y métricas compactas */
-      .card   { padding: 16px !important; border-radius: var(--rl) !important; }
-      .metric { padding: 13px 14px !important; border-radius: var(--rl) !important; }
+      /* Fase 3I-2b -- más aire interior y, sobre todo, separación REAL
+         entre cards consecutivas (antes se pegaban entre sí). */
+      .card   { padding: 16px 15px !important; border-radius: var(--rl) !important; }
+      .card + .card { margin-top: 12px; }
+      .metric { padding: 14px !important; border-radius: var(--rl) !important; }
+
+      /* Fase 3I-2b -- altura táctil mínima cómoda (~40px) en botones e
+         inputs. Antes los botones pequeños inline (fontSize 11, padding
+         3px) quedaban imposibles de tocar con precisión. */
+      button { padding: 10px 14px; min-height: 40px; }
+      button.tab { padding: 9px 12px; font-size: 12px; min-height: 40px; }
+      /* Botones pequeños dentro de filas de acciones: no bajar de 36px. */
+      td button, .oc-card button, .acciones-row button { min-height: 36px; }
 
       /* Tabs */
       .tab-scroll::-webkit-scrollbar { display: none; }
@@ -527,9 +538,16 @@
       /* Botón nuevo del dashboard oculto (ya hay + en el header) */
       .dash-new-btn { display: none !important; }
 
-      /* Tablas compactas con scroll horizontal */
+      /* Tablas compactas con scroll horizontal controlado */
+      /* Fase 3I-2b -- el scroll-x se mantiene (necesario para tablas
+         densas), pero con padding real y sin que el encabezado se
+         comprima. Las tablas que SÍ tienen alternativa de tarjetas
+         (Operación/OC) usan .hide-mobile/.show-mobile y ni siquiera
+         llegan aquí. */
       table { font-size: 12px !important; }
-      table td, table th { padding: 8px 6px !important; white-space: nowrap; }
+      table td, table th { padding: 9px 8px !important; white-space: nowrap; }
+      table th { font-size: 10px !important; }
+      .tbl-scroll { -webkit-overflow-scrolling: touch; }
 
       /* Alertas en columna */
       .alert-row { flex-direction: column !important; align-items: flex-start !important; gap: 4px !important; }
@@ -548,12 +566,54 @@
       .filtros-bar .view-toggle { display: flex; gap: 8px; }
       .filtros-bar .view-toggle button { flex: 1; }
 
-      /* Botones un poco más altos para tocar mejor */
-      button { padding: 9px 14px; }
-      button.tab { padding: 8px 11px; }
+      /* Inputs más cómodos al tocar. font-size 16px evita el zoom
+         automático de iOS al enfocar un campo. */
+      input, select, textarea { padding: 11px 12px; font-size: 16px; min-height: 44px; }
+      textarea { min-height: 88px; }
 
-      /* Inputs más cómodos al tocar */
-      input, select, textarea { padding: 10px 12px; font-size: 16px; }
+      /* Fase 3I-2b -- utilidades móviles reutilizables. */
+      /* Fila de acciones: los botones se reparten y bajan de línea con
+         aire, en vez de amontonarse pegados. */
+      .acciones-row { display: flex !important; flex-wrap: wrap; gap: 8px !important; }
+      .acciones-row > button { flex: 1 1 auto; min-width: 44%; margin-left: 0 !important; }
+      /* Stack: cualquier fila que en móvil debe apilarse. */
+      .mob-stack { flex-direction: column !important; align-items: stretch !important; gap: 10px !important; }
+      /* Tarjeta de OC en móvil (Operación). */
+      .oc-card {
+        border: 1px solid var(--b1);
+        border-radius: var(--rl);
+        padding: 14px;
+        margin-bottom: 10px;
+        background: var(--bg1);
+      }
+      /* Fase 3I-2b -- modal de OC: aprovecha casi toda la pantalla en
+         móvil (antes quedaba con padding de escritorio, desperdiciando
+         ancho útil en un modal que ya es denso). */
+      .oc-modal { padding: 16px 14px !important; max-height: 94vh !important; border-radius: var(--rl) !important; }
+      /* Las pestañas Vehículos/Equipo/Servicios del modal necesitan poder
+         achicarse sin desbordar. */
+      .oc-modal button { font-size: 12px; }
+    }
+
+    /* ── Fase 3I-2b -- escalón intermedio (tablet / móvil grande) ─────── */
+    @media (max-width: 900px) and (min-width: 769px) {
+      .main-content { padding: 24px 20px 40px; }
+      /* En tablet, 5 y 4 columnas son demasiado apretadas. */
+      .grid-5 { grid-template-columns: repeat(3, 1fr) !important; }
+      .grid-4 { grid-template-columns: repeat(2, 1fr) !important; }
+    }
+
+    /* ── Fase 3I-2b -- pantallas chicas (iPhone SE / mini) ───────────── */
+    @media (max-width: 520px) {
+      .main-content { padding-left: 12px; padding-right: 12px; }
+      .card { padding: 14px 13px !important; }
+      .tbl-scroll { margin-left: -13px; margin-right: -13px; padding-left: 13px; padding-right: 13px; }
+      /* Las métricas dejan de ir en 2 columnas: en pantallas de ~360px
+         de ancho, 2 columnas dejan los números ilegibles. */
+      .grid-5, .grid-4 { grid-template-columns: 1fr !important; }
+      .page-title { font-size: 17px; }
+      /* Acciones a ancho completo -- más fáciles de tocar. */
+      .acciones-row > button { min-width: 100%; }
     }
   
   summary::-webkit-details-marker { display:none; }
