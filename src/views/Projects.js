@@ -516,6 +516,11 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
   const [showEdit, setShowEdit]     = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [showOC, setShowOC]         = useState(false);
+  // Fase 3I-1b -- aviso de "Exportar expediente". El botón existe desde
+  // ahora en el Centro de Control (no es un botón muerto: siempre lleva a
+  // Expediente), pero la exportación real (ZIP/paquete bancario) queda
+  // explícitamente fuera de alcance por ahora.
+  const [showExportarExp, setShowExportarExp] = useState(false);
   const [note, setNote]             = useState('');
   const [pregunta, setPregunta]     = useState('');
   // cotTab (sub-pestaña de Cotización) ya NO es estado local — se levantó a
@@ -771,8 +776,10 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
     ),
 
     // Fase 3I-1 -- bloque de pendientes derivados + acciones rápidas.
-    // NUNCA incluye exportación/ZIP/paquete bancario (excluido
-    // explícitamente del alcance de esta fase).
+    // Fase 3I-1b -- corrección de alcance: SÍ existe un botón "Exportar
+    // expediente" (abre un aviso con acción real a Expediente), pero la
+    // exportación real -- ZIP completo, paquete bancario, separación
+    // documental avanzada -- sigue explícitamente FUERA de alcance.
     (ccPendientes.length>0) && h('div', { style:{ marginBottom:16, padding:'14px 16px', background:'var(--amber-bg)', border:'1px solid var(--amber-border)', borderRadius:'var(--rl)' } },
       h('div', { className:'section-label', style:{ color:'#78350f' } }, 'Pendientes del proyecto'),
       h('ul', { style:{ margin:0, paddingLeft:18 } },
@@ -783,6 +790,7 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
       h('button', { onClick:()=>setTab('cotizacion') }, 'Ir a Cotización'),
       h('button', { onClick:()=>setTab('operacion') }, 'Ir a Operación'),
       h('button', { onClick:()=>setTab('docs') }, 'Ir a Expediente'),
+      h('button', { onClick:()=>setShowExportarExp(true) }, 'Exportar expediente'),
       h('button', { onClick:()=>{ setTab('operacion'); setShowOC(true); } }, '+ Generar OC'),
       h('button', { onClick:()=>onNav('inbox') }, 'Ver aprobaciones'),
     ),
@@ -1145,6 +1153,25 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
     })(),
     // Modal Orden de Compra
     showOC && h(OCModal, { project, companies, config, onSaveConfig, onSaveCompany, onUpdate:updProject, onClose:()=>setShowOC(false), user }),
+    // Fase 3I-1b -- aviso de "Exportar expediente". Siempre ofrece una
+    // acción real (ir a Expediente) -- nunca es un botón muerto. La
+    // exportación real (ZIP/paquete bancario/separación documental) NO se
+    // implementa aquí, es una fase aparte.
+    showExportarExp && h('div', { style:{ position:'fixed', inset:0, background:'rgba(0,0,0,.4)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000, padding:16 }, onClick:()=>setShowExportarExp(false) },
+      h('div', { className:'card', style:{ maxWidth:440, width:'100%' }, onClick:e=>e.stopPropagation() },
+        h('div', { style:{ fontSize:16, fontWeight:600, marginBottom:8 } }, 'Exportar expediente'),
+        h('div', { style:{ fontSize:13, color:'var(--t2)', lineHeight:1.6, marginBottom:8 } },
+          'Esta función preparará un expediente descargable del proyecto. Por ahora puedes revisar y organizar los documentos en la pestaña Expediente.'),
+        h('div', { style:{ fontSize:12, color:'var(--t3)', marginBottom:18 } },
+          ccNumDocs === 0
+            ? 'Este proyecto todavía no tiene documentos cargados.'
+            : ccNumDocs + (ccNumDocs===1 ? ' documento cargado en el expediente.' : ' documentos cargados en el expediente.')),
+        h('div', { style:{ display:'flex', gap:8, justifyContent:'flex-end' } },
+          h('button', { onClick:()=>setShowExportarExp(false) }, 'Cerrar'),
+          h('button', { className:'bp', onClick:()=>{ setShowExportarExp(false); setTab('docs'); } }, 'Ir a Expediente'),
+        ),
+      ),
+    ),
     // Modal eliminar
     showDelete && h(DeleteConfirmModal, { title:'¿Eliminar proyecto?', message:'Vas a eliminar el proyecto "'+project.name+'".\n\nSe eliminarán también todos los vehículos asociados.', warning:'Esta acción no se puede deshacer.', confirmLabel:'Sí, eliminar proyecto', onConfirm:()=>{ onDelete(project.id); setShowDelete(false); onNav('projects'); }, onCancel:()=>setShowDelete(false) }),
   );
