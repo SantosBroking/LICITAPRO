@@ -785,7 +785,10 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
     // Header
     h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16, flexWrap:'wrap', gap:12 } },
       h('div', { style:{ minWidth:0, flex:1 } },
-        h('div', { style:{ fontSize:22, fontWeight:600, marginBottom:6, lineHeight:1.25, letterSpacing:'-0.4px', textTransform:'uppercase' } }, project.name),
+        // Fase 3I-2c -- `clamp-2` limita el título a 2 líneas en móvil y
+        // permite el corte de palabras largas, para que un nombre de
+        // proyecto largo no rompa el layout ni empuje scroll horizontal.
+        h('div', { className:'clamp-2', style:{ fontSize:22, fontWeight:600, marginBottom:6, lineHeight:1.25, letterSpacing:'-0.4px', textTransform:'uppercase' } }, project.name),
         // Fase 3I-1 -- línea de contexto ejecutiva: folio · cliente ·
         // categoría de proyecto, todo en un renglón legible de un vistazo.
         h('div', { style:{ fontSize:12.5, color:'var(--t2)', marginBottom:10, lineHeight:1.5 } },
@@ -804,7 +807,10 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
           alerts.map((a,i)=>h(AlertChip, { key:i, level:a.level, text:a.label+': '+a.date })),
         ),
       ),
-      h('div', { className:'acciones-row', style:{ display:'flex', gap:8, flexWrap:'wrap' } },
+      // Fase 3I-2c -- `acciones-sec` las hace visualmente secundarias en
+      // móvil (texto más chico, menos peso), en vez de tres botones
+      // grandes compitiendo con el título del proyecto.
+      h('div', { className:'acciones-row acciones-sec', style:{ display:'flex', gap:8, flexWrap:'wrap' } },
         h('button', { onClick:()=>setShowEdit(true) }, 'Editar'),
         h('button', { onClick:async ()=>{
           const now = new Date().toISOString().slice(0,10);
@@ -1803,8 +1809,8 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
     onClick: e => { if(e.target===e.currentTarget) onClose(); } },
     h('div', { className:'oc-modal', style:{ background:'var(--bg1)', borderRadius:'var(--rl)', width:'100%', maxWidth:640, maxHeight:'92vh', overflow:'auto', WebkitOverflowScrolling:'touch', padding:24, display:'flex', flexDirection:'column', gap:16 } },
 
-      // Header
-      h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center' } },
+      // Header -- Fase 3I-2c: `oc-modal-head` lo fija arriba en móvil.
+      h('div', { className:'oc-modal-head', style:{ display:'flex', justifyContent:'space-between', alignItems:'center' } },
         h('div', { style:{ fontSize:15, fontWeight:600 } }, '🛒 Orden de Compra'),
         h('button', { onClick:onClose, style:{ background:'transparent', border:'none', fontSize:18, cursor:'pointer', color:'var(--t2)' } }, '✕'),
       ),
@@ -1984,7 +1990,10 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
         ),
       ),
 
-      h('div', { style:{ display:'flex', gap:8, justifyContent:'space-between', alignItems:'center', paddingTop:8, borderTop:'.5px solid var(--b2)', flexWrap:'wrap' } },
+      // Footer -- Fase 3I-2c: `oc-modal-foot` lo fija abajo en móvil, para
+      // que el botón "Generar OC" siempre esté al alcance sin scrollear
+      // hasta el final de un modal denso.
+      h('div', { className:'oc-modal-foot', style:{ display:'flex', gap:8, justifyContent:'space-between', alignItems:'center', paddingTop:8, borderTop:'.5px solid var(--b2)', flexWrap:'wrap' } },
         h('div', { style:{ display:'flex', flexDirection:'column', gap:2 } },
           h('button', { onClick:guardarPredeterminado, style:{ fontSize:11, color:'var(--blue)', background:'transparent', border:'.5px solid var(--blue)44', padding:'5px 10px', borderRadius:'var(--r)' } }, '★ Guardar condiciones como predeterminadas'),
           savedMsg && h('span', { style:{ fontSize:10, color:'#1D9E75' } }, savedMsg),

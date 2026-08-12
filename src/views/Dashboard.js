@@ -72,7 +72,7 @@ export default function Dashboard({ projects, vehicles, companies, onNav, onUpda
         filtered.slice(0,8).map((a,i) =>
           h('div', { key:i, onClick:()=>onNav('project_detail',a.project.id), className:(a.level==='r'?'alert-r':'alert-y')+' alert-row',
             style:{ padding:'8px 12px', borderRadius:'var(--r)', fontSize:12, cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 } },
-            h('div', { style:{ flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, h('strong', null, a.project.name), ' — ', a.label, ': ', a.date),
+            h('div', { className:'alert-txt', style:{ flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, h('strong', null, a.project.name), ' — ', a.label, ': ', a.date),
             h('div', { style:{ display:'flex', alignItems:'center', gap:6, flexShrink:0 } },
               h('div', { className:'alert-badge', style:{ fontWeight:600, fontSize:11, padding:'2px 8px', borderRadius:8, whiteSpace:'nowrap', background:'rgba(0,0,0,.06)' } }, a.days<0?'Vencido hace '+(-a.days)+'d':a.days===0?'HOY':'En '+a.days+'d'),
               h('button', { onClick:e=>{ e.stopPropagation(); dismissAlert(a); }, title:'Descartar alerta',
