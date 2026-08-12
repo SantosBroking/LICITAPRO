@@ -8,7 +8,7 @@ import { calcCotizacion } from '../lib/calc.js';
 import { h, useState, useMemo, useCallback, useRef, useEffect } from '../lib/core.js';
 import { STATUSES, FINAL_STATUS, KANBAN_COLS, TIPOS_PROCEDIMIENTO, DEPENDENCIAS_COMUNES, TIPOS_PRODUCTO, esProyectoPerdido, categoriaProyecto, CATEGORIA_PROYECTO_LABELS } from '../lib/constants.js';
 import { fmt, daysUntil, alertLevel, TODAY, NOW, uid, normalizeProjectName, generarFolioProyecto, generarFolioOC, generarFolioCotizacion } from '../lib/utils.js';
-import { Badge, AlertChip, Metric, Inp, EmptyState, ConfirmAction, NumInput, DeleteConfirmModal } from '../ui/primitives.js';
+import { Badge, AlertChip, Inp, EmptyState, ConfirmAction, NumInput, DeleteConfirmModal } from '../ui/primitives.js';
 import { getPermissions, canProjectTab, getAllowedSubTabs } from '../lib/permissions.js'; // Fase 1C + fix navegación + Fase 2A6 (sub-nav de Operación)
 import { sb, createInboxItem, listInboxItems } from '../lib/supabase.js'; // Fase 1C — directorio de usuarios activos; Fase 3D-B1 — creación de firma_documento; Fase 3D-B1.1 — reconocer firmas de OC en Inbox
 import CotizacionTab from './Cotizacion.js';
@@ -556,6 +556,32 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
     return () => { cancel = true; };
   }, [project.id]);
   const company = companies.find(c=>c.name===project.company);
+  // Fase 3I-1 -- helpers de estatus de firma ELEVADOS al nivel de
+  // ProjectDetail. Antes vivían anidados dentro de la IIFE de la pestaña
+  // Operación (inaccesibles desde el header/cards). Se movieron aquí SIN
+  // ningún cambio de lógica -- byte por byte la misma implementación --
+  // para que las cards de resumen y la pestaña Operación usen la MISMA
+  // fuente de verdad, en vez de duplicar la regla en dos lugares.
+  const inboxFirmaDeOC = oc => inboxFirmasOC.find(i =>
+    (i.data && i.data.ocId === oc.id) || (i.data && !i.data.ocId && i.data.documentoFolio === oc.folio)
+  );
+  const ocAprobada = oc => {
+    if ((project.firmas||[]).some(f => f.ocId===oc.id && (f.estatus==='en_firma' || f.estatus==='en_visto' || f.estatus==='completado'))) return true;
+    const item = inboxFirmaDeOC(oc);
+    if (!item) return false;
+    if (['aprobado', 'cerrado'].includes(item.status)) return true;
+    if (item.data && ['firmado', 'visto_final'].includes(item.data.firmaStatus)) return true;
+    return false;
+  };
+  const enFlujo = oc => {
+    const legacy = (project.firmas||[]).find(f => f.ocId===oc.id && f.estatus!=='completado');
+    if (legacy) return legacy;
+    const item = inboxFirmaDeOC(oc);
+    if (!item) return undefined;
+    if (['pendiente', 'en_revision', 'cambios_solicitados'].includes(item.status)) return item;
+    if (item.data && item.data.firmaStatus === 'pendiente_firma') return item;
+    return undefined;
+  };
   // Fase 0C: solo admin ve costos/utilidad/márgenes (pestaña Cotización) y
   // puede borrar proyectos definitivamente.
   const isAdmin = getPermissions(user).isAdmin;
@@ -567,8 +593,39 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
   [['Aclaraciones',project.fechaAclaraciones],['Propuesta',project.fechaPropuesta],['Fallo',project.fechaFallo],['Contrato',project.fechaContrato]]
     .forEach(([l,d])=>{ const lv=alertLevel(d); if(lv)alerts.push({label:l,date:d,level:lv,days:daysUntil(d)}); });
 
-  const addNote = () => {
-    if (!note.trim()) return;
+  // ── Fase 3I-1 -- Centro de Control: datos DERIVADOS de lo que ya existe.
+  // No se crea ningún campo, tabla ni obligación nueva -- todo se calcula
+  // en memoria a partir del proyecto y de inboxFirmasOC ya cargado.
+  const ccOCs = project.ordenesCompra || [];
+  const ccOCsFirmadas  = ccOCs.filter(oc => ocAprobada(oc));
+  const ccOCsEnFirma   = ccOCs.filter(oc => !ocAprobada(oc) && enFlujo(oc));
+  const ccOCsSinEnviar = ccOCs.filter(oc => !ocAprobada(oc) && !enFlujo(oc));
+  // Total de OCs -- SOLO admin (precioUnit es costo interno, mismo criterio
+  // que sanitizeOrdenCompraForRole ya aplica). Para empleado queda null y
+  // la card simplemente no muestra el monto.
+  const ccTotalOCs = isAdmin
+    ? ccOCs.reduce((s,oc)=>s+(oc.partidas||[]).reduce((s2,p)=>s2+(Number(p.precioUnit)||0)*(Number(p.cantidad)||0),0),0)
+    : null;
+  const ccCot = project.cotizacion || {};
+  const ccNumPartidas  = (ccCot.partidas||[]).filter(p=>p.activo && (p.cantidad||0)>0).length;
+  const ccNumEquipo    = (ccCot.equipo||[]).filter(e=>e.usar).length;
+  const ccNumServicios = (ccCot.servicios||[]).filter(s=>s.usar).length;
+  const ccHayCotizacion = ccNumPartidas>0 || ccNumEquipo>0 || ccNumServicios>0;
+  const ccNumDocs = (project.docs||[]).length;
+
+  // Pendientes -- mensajes derivados de datos existentes, nunca de reglas
+  // nuevas. Cada uno corresponde a algo que el usuario realmente puede
+  // resolver dentro de la app tal como está hoy.
+  const ccPendientes = [];
+  if (!project.dependencia)  ccPendientes.push({ t:'Sin cliente / dependencia asignada.', nivel:'aviso' });
+  if (!project.company)      ccPendientes.push({ t:'Sin empresa operadora asignada.', nivel:'aviso' });
+  if (!project.responsable)  ccPendientes.push({ t:'Sin responsable asignado.', nivel:'aviso' });
+  if (!ccHayCotizacion)      ccPendientes.push({ t:'Aún no hay partidas, equipo ni servicios capturados en la cotización.', nivel:'aviso' });
+  if (ccHayCotizacion && ccOCs.length===0) ccPendientes.push({ t:'Hay cotización capturada pero todavía no se genera ninguna orden de compra.', nivel:'aviso' });
+  if (ccOCsSinEnviar.length>0) ccPendientes.push({ t:ccOCsSinEnviar.length+' orden(es) de compra sin enviar a firma.', nivel:'aviso' });
+  if (ccOCsEnFirma.length>0)   ccPendientes.push({ t:ccOCsEnFirma.length+' orden(es) de compra esperando firma.', nivel:'info' });
+
+  const addNote = () => {    if (!note.trim()) return;
     updProject({...project,notes:[...(project.notes||[]),{id:uid('note'),text:note.trim(),author:user?.name||'Usuario',date:NOW()}]});
     if(logFn)logFn(user,'anotación','proyecto',project.id,note.slice(0,60));
     setNote('');
@@ -638,12 +695,22 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
     ),
     // Header
     h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16, flexWrap:'wrap', gap:12 } },
-      h('div', null,
-        h('div', { style:{ fontSize:20, fontWeight:600, marginBottom:4, lineHeight:1.3, letterSpacing:'-0.3px', textTransform:'uppercase' } }, project.name),
-        project.folioProyecto && h('div', { style:{ fontSize:12, color:'var(--t2)', marginBottom:8 } }, project.folioProyecto),
+      h('div', { style:{ minWidth:0, flex:1 } },
+        h('div', { style:{ fontSize:22, fontWeight:600, marginBottom:6, lineHeight:1.25, letterSpacing:'-0.4px', textTransform:'uppercase' } }, project.name),
+        // Fase 3I-1 -- línea de contexto ejecutiva: folio · cliente ·
+        // categoría de proyecto, todo en un renglón legible de un vistazo.
+        h('div', { style:{ fontSize:12.5, color:'var(--t2)', marginBottom:10, lineHeight:1.5 } },
+          [
+            project.folioProyecto,
+            project.dependencia,
+            categoriaProyecto(project.productType)!=='otro' ? CATEGORIA_PROYECTO_LABELS[categoriaProyecto(project.productType)] : null,
+            project.tipoOperacion,
+          ].filter(Boolean).join(' · ')
+        ),
         h('div', { style:{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' } },
           h(Badge, { statusId:project.status }),
-          project.dependencia && h('span', { style:{ fontSize:12, color:'var(--t2)' } }, project.dependencia),
+          project.responsable && h('span', { style:{ fontSize:12, color:'var(--t2)' } }, 'Responsable: ', project.responsable),
+          project.company && h('span', { style:{ fontSize:12, color:'var(--t2)' } }, '· ', project.company),
           project.numLicitacion && h('span', { style:{ fontSize:11, color:'var(--t2)', fontFamily:'monospace' } }, project.numLicitacion),
           alerts.map((a,i)=>h(AlertChip, { key:i, level:a.level, text:a.label+': '+a.date })),
         ),
@@ -670,13 +737,54 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
         isAdmin && h('button', { onClick:()=>setShowDelete(true), style:{ color:'#E24B4A' } }, 'Eliminar'),
       ),
     ),
-    // KPIs
-    h('div', { className:'grid-5', style:{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:12, marginBottom:20 } },
-      h(Metric, { label:'Monto estimado', value:fmt(project.montoEstimado) }),
-      h(Metric, { label:'Probabilidad', value:project.probability+'%' }),
-      h(Metric, { label:'Empresa', value:project.company||'—' }),
-      h(Metric, { label:'Vehículos', value:pVehicles.length }),
-      h(Metric, { label:'Responsable', value:project.responsable||'—' }),
+    // Fase 3I-1 -- Centro de Control: 4 cards de resumen que reemplazan
+    // los KPIs genéricos anteriores (Monto/Probabilidad/Empresa/Vehículos/
+    // Responsable -- empresa y responsable ya subieron al header, y monto/
+    // probabilidad siguen visibles en la pestaña Resumen). Todo derivado
+    // de datos existentes.
+    h('div', { className:'grid-4', style:{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:16 } },
+      h('div', { className:'metric' },
+        h('div', { className:'section-label', style:{ marginBottom:6 } }, 'Cotización'),
+        h('div', { style:{ fontSize:18, fontWeight:600, lineHeight:1.2 } }, ccHayCotizacion ? (ccNumPartidas+ccNumEquipo+ccNumServicios) : '—'),
+        h('div', { style:{ fontSize:11, color:'var(--t2)', marginTop:4 } },
+          ccHayCotizacion
+            ? [ccNumPartidas?ccNumPartidas+' vehículo(s)':null, ccNumEquipo?ccNumEquipo+' equipo':null, ccNumServicios?ccNumServicios+' servicio(s)':null].filter(Boolean).join(' · ')
+            : 'Sin capturar'),
+      ),
+      h('div', { className:'metric' },
+        h('div', { className:'section-label', style:{ marginBottom:6 } }, 'Órdenes de compra'),
+        h('div', { style:{ fontSize:18, fontWeight:600, lineHeight:1.2 } }, ccOCs.length),
+        h('div', { style:{ fontSize:11, color:'var(--t2)', marginTop:4 } },
+          ccOCs.length===0 ? 'Ninguna generada'
+            : [ccOCsFirmadas.length?ccOCsFirmadas.length+' firmada(s)':null, ccOCsEnFirma.length?ccOCsEnFirma.length+' en firma':null, ccOCsSinEnviar.length?ccOCsSinEnviar.length+' sin enviar':null].filter(Boolean).join(' · ')),
+      ),
+      h('div', { className:'metric' },
+        h('div', { className:'section-label', style:{ marginBottom:6 } }, isAdmin ? 'Total en OCs' : 'Documentos'),
+        h('div', { style:{ fontSize:18, fontWeight:600, lineHeight:1.2 } }, isAdmin ? fmt(ccTotalOCs) : ccNumDocs),
+        h('div', { style:{ fontSize:11, color:'var(--t2)', marginTop:4 } }, isAdmin ? 'Suma de órdenes generadas' : (ccNumDocs===1?'archivo cargado':'archivos cargados')),
+      ),
+      h('div', { className:'metric' },
+        h('div', { className:'section-label', style:{ marginBottom:6 } }, 'Pendientes'),
+        h('div', { style:{ fontSize:18, fontWeight:600, lineHeight:1.2, color: ccPendientes.length>0 ? 'var(--amber)' : 'var(--green)' } }, ccPendientes.length),
+        h('div', { style:{ fontSize:11, color:'var(--t2)', marginTop:4 } }, ccPendientes.length===0 ? 'Todo en orden' : 'Ver detalle abajo'),
+      ),
+    ),
+
+    // Fase 3I-1 -- bloque de pendientes derivados + acciones rápidas.
+    // NUNCA incluye exportación/ZIP/paquete bancario (excluido
+    // explícitamente del alcance de esta fase).
+    (ccPendientes.length>0) && h('div', { style:{ marginBottom:16, padding:'14px 16px', background:'var(--amber-bg)', border:'1px solid var(--amber-border)', borderRadius:'var(--rl)' } },
+      h('div', { className:'section-label', style:{ color:'#78350f' } }, 'Pendientes del proyecto'),
+      h('ul', { style:{ margin:0, paddingLeft:18 } },
+        ccPendientes.map((p,i)=>h('li', { key:i, style:{ fontSize:12, color:'#78350f', lineHeight:1.7 } }, p.t)),
+      ),
+    ),
+    h('div', { style:{ display:'flex', gap:8, marginBottom:20, flexWrap:'wrap' } },
+      h('button', { onClick:()=>setTab('cotizacion') }, 'Ir a Cotización'),
+      h('button', { onClick:()=>setTab('operacion') }, 'Ir a Operación'),
+      h('button', { onClick:()=>setTab('docs') }, 'Ir a Expediente'),
+      h('button', { onClick:()=>{ setTab('operacion'); setShowOC(true); } }, '+ Generar OC'),
+      h('button', { onClick:()=>onNav('inbox') }, 'Ver aprobaciones'),
     ),
     // Tabs — filtradas con canProjectTab(t.id, user) desde permissions.js.
     // La lista de pestañas admin-only (cotizacion, facturacion, flujo) vive
@@ -845,17 +953,11 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
         // oc.folio -- nunca se inventan nombres de status: los valores
         // reales de INBOX_ESTATUS son pendiente/en_revision/
         // cambios_solicitados/aprobado/rechazado/revisado/cerrado.
-        const inboxFirmaDeOC = oc => inboxFirmasOC.find(i =>
-          (i.data && i.data.ocId === oc.id) || (i.data && !i.data.ocId && i.data.documentoFolio === oc.folio)
-        );
-        const ocAprobada = oc => {
-          if ((project.firmas||[]).some(f => f.ocId===oc.id && (f.estatus==='en_firma' || f.estatus==='en_visto' || f.estatus==='completado'))) return true;
-          const item = inboxFirmaDeOC(oc);
-          if (!item) return false;
-          if (['aprobado', 'cerrado'].includes(item.status)) return true;
-          if (item.data && ['firmado', 'visto_final'].includes(item.data.firmaStatus)) return true;
-          return false;
-        };
+        // Fase 3I-1 -- inboxFirmaDeOC/ocAprobada/enFlujo ya NO se declaran
+        // aquí: viven en el nivel superior de ProjectDetail (misma lógica,
+        // movida sin cambios) y llegan por clausura, para que las cards de
+        // resumen del Centro de Control y esta pestaña compartan una sola
+        // fuente de verdad.
         const reimprimir = oc => {
           // Los empleados solo pueden imprimir OC ya aprobadas por el jefe
           if (!esJefeDetalle && !ocAprobada(oc)) {
@@ -870,15 +972,6 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
           printOrdenCompra({ project:{...project,ocProveedor:{name:oc.proveedor,rfc:oc.proveedorRfc,address:oc.proveedorAddress},cotizacion:{...cot2,agenciaProveedor:oc.proveedor}}, partidas:parts, condiciones:oc.condiciones||[], folio:oc.folio, companyObj:company });
         };
         const eliminar = oc => { if(confirm('¿Eliminar OC '+oc.folio+'?')) updProject({...project,ordenesCompra:(project.ordenesCompra||[]).filter(o=>o.id!==oc.id)}); };
-        const enFlujo = oc => {
-          const legacy = (project.firmas||[]).find(f => f.ocId===oc.id && f.estatus!=='completado');
-          if (legacy) return legacy;
-          const item = inboxFirmaDeOC(oc);
-          if (!item) return undefined;
-          if (['pendiente', 'en_revision', 'cambios_solicitados'].includes(item.status)) return item;
-          if (item.data && item.data.firmaStatus === 'pendiente_firma') return item;
-          return undefined;
-        };
         const equipo = usuariosActivosDetalle;
         const enviarAprobacion = async (oc) => {
           // Fase mini Firmas/OC: una Orden de Compra siempre contiene
@@ -958,9 +1051,29 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
         // existentes (ocAprobada/enFlujo) -- no inventa ningún estado nuevo.
         const estatusFirma = oc => ocAprobada(oc) ? '✅ Firmada' : enFlujo(oc) ? '⏳ En firma' : '— Sin enviar';
         return h('div', { className:'card', style:{ marginBottom:14 } },
-          h('div', { style:{ fontSize:13, fontWeight:500, marginBottom:10 } }, '🛒 Órdenes de Compra'),
+          // Fase 3I-1 -- Mesa de ejecución: encabezado con el resumen
+          // operativo (mismos contadores derivados del Centro de Control,
+          // por clausura -- una sola fuente de verdad, sin recalcular).
+          h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'baseline', flexWrap:'wrap', gap:8, marginBottom:4 } },
+            h('div', { style:{ fontSize:13, fontWeight:600 } }, '🛒 Órdenes de Compra'),
+            ocsList.length>0 && h('div', { style:{ fontSize:11.5, color:'var(--t2)' } },
+              ocsList.length, ocsList.length===1?' orden':' órdenes',
+              esJefeDetalle ? ' · '+fmt(ccTotalOCs) : '',
+            ),
+          ),
+          ocsList.length>0 && h('div', { style:{ fontSize:11.5, color:'var(--t2)', marginBottom:12 } },
+            [ccOCsFirmadas.length?ccOCsFirmadas.length+' firmada(s)':null,
+             ccOCsEnFirma.length?ccOCsEnFirma.length+' esperando firma':null,
+             ccOCsSinEnviar.length?ccOCsSinEnviar.length+' sin enviar':null].filter(Boolean).join(' · ')
+          ),
+          // Fase 3I-1 -- estado vacío útil (antes la tabla simplemente
+          // quedaba sin filas, sin explicar qué hacer).
+          ocsList.length === 0 && h('div', { className:'empty', style:{ padding:'32px 20px' } },
+            h('h3', null, 'Sin órdenes de compra'),
+            h('p', null, 'Aún no hay órdenes de compra para este proyecto. Crea una OC cuando tengas definido qué vas a comprar o contratar.'),
+          ),
           // Tabla (desktop)
-          h('div', { className:'tbl-scroll hide-mobile', style:{ overflowX:'auto' } },
+          ocsList.length > 0 && h('div', { className:'tbl-scroll hide-mobile', style:{ overflowX:'auto' } },
             h('table', { style:{ fontSize:12, width:'100%', borderCollapse:'collapse', minWidth:560 } },
               h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b2)' } },
                 ['Folio','Fecha','Proveedor','Partidas','Total','Firma','Acciones'].map(h2=>h('th',{key:h2,style:{padding:'6px 8px',textAlign:'left',fontSize:10,fontWeight:500,color:'var(--t2)',letterSpacing:'.4px',whiteSpace:'nowrap'}},h2))
@@ -983,7 +1096,7 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
             )
           ),
           // Tarjetas (móvil)
-          h('div', { className:'show-mobile', style:{ display:'none' } },
+          ocsList.length > 0 && h('div', { className:'show-mobile', style:{ display:'none' } },
             ocsList.map(oc => h('div', { key:oc.id, style:{ padding:'12px 0', borderBottom:'.5px solid var(--b3)' } },
               h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 } },
                 h('span', { style:{ fontWeight:600, color:'var(--blue)', fontFamily:'monospace', fontSize:13 } }, oc.folio),
