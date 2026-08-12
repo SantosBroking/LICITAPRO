@@ -587,10 +587,89 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
     if (item.data && item.data.firmaStatus === 'pendiente_firma') return item;
     return undefined;
   };
+
+  // ── Fase 3I-2 -- Estados operativos de OC ────────────────────────────
+  // Criterio de negocio nuevo: NO todas las OC requieren firma. Algunas se
+  // emiten, se mandan al proveedor y solo quedan como soporte documental.
+  //
+  // Modelo NO DESTRUCTIVO: se agregan dos campos OPCIONALES a cada OC
+  // (`requiereFirma` y `estadoOperativo`). Las OC legacy no los tienen, y
+  // todo se DERIVA de los datos que ya existen -- ninguna OC existente se
+  // migra, se reescribe ni se rompe.
+  //
+  // `requiereFirma` ausente => true (comportamiento histórico: hasta hoy
+  // toda OC se trataba como si fuera a firma). Solo se marca false cuando
+  // el usuario lo elige explícitamente.
+  const ocRequiereFirma = oc => oc.requiereFirma !== false;
+
+  // Estado operativo efectivo. Si la OC tiene `estadoOperativo` guardado,
+  // manda ese -- EXCEPTO cuando la realidad de la firma lo supera (una OC
+  // marcada 'emitida' que ya volvió firmada debe leerse como 'firmada').
+  // Si no lo tiene (legacy), se deriva por completo.
+  const estadoOperativoOC = oc => {
+    if (oc.estadoOperativo === 'cancelada') return 'cancelada';
+    if (ocAprobada(oc)) return 'firmada';
+    if (enFlujo(oc)) return 'en_firma';
+    if (oc.estadoOperativo) return oc.estadoOperativo;
+    // Legacy / sin estado guardado: si no requiere firma, es soporte
+    // documental ya emitido; si sí la requiere, está emitida esperando
+    // que alguien la mande a firma.
+    return 'emitida';
+  };
+  const ESTADO_OP_LABEL = {
+    borrador: 'Borrador',
+    emitida: 'Emitida',
+    enviada_proveedor: 'Enviada al proveedor',
+    en_firma: 'En firma',
+    firmada: 'Firmada',
+    archivada_expediente: 'Archivada',
+    cancelada: 'Cancelada',
+  };
+  // Etiqueta de FIRMA -- independiente del estado operativo.
+  const estadoFirmaOC = oc => {
+    if (estadoOperativoOC(oc) === 'cancelada') return '—';
+    if (!ocRequiereFirma(oc)) return 'No requerida';
+    if (ocAprobada(oc)) return 'Firmada';
+    if (enFlujo(oc)) return 'Pendiente';
+    return 'Sin enviar';
+  };
+  // Etiqueta de EXPEDIENTE -- una OC cuenta como "en expediente" cuando ya
+  // volvió firmada (soporte con firma) o cuando se archivó explícitamente.
+  const estadoExpedienteOC = oc => {
+    const e = estadoOperativoOC(oc);
+    if (e === 'archivada_expediente' || e === 'firmada') return 'En expediente';
+    if (e === 'cancelada') return '—';
+    return 'Pendiente';
+  };
+  // ¿Cuenta como PENDIENTE de atención? Una OC marcada explícitamente como
+  // "solo expediente" y ya archivada NO es pendiente -- ese es justamente
+  // el punto del criterio nuevo.
+  const ocEsPendiente = oc => {
+    const e = estadoOperativoOC(oc);
+    if (['firmada', 'archivada_expediente', 'cancelada'].includes(e)) return false;
+    if (e === 'en_firma') return false; // ya está en curso, se cuenta aparte
+    return true;
+  };
+  // Cambiar el estado operativo de una OC: ver setEstadoOC más abajo
+  // (se declara después de updProject, del que depende).
   // Fase 0C: solo admin ve costos/utilidad/márgenes (pestaña Cotización) y
   // puede borrar proyectos definitivamente.
   const isAdmin = getPermissions(user).isAdmin;
   const updProject = useCallback(updated=>onUpdate(updated),[onUpdate]);
+  // Fase 3I-2 -- cambiar el estado operativo de una OC. Declarado AQUÍ (no
+  // junto a los demás helpers de estado) porque depende de updProject.
+  // ADMIN-ONLY a propósito: se confirmó empíricamente que
+  // data_sanitize.js NO permite a empleado escribir en
+  // project.ordenesCompra[] (se preserva del original), así que un botón
+  // para empleado se perdería en silencio. Mejor no ofrecerlo.
+  const setEstadoOC = (oc, nuevoEstado) => {
+    updProject({
+      ...project,
+      ordenesCompra: (project.ordenesCompra||[]).map(o =>
+        o.id === oc.id ? { ...o, estadoOperativo: nuevoEstado } : o
+      ),
+    });
+  };
   const cotRef = useRef(project.cotizacion||{});
   cotRef.current = project.cotizacion || {};
   const pVehicles  = vehicles.filter(v=>v.projectId===project.id);
@@ -602,9 +681,14 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
   // No se crea ningún campo, tabla ni obligación nueva -- todo se calcula
   // en memoria a partir del proyecto y de inboxFirmasOC ya cargado.
   const ccOCs = project.ordenesCompra || [];
-  const ccOCsFirmadas  = ccOCs.filter(oc => ocAprobada(oc));
-  const ccOCsEnFirma   = ccOCs.filter(oc => !ocAprobada(oc) && enFlujo(oc));
-  const ccOCsSinEnviar = ccOCs.filter(oc => !ocAprobada(oc) && !enFlujo(oc));
+  // Fase 3I-2 -- los contadores ahora respetan el criterio nuevo: una OC
+  // marcada como "solo expediente" y ya archivada NO cuenta como
+  // pendiente, y las canceladas se separan.
+  const ccOCsFirmadas    = ccOCs.filter(oc => estadoOperativoOC(oc)==='firmada');
+  const ccOCsEnFirma     = ccOCs.filter(oc => estadoOperativoOC(oc)==='en_firma');
+  const ccOCsExpediente  = ccOCs.filter(oc => estadoOperativoOC(oc)==='archivada_expediente');
+  const ccOCsCanceladas  = ccOCs.filter(oc => estadoOperativoOC(oc)==='cancelada');
+  const ccOCsSinEnviar   = ccOCs.filter(oc => ocEsPendiente(oc));
   // Total de OCs -- SOLO admin (precioUnit es costo interno, mismo criterio
   // que sanitizeOrdenCompraForRole ya aplica). Para empleado queda null y
   // la card simplemente no muestra el monto.
@@ -627,7 +711,7 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
   if (!project.responsable)  ccPendientes.push({ t:'Sin responsable asignado.', nivel:'aviso' });
   if (!ccHayCotizacion)      ccPendientes.push({ t:'Aún no hay partidas, equipo ni servicios capturados en la cotización.', nivel:'aviso' });
   if (ccHayCotizacion && ccOCs.length===0) ccPendientes.push({ t:'Hay cotización capturada pero todavía no se genera ninguna orden de compra.', nivel:'aviso' });
-  if (ccOCsSinEnviar.length>0) ccPendientes.push({ t:ccOCsSinEnviar.length+' orden(es) de compra sin enviar a firma.', nivel:'aviso' });
+  if (ccOCsSinEnviar.length>0) ccPendientes.push({ t:ccOCsSinEnviar.length+' orden(es) de compra sin cerrar: envíalas a firma o márcalas en expediente.', nivel:'aviso' });
   if (ccOCsEnFirma.length>0)   ccPendientes.push({ t:ccOCsEnFirma.length+' orden(es) de compra esperando firma.', nivel:'info' });
 
   const addNote = () => {    if (!note.trim()) return;
@@ -761,7 +845,7 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
         h('div', { style:{ fontSize:18, fontWeight:600, lineHeight:1.2 } }, ccOCs.length),
         h('div', { style:{ fontSize:11, color:'var(--t2)', marginTop:4 } },
           ccOCs.length===0 ? 'Ninguna generada'
-            : [ccOCsFirmadas.length?ccOCsFirmadas.length+' firmada(s)':null, ccOCsEnFirma.length?ccOCsEnFirma.length+' en firma':null, ccOCsSinEnviar.length?ccOCsSinEnviar.length+' sin enviar':null].filter(Boolean).join(' · ')),
+            : [ccOCsFirmadas.length?ccOCsFirmadas.length+' firmada(s)':null, ccOCsEnFirma.length?ccOCsEnFirma.length+' en firma':null, ccOCsExpediente.length?ccOCsExpediente.length+' en expediente':null, ccOCsSinEnviar.length?ccOCsSinEnviar.length+' sin cerrar':null, ccOCsCanceladas.length?ccOCsCanceladas.length+' cancelada(s)':null].filter(Boolean).join(' · ')),
       ),
       h('div', { className:'metric' },
         h('div', { className:'section-label', style:{ marginBottom:6 } }, isAdmin ? 'Total en OCs' : 'Documentos'),
@@ -1057,7 +1141,10 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
         const totalOC = oc => (oc.partidas||[]).reduce((s,p)=>s+(Number(p.precioUnit)||0)*(Number(p.cantidad)||0),0);
         // Estatus de firma legible, derivado de las MISMAS funciones ya
         // existentes (ocAprobada/enFlujo) -- no inventa ningún estado nuevo.
-        const estatusFirma = oc => ocAprobada(oc) ? '✅ Firmada' : enFlujo(oc) ? '⏳ En firma' : '— Sin enviar';
+        // Fase 3I-2 -- el antiguo `estatusFirma` se eliminó: lo reemplazan
+        // las 3 dimensiones del modelo nuevo (estadoOperativoOC /
+        // estadoFirmaOC / estadoExpedienteOC), que viven en el nivel
+        // superior de ProjectDetail y llegan por clausura.
         return h('div', { className:'card', style:{ marginBottom:14 } },
           // Fase 3I-1 -- Mesa de ejecución: encabezado con el resumen
           // operativo (mismos contadores derivados del Centro de Control,
@@ -1072,7 +1159,9 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
           ocsList.length>0 && h('div', { style:{ fontSize:11.5, color:'var(--t2)', marginBottom:12 } },
             [ccOCsFirmadas.length?ccOCsFirmadas.length+' firmada(s)':null,
              ccOCsEnFirma.length?ccOCsEnFirma.length+' esperando firma':null,
-             ccOCsSinEnviar.length?ccOCsSinEnviar.length+' sin enviar':null].filter(Boolean).join(' · ')
+             ccOCsExpediente.length?ccOCsExpediente.length+' en expediente':null,
+             ccOCsSinEnviar.length?ccOCsSinEnviar.length+' sin cerrar':null,
+             ccOCsCanceladas.length?ccOCsCanceladas.length+' cancelada(s)':null].filter(Boolean).join(' · ')
           ),
           // Fase 3I-1 -- estado vacío útil (antes la tabla simplemente
           // quedaba sin filas, sin explicar qué hacer).
@@ -1084,7 +1173,7 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
           ocsList.length > 0 && h('div', { className:'tbl-scroll hide-mobile', style:{ overflowX:'auto' } },
             h('table', { style:{ fontSize:12, width:'100%', borderCollapse:'collapse', minWidth:560 } },
               h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b2)' } },
-                ['Folio','Fecha','Proveedor','Partidas','Total','Firma','Acciones'].map(h2=>h('th',{key:h2,style:{padding:'6px 8px',textAlign:'left',fontSize:10,fontWeight:500,color:'var(--t2)',letterSpacing:'.4px',whiteSpace:'nowrap'}},h2))
+                ['Folio','Fecha','Proveedor','Partidas','Total','Estado','Firma','Expediente','Acciones'].map(h2=>h('th',{key:h2,style:{padding:'6px 8px',textAlign:'left',fontSize:10,fontWeight:500,color:'var(--t2)',letterSpacing:'.4px',whiteSpace:'nowrap'}},h2))
               )),
               h('tbody', null, ocsList.map(oc=>
                 h('tr', { key:oc.id, style:{ borderBottom:'.5px solid var(--b3)' } },
@@ -1093,10 +1182,19 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
                   h('td', { style:{ padding:'9px 8px' } }, oc.proveedor||'—'),
                   h('td', { style:{ padding:'9px 8px', fontSize:11, color:'var(--t2)' } }, vehTxt(oc)),
                   h('td', { style:{ padding:'9px 8px', fontSize:11, whiteSpace:'nowrap', textAlign:'right' } }, esJefeDetalle ? fmt(totalOC(oc)) : '—'),
-                  h('td', { style:{ padding:'9px 8px', fontSize:11, whiteSpace:'nowrap' } }, estatusFirma(oc)),
+                  // Fase 3I-2 -- 3 dimensiones separadas: estado operativo,
+                  // firma y expediente.
+                  h('td', { style:{ padding:'9px 8px', fontSize:11, whiteSpace:'nowrap' } }, ESTADO_OP_LABEL[estadoOperativoOC(oc)]||estadoOperativoOC(oc)),
+                  h('td', { style:{ padding:'9px 8px', fontSize:11, whiteSpace:'nowrap', color: estadoFirmaOC(oc)==='No requerida'?'var(--t3)':'var(--t1)' } }, estadoFirmaOC(oc)),
+                  h('td', { style:{ padding:'9px 8px', fontSize:11, whiteSpace:'nowrap', color: estadoExpedienteOC(oc)==='En expediente'?'var(--green)':'var(--t2)' } }, estadoExpedienteOC(oc)),
                   h('td', { style:{ padding:'9px 8px', whiteSpace:'nowrap' } },
                     h('button', { style:{ fontSize:11, color:'var(--blue)', padding:'3px 8px' }, onClick:()=>reimprimir(oc) }, '📄 Reimprimir'),
-                    (()=>{ const fl=enFlujo(oc); return h('button', { style:{ fontSize:11, color:fl?'var(--t3)':'var(--green)', padding:'3px 8px', marginLeft:4 }, onClick:()=>enviarAprobacion(oc) }, fl?'⏳ En flujo':'✍ A aprobación'); })(),
+                    // "Enviar a firma" SOLO si la OC realmente la requiere.
+                    ocRequiereFirma(oc) && (()=>{ const fl=enFlujo(oc); return h('button', { style:{ fontSize:11, color:fl?'var(--t3)':'var(--green)', padding:'3px 8px', marginLeft:4 }, onClick:()=>enviarAprobacion(oc) }, fl?'⏳ En flujo':'✍ A aprobación'); })(),
+                    // Acciones de estado -- ADMIN-ONLY (empleado no puede
+                    // escribir en project.ordenesCompra[], confirmado).
+                    esJefeDetalle && estadoOperativoOC(oc)!=='cancelada' && estadoOperativoOC(oc)!=='firmada' && h('button', { style:{ fontSize:11, padding:'3px 8px', marginLeft:4 }, onClick:()=>setEstadoOC(oc,'enviada_proveedor') }, '→ Enviada'),
+                    esJefeDetalle && estadoExpedienteOC(oc)!=='En expediente' && estadoOperativoOC(oc)!=='cancelada' && h('button', { style:{ fontSize:11, padding:'3px 8px', marginLeft:4 }, onClick:()=>setEstadoOC(oc,'archivada_expediente') }, '📁 En expediente'),
                     h('button', { style:{ fontSize:11, color:'var(--red)', padding:'3px 8px', marginLeft:4 }, onClick:()=>eliminar(oc) }, 'Eliminar'),
                   ),
                 )
@@ -1111,7 +1209,11 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
                 h('span', { style:{ fontSize:11, color:'var(--t3)' } }, oc.fecha),
               ),
               h('div', { style:{ fontSize:13, fontWeight:500, marginBottom:2 } }, oc.proveedor||'—'),
-              h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:2 } }, estatusFirma(oc), esJefeDetalle ? ' · '+fmt(totalOC(oc)) : ''),
+              h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:2 } },
+                (ESTADO_OP_LABEL[estadoOperativoOC(oc)]||estadoOperativoOC(oc)),
+                ' · Firma: ', estadoFirmaOC(oc),
+                ' · ', estadoExpedienteOC(oc),
+                esJefeDetalle ? ' · '+fmt(totalOC(oc)) : ''),
               vehTxt(oc) && h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:8, lineHeight:1.4 } }, vehTxt(oc)),
               h('div', { style:{ display:'flex', gap:8, flexWrap:'wrap' } },
                 h('button', { style:{ fontSize:12, color:'var(--blue)', padding:'6px 12px', border:'1px solid var(--blue-border)', borderRadius:'var(--r)', background:'var(--bg1)', flex:1 }, onClick:()=>reimprimir(oc) }, '📄 Reimprimir'),
@@ -1487,6 +1589,9 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
   // controla qué lista se está viendo, nunca qué se incluye en la OC --
   // eso lo determina exclusivamente lo seleccionado en cada lista.
   const [fuenteOC, setFuenteOC] = useState('vehiculos');
+  // Fase 3I-2 -- ¿esta OC requiere firma? Default true = comportamiento
+  // histórico (hasta ahora toda OC se trataba como si fuera a firma).
+  const [requiereFirma, setRequiereFirma] = useState(true);
   const equipoPartidas = partidasDeEquipoParaOC(cot, cfg);
   const [selEquipo, setSelEquipo] = useState([]);
   const toggleEquipo = id => setSelEquipo(s => s.includes(id) ? s.filter(x=>x!==id) : [...s, id]);
@@ -1629,6 +1734,11 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
       id: folio,
       folio,
       fecha: new Date().toISOString().slice(0,10),
+      // Fase 3I-2 -- estado documental/operativo de la OC. Se guardan
+      // explícitamente al crear para que no haya ambigüedad; las OC
+      // legacy sin estos campos siguen funcionando por derivación.
+      requiereFirma,
+      estadoOperativo: 'emitida',
       proveedor: prov.name,
       proveedorRfc: prov.rfc,
       proveedorAddress: prov.address,
@@ -1805,6 +1915,20 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
               ),
               esAdmin && h('div', { style:{ fontSize:13, fontWeight:600, marginTop:6 } }, 'Subtotal estimado: ', fmt(subtotalOC)),
             ),
+      ),
+
+      // Fase 3I-2 -- no todas las OC requieren firma. Algunas se emiten,
+      // se mandan al proveedor y solo quedan como soporte documental.
+      h('div', null,
+        h('div', { style:secLabel }, '¿Esta orden requiere firma?'),
+        h('div', { style:{ display:'flex', gap:8, marginBottom:6 } },
+          h('button', { onClick:()=>setRequiereFirma(true), style:{ flex:1, padding:'8px 12px', fontSize:12, fontWeight:500, borderRadius:'var(--r)', border:'1px solid var(--b2)', cursor:'pointer', background:requiereFirma?'var(--blue)':'transparent', color:requiereFirma?'#fff':'var(--t1)' } }, 'Sí, enviar a firma'),
+          h('button', { onClick:()=>setRequiereFirma(false), style:{ flex:1, padding:'8px 12px', fontSize:12, fontWeight:500, borderRadius:'var(--r)', border:'1px solid var(--b2)', cursor:'pointer', background:!requiereFirma?'var(--blue)':'transparent', color:!requiereFirma?'#fff':'var(--t1)' } }, 'No, solo expediente'),
+        ),
+        h('div', { style:{ fontSize:11, color:'var(--t3)', lineHeight:1.5, marginBottom:12 } },
+          requiereFirma
+            ? 'Se podrá enviar por el flujo de firma desde el Centro de aprobaciones.'
+            : 'Quedará como soporte documental interno. No se pedirá firma ni contará como pendiente.'),
       ),
 
       // Condiciones
