@@ -8,20 +8,21 @@
 
 | Fase | Estado | Rama |
 |---|---|---|
-| 3I-2 — Operación con estados de OC + UX móvil profunda | **En preview, pendiente de validación y merge** | `fase3i2-operacion-estados-oc-expediente` |
-| SYS-0 — Manual maestro y sistema de trabajo | En curso (este documento) | `sys0-manual-maestro-licitapro` |
+| SYS-0 — Manual maestro y sistema de trabajo | ✅ **Completada, mergeada en producción** | `sys0-manual-maestro-licitapro` |
+| 3I-2 — Operación con estados de OC + UX móvil profunda | ✅ **Completada, mergeada en producción**, validada visualmente en dispositivo real | `fase3i2-operacion-estados-oc-expediente` |
 
-`main` en producción: `f2ee9f75735a8e838affa13b8618dc00640b6939` — incluye hasta el Centro de Control, Mesa de Ejecución, botón Exportar expediente (sin ZIP real), y el sistema de servicios formales.
+`main` en producción: `adc8053b0a148f4bffac48596722178a048f9661` — incluye el Centro de Control, Mesa de Ejecución, botón Exportar expediente (sin ZIP real), sistema de servicios formales, **modelo de estados operativos de OC** (requiere firma / solo expediente / cancelada) y la **reestructura móvil profunda** de Dashboard, Proyectos, Centro de Control, Operación/OC, modal de OC, Cotización y Cotización Operativa. Deployment: Ready.
 
 ## 2. Pendientes inmediatos
 
-1. **Validar y decidir sobre `fase3i2-operacion-estados-oc-expediente`** — 6 commits acumulados (estados operativos de OC + rediseño móvil profundo de Dashboard/Proyectos/Centro de Control/Operación/Modal OC/Cotización/Cotización Operativa/Inbox). Pendiente de validación visual real en dispositivo antes de merge.
-2. Decidir si se abre permiso de escritura de `ordenesCompra[]` para `empleado` (hoy es admin-only por diseño de `data_sanitize.js`) — si se quiere que Eduardo/Mauricio puedan marcar OCs como enviadas/archivadas, requiere su propia fase de seguridad.
-3. Resumen por proveedor dentro de Operación (quedó pendiente desde 3I-1).
+1. **DRIVE-0** — Diseño del ecosistema Google Drive (ver sección 5).
+2. **AI-1** — Asistente Operativo de consulta interna (ver `AGENTES_LICITAPRO.md`).
+3. **3I-3** — Resumen por proveedor dentro de Operación (quedó pendiente desde 3I-1).
+4. **Exportación real de expediente** — ZIP y/o integración con Drive (el botón ya existe en el Centro de Control, pero sin implementación real, ver sección 4.1).
+5. **Permitir a empleados cambiar ciertos estados de OC** (marcar enviada/archivada), si se decide — hoy es admin-only por diseño de `data_sanitize.js` (`ordenesCompra[]` no está en su allowlist de escritura para `empleado`); requiere su propia fase de seguridad con sanitización dedicada.
 
 ## 3. Evolución a corto plazo
 
-- Cerrar la validación móvil de 3I-2 y mergear si corresponde.
 - Definir el modelo real de "partida libre" en Órdenes de Compra (agregar una partida sin origen en la cotización) — evaluado y pospuesto en fases anteriores.
 - Revisar Dashboard y Proyectos con foco en limpieza, estética y jerarquía (problema de lógica #9, ver `DECISIONES_LICITAPRO.md`).
 - Clarificar el lugar de Servicios en el flujo completo de cotización → OC → expediente (problema de lógica #6).

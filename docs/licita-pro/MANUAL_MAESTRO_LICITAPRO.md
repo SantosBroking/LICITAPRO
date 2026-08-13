@@ -64,7 +64,7 @@ Este límite de visibilidad está implementado técnicamente en `src/lib/data_sa
 | **Proyectos** | Listado, kanban, detalle de proyecto (Centro de Control) | Detalle rediseñado como centro de control ejecutivo |
 | **Cotización (admin)** | Captura de partidas de vehículo, equipo, servicios, condiciones, finanzas | Motor de cálculo en `src/lib/calc.js`, replica fórmulas del Excel original |
 | **Cotización Operativa** | Versión simplificada para `empleado`, sin campos estratégicos | Mismo modelo de datos que la cotización admin |
-| **Operación / OC** | Generador y listado de órdenes de compra **dentro del proyecto** (legacy, `project.ordenesCompra[]`) | Es el flujo principal vigente — el módulo global fue descartado |
+| **Operación / OC** | Generador y listado de órdenes de compra **dentro del proyecto** (legacy, `project.ordenesCompra[]`) | Es el flujo principal vigente — el módulo global fue descartado. Desde 3I-2, cada OC distingue si requiere firma o queda solo como soporte documental/expediente (ver sección 6 y `DECISIONES_LICITAPRO.md`) |
 | **Inbox / Centro de aprobaciones** | Flujo de firma de OC (y otros documentos futuros) | No confundir con notificaciones — es un flujo formal de aprobación |
 | **Empresas** | Catálogo de empresas operadoras (Broking, SATHRI, etc.) | |
 | **Catálogo** | Productos/equipo disponibles para cotizar | Incluye productos custom subidos por el equipo |
@@ -146,11 +146,13 @@ Esto es una **decisión de arquitectura documental**, todavía no implementada e
 
 ## 9. Estado técnico actual
 
-- **Producción:** `main = f2ee9f75735a8e838affa13b8618dc00640b6939`
+- **Producción:** `main = adc8053b0a148f4bffac48596722178a048f9661`
 - **URL:** https://licitapro-beta.vercel.app
 - **Funciones Vercel:** 10 / 12 (límite del plan Hobby)
-- **Rama abierta pendiente de validación (NO tocar en esta fase):** `fase3i2-operacion-estados-oc-expediente`
-- **Tabla `purchase_orders`:** existe en Supabase (creada y verificada), pero **sin código que la use** — el módulo global de OC fue descartado explícitamente.
+- **Estado del deployment:** Ready.
+- **SYS-0** (documentación base) — **mergeado en producción**.
+- **3I-2** (estados operativos de OC + UX móvil profunda de Dashboard, Proyectos, Centro de Control, Operación/OC, modal de OC, Cotización y Cotización Operativa) — **mergeado en producción**, validado visualmente en dispositivo real antes del merge.
+- **Tabla `purchase_orders`:** existe en Supabase (creada y verificada), pero **sin código que la use** — el módulo global de OC fue descartado explícitamente y no fue tocado por 3I-2.
 
 ## 10. Criterios de éxito
 
