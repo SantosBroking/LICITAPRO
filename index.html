@@ -553,6 +553,79 @@
       .alert-row { flex-direction: column !important; align-items: flex-start !important; gap: 4px !important; }
       .alert-badge { align-self: flex-start !important; }
 
+      /* ══ Fase 3I-2d -- Sistema visual móvil reutilizable ═════════════
+         Las pasadas anteriores (3I-2b/3I-2c) solo ajustaron CSS sobre el
+         markup de escritorio. Estas clases existen para acompañar MARKUP
+         MÓVIL DEDICADO, que es lo que realmente faltaba. */
+
+      .mobile-only  { display: block !important; }
+      .desktop-only { display: none !important; }
+
+      /* Feed: contenedor vertical de tarjetas con separación consistente. */
+      .mobile-feed { display: flex; flex-direction: column; gap: 10px; }
+
+      /* Tarjeta móvil: la unidad base de todas las vistas en celular. */
+      .mobile-card {
+        background: var(--bg1);
+        border: 1px solid var(--b1);
+        border-radius: var(--rl);
+        padding: 13px 14px;
+        box-shadow: var(--shadow-sm);
+        overflow-wrap: anywhere;
+      }
+      /* Cabecera: identificador a la izquierda, dato clave a la derecha. */
+      .mobile-card-head {
+        display: flex; justify-content: space-between; align-items: flex-start;
+        gap: 10px; margin-bottom: 8px;
+      }
+      .mobile-card-head .mc-id { font-size: 12px; font-weight: 600; color: var(--blue); font-family: monospace; }
+      .mobile-card-head .mc-meta { font-size: 11px; color: var(--t3); flex-shrink: 0; text-align: right; }
+      .mobile-card-title { font-size: 14px; font-weight: 600; line-height: 1.35; margin-bottom: 6px; }
+
+      /* Pares label/valor en 2 columnas compactas -- reemplaza las tablas
+         de datos, que en móvil se aplastaban. */
+      .mobile-kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 12px; }
+      .mobile-kv > .k { color: var(--t3); }
+      .mobile-kv > .v { color: var(--t1); overflow-wrap: anywhere; }
+
+      /* Acción PRINCIPAL: una sola, ancho completo, obvia. */
+      .mobile-primary-action {
+        display: block; width: 100%; margin-top: 10px;
+        min-height: 44px; font-weight: 600; font-size: 13px;
+        background: var(--accent); color: #fff; border: none;
+        border-radius: var(--r); cursor: pointer;
+      }
+      .mobile-primary-action:disabled { opacity: .45; }
+      /* Acciones SECUNDARIAS: discretas, en una línea, sin competir. */
+      .mobile-secondary-actions {
+        display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px;
+        padding-top: 8px; border-top: 1px solid var(--b1);
+      }
+      .mobile-secondary-actions button {
+        flex: 1 1 auto; min-height: 36px; font-size: 11.5px;
+        background: transparent; border: 1px solid var(--b2);
+        border-radius: var(--r); color: var(--t2); padding: 6px 8px;
+      }
+
+      /* Secciones con título discreto, para agrupar sin cajas pesadas. */
+      .mobile-section { margin-bottom: 18px; }
+      .mobile-section-title {
+        font-size: 11px; font-weight: 600; color: var(--t2);
+        text-transform: uppercase; letter-spacing: .6px; margin-bottom: 8px;
+      }
+
+      /* Fase 3I-2d -- Inbox como feed de tareas: la metadata deja de ser
+         una línea concatenada que se aprieta y pasa a líneas apiladas;
+         los separadores " · " se ocultan en móvil. */
+      .inbox-meta { display: flex; flex-direction: column; gap: 1px; line-height: 1.5; }
+      .inbox-meta .sep { display: none; }
+      /* El mensaje deja de cortarse en 1 línea con ellipsis y muestra 2. */
+      .inbox-msg {
+        white-space: normal !important; text-overflow: unset !important;
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+        overflow: hidden; overflow-wrap: anywhere;
+      }
+
       /* Grids inline sin clase — forzar 1 columna en mobile */
       .mob-1col  { grid-template-columns: 1fr !important; }
       .mob-2col  { grid-template-columns: repeat(2, 1fr) !important; }
@@ -704,6 +777,13 @@
       .acciones-row > button { min-width: 100%; }
     }
   
+  /* Fase 3I-2d -- visibilidad por plataforma. En escritorio, el markup
+     móvil dedicado se oculta por completo (y viceversa dentro del media
+     query de 768px). Así cada plataforma renderiza SU estructura, en vez
+     de comprimir la de escritorio. */
+  .mobile-only  { display: none !important; }
+  .desktop-only { display: block !important; }
+
   summary::-webkit-details-marker { display:none; }
   summary::marker { content:""; }
   details summary { list-style:none; }

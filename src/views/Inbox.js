@@ -265,11 +265,22 @@ export function Inbox({ user, onNav, projects, onSeenChange }) {
                     item.title,
                     h(BadgePrioridad, { prioridad }),
                   ),
-                  h('div', { style:{ fontSize:11, color:'var(--t2)', marginTop:3 } },
-                    (INBOX_TIPO_LABELS[item.type]||item.type), ' · ', (proyecto ? normalizeProjectName(proyecto.name) : (item.project_id || 'sin proyecto')),
-                    (proyecto && proyecto.folioProyecto) ? ' ('+proyecto.folioProyecto+')' : '',
-                    ' · ', (item.created_by||'—'), ' · ', item.created_at ? new Date(item.created_at).toLocaleString('es-MX') : '—'),
-                  !expandido && item.message && h('div', { style:{ fontSize:12, color:'var(--t1)', marginTop:6, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, item.message),
+                  // Fase 3I-2d -- metadata en líneas separadas. Antes era
+                  // una sola concatenación (tipo · proyecto · folio ·
+                  // creador · fecha) que en móvil se apretaba y cortaba.
+                  // `inbox-meta` la apila en celular y la deja en línea en
+                  // escritorio (una sola estructura, sin duplicar markup).
+                  h('div', { className:'inbox-meta', style:{ fontSize:11, color:'var(--t2)', marginTop:3 } },
+                    h('span', null, INBOX_TIPO_LABELS[item.type]||item.type),
+                    h('span', { className:'sep' }, ' · '),
+                    h('span', null, (proyecto ? normalizeProjectName(proyecto.name) : (item.project_id || 'sin proyecto')),
+                      (proyecto && proyecto.folioProyecto) ? ' ('+proyecto.folioProyecto+')' : ''),
+                    h('span', { className:'sep' }, ' · '),
+                    h('span', null, (item.created_by||'—')),
+                    h('span', { className:'sep' }, ' · '),
+                    h('span', null, item.created_at ? new Date(item.created_at).toLocaleString('es-MX') : '—'),
+                  ),
+                  !expandido && item.message && h('div', { className:'inbox-msg', style:{ fontSize:12, color:'var(--t1)', marginTop:6, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, item.message),
                 ),
                 h(BadgeEstatus, { status:item.status }),
               ),

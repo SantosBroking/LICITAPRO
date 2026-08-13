@@ -1228,18 +1228,36 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
                 esJefeDetalle && h('span', { style:{ fontWeight:600 } }, fmt(totalOC(oc))),
               ),
               vehTxt(oc) && h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:10, lineHeight:1.5 } }, vehTxt(oc)),
-              // Fase 3I-2b -- acciones en fila táctil (.acciones-row las
-              // reparte con aire y a ancho completo en pantallas chicas).
-              // CORRECCIÓN: "✍ A aprobación" ahora solo aparece si la OC
-              // realmente requiere firma -- antes se mostraba SIEMPRE aquí,
-              // inconsistente con la tabla desktop de la Fase 3I-2.
-              h('div', { className:'acciones-row', style:{ display:'flex', gap:8, flexWrap:'wrap' } },
-                h('button', { style:{ fontSize:12, color:'var(--blue)' }, onClick:()=>reimprimir(oc) }, '📄 PDF'),
-                ocRequiereFirma(oc) && (()=>{ const fl=enFlujo(oc); return h('button', { style:{ fontSize:12, color:fl?'var(--t3)':'var(--green)' }, onClick:()=>enviarAprobacion(oc) }, fl?'⏳ En flujo':'✍ A firma'); })(),
-                esJefeDetalle && estadoOperativoOC(oc)!=='cancelada' && estadoOperativoOC(oc)!=='firmada' && h('button', { style:{ fontSize:12 }, onClick:()=>setEstadoOC(oc,'enviada_proveedor') }, '→ Enviada'),
-                esJefeDetalle && estadoExpedienteOC(oc)!=='En expediente' && estadoOperativoOC(oc)!=='cancelada' && h('button', { style:{ fontSize:12 }, onClick:()=>setEstadoOC(oc,'archivada_expediente') }, '📁 Expediente'),
-                h('button', { style:{ fontSize:12, color:'var(--red)' }, onClick:()=>eliminar(oc) }, 'Eliminar'),
-              ),
+              // Fase 3I-2d -- jerarquía real de acciones: UNA acción
+              // principal obvia según el estado de la OC (qué sigue hacer),
+              // y el resto discretas abajo. Antes todas competían al mismo
+              // nivel en una sola fila. La lógica de qué es válido no
+              // cambia -- son las MISMAS condiciones, solo reordenadas por
+              // prioridad.
+              (() => {
+                const fl = enFlujo(oc);
+                const est = estadoOperativoOC(oc);
+                // Prioridad: firma pendiente > archivar > enviar > PDF.
+                let principal = null;
+                if (ocRequiereFirma(oc) && !fl && est!=='firmada' && est!=='cancelada') {
+                  principal = h('button', { className:'mobile-primary-action', onClick:()=>enviarAprobacion(oc) }, '✍ Enviar a firma');
+                } else if (esJefeDetalle && estadoExpedienteOC(oc)!=='En expediente' && est!=='cancelada') {
+                  principal = h('button', { className:'mobile-primary-action', onClick:()=>setEstadoOC(oc,'archivada_expediente') }, '📁 Marcar en expediente');
+                } else {
+                  principal = h('button', { className:'mobile-primary-action', onClick:()=>reimprimir(oc) }, '📄 Descargar PDF');
+                }
+                const esPDFPrincipal = !(ocRequiereFirma(oc) && !fl && est!=='firmada' && est!=='cancelada')
+                  && !(esJefeDetalle && estadoExpedienteOC(oc)!=='En expediente' && est!=='cancelada');
+                return h('div', null,
+                  principal,
+                  h('div', { className:'mobile-secondary-actions' },
+                    !esPDFPrincipal && h('button', { onClick:()=>reimprimir(oc) }, '📄 PDF'),
+                    fl && h('button', { disabled:true, style:{ opacity:.6 } }, '⏳ En flujo'),
+                    esJefeDetalle && est!=='cancelada' && est!=='firmada' && est!=='enviada_proveedor' && h('button', { onClick:()=>setEstadoOC(oc,'enviada_proveedor') }, '→ Enviada'),
+                    h('button', { style:{ color:'var(--red)' }, onClick:()=>eliminar(oc) }, 'Eliminar'),
+                  ),
+                );
+              })(),
             )),
           ),
         );
