@@ -626,6 +626,47 @@
         overflow: hidden; overflow-wrap: anywhere;
       }
 
+      /* Fase 3I-2e -- soporte para el markup móvil dedicado de Cotización
+         y Cotización Operativa (tarjetas de partida en vez de las tablas
+         de minWidth:700 que forzaban scroll horizontal). */
+      .mobile-partida-card {
+        background: var(--bg1); border: 1px solid var(--b1);
+        border-radius: var(--rl); padding: 13px 14px;
+        box-shadow: var(--shadow-sm); overflow-wrap: anywhere;
+      }
+      /* Formulario apilado: label arriba, input abajo, ancho completo --
+         nunca 8 inputs en una línea. */
+      .mobile-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .mobile-form-grid > label { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+      .mobile-form-grid > label > span { font-size: 10px; color: var(--t3); text-transform: uppercase; letter-spacing: .4px; }
+      .mobile-form-grid > label > input,
+      .mobile-form-grid > label > select {
+        width: 100%; box-sizing: border-box; min-height: 40px; font-size: 13px;
+      }
+      /* Cantidades por partida: chips compactos en grid, no columnas. */
+      .mobile-cnts { display: grid; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); gap: 6px; }
+      .mobile-cnts > label { display: flex; flex-direction: column; gap: 2px; }
+      .mobile-cnts > label > span { font-size: 10px; color: var(--t3); text-align: center; }
+      .mobile-cnts > label > input { width: 100%; box-sizing: border-box; min-height: 38px; text-align: center; font-size: 13px; }
+
+      /* Barra de resumen fija y footer pegajoso, para que la acción
+         principal nunca quede perdida al fondo de un formulario largo. */
+      .mobile-summary-bar {
+        position: sticky; top: 0; z-index: 3;
+        background: var(--bg2); border: 1px solid var(--b1);
+        border-radius: var(--r); padding: 10px 12px; margin-bottom: 12px;
+      }
+      .mobile-sticky-footer {
+        position: sticky; bottom: 0; z-index: 3;
+        background: var(--bg1); border-top: 1px solid var(--b1);
+        padding: 10px 0 calc(10px + env(safe-area-inset-bottom));
+        margin-top: 12px;
+      }
+      .mobile-action-stack { display: flex; flex-direction: column; gap: 8px; }
+      .mobile-action-stack > button { width: 100%; min-height: 44px; }
+      /* Secciones colapsables sin JS extra (usa <details>). */
+      .mobile-collapse > summary { cursor: pointer; padding: 10px 0; font-weight: 600; font-size: 13px; }
+
       /* Grids inline sin clase — forzar 1 columna en mobile */
       .mob-1col  { grid-template-columns: 1fr !important; }
       .mob-2col  { grid-template-columns: repeat(2, 1fr) !important; }

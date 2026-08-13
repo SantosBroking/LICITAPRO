@@ -429,7 +429,58 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
         ),
       ),
       cot.equipo.length===0 && h('div', { className:'card', style:{ textAlign:'center', padding:'30px', color:'var(--t2)', fontSize:13 } }, 'Sin equipo. Abre el catálogo arriba.'),
-      cot.equipo.length>0 && h('div', { className:'card' }, h('div', { className:'tbl-scroll' },
+      // Fase 3I-2e -- MÓVIL: tarjetas dedicadas en vez de la tabla de
+      // minWidth:700 (que forzaba scroll horizontal en cualquier
+      // teléfono). Usa EXACTAMENTE los mismos handlers y campos que la
+      // tabla de escritorio -- updEquipo/updCnts/setAllCnts/removeEquipo/
+      // liveEquipo -- así que no hay lógica ni cálculo duplicado.
+      cot.equipo.length>0 && h('div', { className:'mobile-only mobile-feed' },
+        [...cot.equipo].sort((a,b)=>(a.cat||'').localeCompare(b.cat||'','es',{numeric:true})).map(eRaw=>{
+          const e = liveEquipo(eRaw);
+          const activas = cot.partidas.filter(p=>p.activo);
+          return h('div', { key:e.id, className:'mobile-partida-card', style:{ opacity:e.usar?1:.5 } },
+            h('div', { className:'mobile-card-head' },
+              h('label', { style:{ display:'flex', alignItems:'center', gap:8, minWidth:0, flex:1, cursor:'pointer' } },
+                h('input', { type:'checkbox', checked:e.usar, onChange:ev=>updEquipo(e.id,'usar',ev.target.checked), style:{ width:18, height:18, accentColor:'var(--blue)', flexShrink:0 } }),
+                h('div', { style:{ minWidth:0 } },
+                  h('div', { style:{ fontSize:13, fontWeight:600, lineHeight:1.3 } }, e.nombre),
+                  h('div', { style:{ fontSize:10, color:'var(--t3)' } }, e.cat),
+                ),
+              ),
+              h('button', { onClick:()=>removeEquipo(e.id), style:{ background:'transparent', border:'none', color:'var(--red)', fontSize:18, padding:'0 4px', flexShrink:0 } }, '×'),
+            ),
+            h('div', { className:'mobile-form-grid' },
+              h('label', null, h('span', null, 'Marca'), h('input', { value:e.marca||'', onChange:ev=>updEquipo(e.id,'marca',ev.target.value) })),
+              h('label', null, h('span', null, 'Modelo'), h('input', { value:e.modelo||'', onChange:ev=>updEquipo(e.id,'modelo',ev.target.value) })),
+              h('label', null, h('span', null, 'Unidad'), h('input', { value:e.unidad||'pz', onChange:ev=>updEquipo(e.id,'unidad',ev.target.value) })),
+              h('label', null, h('span', null, 'Costo c/IVA'), h(NumInput, { value:e.costoConIVA, onChange:v=>updEquipo(e.id,'costoConIVA',v) })),
+              cot.soloEquipo && (cot.modoEquipo||'margen')==='margen' && h('label', null, h('span', null, 'Margen %'),
+                h('input', { type:'number', value:e.margenPropio!=null?Math.round(e.margenPropio*100):'', placeholder:Math.round((cot.margenEquipo||0)*100),
+                  onChange:ev=>{ const v=ev.target.value; updEquipo(e.id,'margenPropio', v===''?null:Number(v)/100); } })),
+              h('label', null, h('span', null, 'Estatus de costo'),
+                h('select', { value:e.est||'Estimado', onChange:ev=>updEquipo(e.id,'est',ev.target.value) },
+                  ['Confirmado','Estimado','Heredado','Pendiente MSM','Vencido'].map(o=>h('option',{key:o},o)))),
+            ),
+            // Cantidades: global si no hay vehículos activos, o una por
+            // partida activa -- misma regla exacta que la tabla.
+            h('div', { style:{ marginTop:10, paddingTop:10, borderTop:'1px solid var(--b1)' } },
+              h('div', { className:'mobile-section-title', style:{ marginBottom:6 } }, activas.length===0 ? 'Cantidad' : 'Cantidad por partida'),
+              activas.length === 0
+                ? h(NumInput, { value:e.cantidadGlobal||0, onChange:v=>updEquipo(e.id,'cantidadGlobal',v), style:{ width:'100%' } })
+                : h('div', null,
+                    h('div', { className:'mobile-cnts' }, activas.map(p=>{
+                      const pi = parseInt(p.id.replace('P',''))-1;
+                      return h('label', { key:p.id }, h('span', null, p.id), h(NumInput, { value:(e.cnts&&e.cnts[pi])||0, onChange:v=>updCnts(e.id,pi,v) }));
+                    })),
+                    h('button', { onClick:()=>setAllCnts(e.id, 1), style:{ marginTop:6, fontSize:11, width:'100%' } }, '✓ Poner 1 en todas'),
+                  ),
+            ),
+            h('label', { style:{ display:'flex', alignItems:'center', gap:8, marginTop:10, fontSize:12, color:'var(--t2)' } },
+              h('input', { type:'checkbox', checked:e.llevaIVA, onChange:ev=>updEquipo(e.id,'llevaIVA',ev.target.checked), style:{ width:16, height:16 } }), 'Lleva IVA'),
+          );
+        })
+      ),
+      cot.equipo.length>0 && h('div', { className:'card desktop-only' }, h('div', { className:'tbl-scroll' },
         h('table', { style:{ fontSize:12, minWidth:700 } },
           h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b3)' } },
             h('td', { style:{ padding:'6px 4px', color:'var(--t2)', fontSize:10, width:30 } }, 'Usar'),

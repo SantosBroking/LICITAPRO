@@ -356,7 +356,55 @@ export default function CotizacionOperativa({ project, onUpdate, activeTab, setA
         ),
       ),
       equipo.length===0 && h('div', { className:'card', style:{ textAlign:'center', padding:'30px', color:'var(--t2)', fontSize:13 } }, 'Sin equipo. Abre el catálogo arriba.'),
-      equipo.length > 0 && h('div', { className:'card' }, h('div', { className:'tbl-scroll' },
+      // Fase 3I-2e -- MÓVIL: tarjetas dedicadas, versión OPERATIVA
+      // (más simple que admin). Solo lo que un empleado necesita capturar:
+      // qué es, cantidad, costo proveedor y notas. Ningún campo
+      // estratégico -- margen/utilidad/montoGanar ni siquiera existen a
+      // nivel equipo, viven en el motor financiero (sanitizado aparte).
+      // Usa los MISMOS handlers que la tabla: updEquipo/updCnts/
+      // removeEquipoDesdeCatalogo.
+      equipo.length > 0 && h('div', { className:'mobile-only mobile-feed' },
+        equipo.map(e => {
+          const activas = partidas.filter(p=>p.activo);
+          return h('div', { key:e.id, className:'mobile-partida-card', style:{ opacity:e.usar?1:.5 } },
+            h('div', { className:'mobile-card-head' },
+              h('label', { style:{ display:'flex', alignItems:'center', gap:8, minWidth:0, flex:1, cursor:'pointer' } },
+                h('input', { type:'checkbox', checked:e.usar, onChange:ev=>updEquipo(e.id,'usar',ev.target.checked), style:{ width:18, height:18, accentColor:'var(--blue)', flexShrink:0 } }),
+                h('div', { style:{ minWidth:0 } },
+                  h('div', { style:{ fontSize:13, fontWeight:600, lineHeight:1.3 } }, e.nombre),
+                  h('div', { style:{ fontSize:10, color:'var(--t3)' } }, e.cat),
+                ),
+              ),
+              h('button', { onClick:()=>removeEquipoDesdeCatalogo(e.id), style:{ background:'transparent', border:'none', color:'var(--red)', fontSize:18, padding:'0 4px', flexShrink:0 } }, '×'),
+            ),
+            h('div', { className:'mobile-form-grid' },
+              h('label', null, h('span', null, 'Marca'), h('input', { value:e.marca||'', onChange:ev=>updEquipo(e.id,'marca',ev.target.value) })),
+              h('label', null, h('span', null, 'Modelo'), h('input', { value:e.modelo||'', onChange:ev=>updEquipo(e.id,'modelo',ev.target.value) })),
+              // costoConIVA ES visible/editable para operativo desde la
+              // Fase 2F1A (EQUIPO_CAMPOS_COSTO_PROVEEDOR en
+              // data_sanitize.js) -- la tabla de escritorio de esta misma
+              // vista lo muestra sin gate, así que aquí igual. Lo que
+              // NUNCA aparece (ni aquí ni en la tabla) es margenPropio /
+              // soloEquipo / modoEquipo / montoGanar: 100% estratégicos.
+              h('label', null, h('span', null, 'Costo proveedor'), h(NumInput, { value:e.costoConIVA, onChange:v=>updEquipo(e.id,'costoConIVA',v) })),
+            ),
+            h('div', { style:{ marginTop:10, paddingTop:10, borderTop:'1px solid var(--b1)' } },
+              h('div', { className:'mobile-section-title', style:{ marginBottom:6 } }, activas.length===0 ? 'Cantidad' : 'Cantidad por partida'),
+              activas.length === 0
+                ? h(NumInput, { value:e.cantidadGlobal||0, onChange:v=>updEquipo(e.id,'cantidadGlobal',v), style:{ width:'100%' } })
+                : h('div', { className:'mobile-cnts' }, activas.map(p=>{
+                    const pi = parseInt(p.id.replace('P',''))-1;
+                    return h('label', { key:p.id }, h('span', null, p.id), h(NumInput, { value:(e.cnts&&e.cnts[pi])||0, onChange:v=>updCnts(e.id,pi,v) }));
+                  })),
+            ),
+            h('div', { style:{ marginTop:10 } },
+              h('div', { className:'mobile-section-title', style:{ marginBottom:4 } }, 'Notas'),
+              h('input', { value:e.notas||'', onChange:ev=>updEquipo(e.id,'notas',ev.target.value), placeholder:'Notas de esta partida', style:{ width:'100%', boxSizing:'border-box' } }),
+            ),
+          );
+        })
+      ),
+      equipo.length > 0 && h('div', { className:'card desktop-only' }, h('div', { className:'tbl-scroll' },
         h('table', { style:{ fontSize:12, minWidth:700 } },
           h('thead', null, h('tr', { style:{ borderBottom:'.5px solid var(--b3)' } },
             h('td', { style:{ padding:'6px 4px', color:'var(--t2)', fontSize:10, width:30 } }, 'Usar'),
