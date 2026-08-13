@@ -1874,8 +1874,8 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
       // Fase 3H -- pestañas de navegación (no excluyentes): se puede
       // seleccionar de las 3 a la vez para una OC mixta. El contador
       // muestra cuántas partidas de cada fuente ya están en el carrito.
-      h('div', null,
-        h('div', { style:secLabel }, 'Partidas de la orden'),
+      h('div', { className:'mobile-oc-step' },
+        h('div', { className:'mobile-oc-step-title', style:secLabel }, 'Partidas de la orden'),
         // Fase 3H-1 -- ayuda visual: explica que se pueden combinar
         // fuentes en una sola OC (el cambio de comportamiento más
         // importante de la Fase 3H, que no era evidente en la UI).
@@ -1940,8 +1940,8 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
       // Fase 3H-1 -- resumen del carrito SIEMPRE visible (antes solo
       // aparecía con partidas), para que el estado vacío sea explícito y
       // no parezca que falta algo por cargar.
-      h('div', { style:{ padding:'10px 12px', borderRadius:'var(--r)', background:'var(--bg2)', border:'.5px solid '+(partidasSeleccionadas.length>0?'var(--b2)':'var(--b3)') } },
-        h('div', { style:secLabel }, 'Partidas seleccionadas'),
+      h('div', { className:'mobile-oc-step', style:{ padding:'10px 12px', borderRadius:'var(--r)', background:'var(--bg2)', border:'.5px solid '+(partidasSeleccionadas.length>0?'var(--b2)':'var(--b3)') } },
+        h('div', { className:'mobile-oc-step-title', style:secLabel }, 'Partidas seleccionadas'),
         partidasSeleccionadas.length === 0
           ? h('div', { style:{ fontSize:12, color:'var(--t3)' } }, 'Aún no has seleccionado partidas para esta OC.')
           : h('div', null,
@@ -1957,8 +1957,8 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
 
       // Fase 3I-2 -- no todas las OC requieren firma. Algunas se emiten,
       // se mandan al proveedor y solo quedan como soporte documental.
-      h('div', null,
-        h('div', { style:secLabel }, '¿Esta orden requiere firma?'),
+      h('div', { className:'mobile-oc-step' },
+        h('div', { className:'mobile-oc-step-title', style:secLabel }, '¿Esta orden requiere firma?'),
         h('div', { style:{ display:'flex', gap:8, marginBottom:6 } },
           h('button', { onClick:()=>setRequiereFirma(true), style:{ flex:1, padding:'8px 12px', fontSize:12, fontWeight:500, borderRadius:'var(--r)', border:'1px solid var(--b2)', cursor:'pointer', background:requiereFirma?'var(--blue)':'transparent', color:requiereFirma?'#fff':'var(--t1)' } }, 'Sí, enviar a firma'),
           h('button', { onClick:()=>setRequiereFirma(false), style:{ flex:1, padding:'8px 12px', fontSize:12, fontWeight:500, borderRadius:'var(--r)', border:'1px solid var(--b2)', cursor:'pointer', background:!requiereFirma?'var(--blue)':'transparent', color:!requiereFirma?'#fff':'var(--t1)' } }, 'No, solo expediente'),
@@ -1970,8 +1970,8 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
       ),
 
       // Condiciones
-      h('div', null,
-        h('div', { style:secLabel }, 'Condiciones de compra'),
+      h('div', { className:'mobile-oc-step' },
+        h('div', { className:'mobile-oc-step-title', style:secLabel }, 'Condiciones de compra'),
         h('div', { style:{ display:'flex', flexDirection:'column', gap:6 } },
           conds.map(c => {
             // Campo especial: Lugar de entrega
@@ -2023,7 +2023,7 @@ function OCModal({ project, companies, config, onSaveConfig, onSaveCompany, onUp
           // (alert) SE MANTIENE como respaldo -- este disabled es una
           // capa de UX encima, no la reemplaza.
           h('button', {
-            className:'bp',
+            className:'bp mobile-final-action',
             onClick:generar,
             disabled: partidasSeleccionadas.length === 0,
             title: partidasSeleccionadas.length === 0 ? 'Selecciona al menos una partida para crear la OC' : '',

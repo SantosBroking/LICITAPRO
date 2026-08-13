@@ -738,7 +738,14 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
           h('div', { style:{ padding:'12px 20px', borderBottom:'.5px solid var(--b1)' } },
             h('span', { style:{ fontSize:13, fontWeight:500 } }, 'Corrida financiera'),
           ),
-          h('div', { style:{ overflowX:'auto' } },
+          // Fase 3I-2f -- la Corrida financiera es una tabla de
+          // CONCEPTO + columnas por partida de vehículo: su valor está
+          // justamente en comparar columnas lado a lado, así que
+          // convertirla a tarjetas destruiría su propósito. Se conserva
+          // como tabla con scroll horizontal CONTROLADO (única excepción
+          // permitida), no como escritorio comprimido. Es admin-only
+          // (pestaña Finanzas) y de lectura, no de captura.
+          h('div', { className:'tbl-scroll', style:{ overflowX:'auto' } },
             h('table', { style:{ fontSize:12, width:'100%', borderCollapse:'collapse' } },
               h('thead', null,
                 h('tr', { style:{ borderBottom:'.5px solid var(--b1)' } },

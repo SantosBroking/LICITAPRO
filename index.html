@@ -667,6 +667,44 @@
       /* Secciones colapsables sin JS extra (usa <details>). */
       .mobile-collapse > summary { cursor: pointer; padding: 10px 0; font-weight: 600; font-size: 13px; }
 
+      /* Fase 3I-2f -- Modal de OC como FLUJO POR SECCIONES en móvil.
+         El modal ya estaba seccionado lógicamente (secLabel); lo que
+         faltaba era que cada sección se leyera como un paso separado en
+         vez de una columna continua. Se logra dando a cada sección fondo,
+         borde y numeración -- sin tocar el estado ni los handlers. */
+      .oc-modal .mobile-oc-step {
+        background: var(--bg2);
+        border: 1px solid var(--b1);
+        border-radius: var(--rl);
+        padding: 14px;
+        margin-bottom: 12px;
+        counter-increment: ocstep;
+      }
+      .oc-modal { counter-reset: ocstep; }
+      /* El título de cada sección se numera automáticamente -- deja claro
+         que es un flujo de pasos, sin agregar markup extra por sección. */
+      .mobile-oc-step > .mobile-oc-step-title::before {
+        content: counter(ocstep) ". ";
+        color: var(--accent); font-weight: 700;
+      }
+      .mobile-oc-step-title {
+        font-size: 12px; font-weight: 700; color: var(--t1);
+        text-transform: uppercase; letter-spacing: .5px; margin-bottom: 10px;
+      }
+      /* Campos apilados: nunca varios inputs comprimidos en una línea. */
+      .mobile-field-stack { display: flex; flex-direction: column; gap: 10px; }
+      .mobile-field-stack > label { display: flex; flex-direction: column; gap: 3px; }
+      .mobile-field-stack > label > span { font-size: 10px; color: var(--t3); text-transform: uppercase; letter-spacing: .4px; }
+      .mobile-field-stack input, .mobile-field-stack select, .mobile-field-stack textarea {
+        width: 100%; box-sizing: border-box; min-height: 42px; font-size: 13px;
+      }
+      /* Resumen compacto y acción final inconfundible. */
+      .mobile-compact-summary {
+        background: var(--bg1); border: 1px solid var(--b2);
+        border-radius: var(--r); padding: 10px 12px; font-size: 12px;
+      }
+      .mobile-final-action { width: 100%; min-height: 48px; font-size: 14px; font-weight: 600; }
+
       /* Grids inline sin clase — forzar 1 columna en mobile */
       .mob-1col  { grid-template-columns: 1fr !important; }
       .mob-2col  { grid-template-columns: repeat(2, 1fr) !important; }
