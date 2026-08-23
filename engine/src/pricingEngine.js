@@ -98,6 +98,17 @@ export const TARGET_PROFIT_BASIS_WARNINGS = Object.freeze({
   DEGENERATE_SALE_COST_COEFFICIENT_SUM_EXCEEDS_ONE: 'DEGENERATE_SALE_COST_COEFFICIENT_SUM_EXCEEDS_ONE',
 });
 
+// LP-ENG-002S — QA Control Tower: cierre global del invariant "ningún
+// resultado público del motor puede contener NaN/Infinity/-Infinity".
+// LP-ENG-002R cerró inputs individualmente no finitos (taxRate, quantity);
+// esta capa cierra el caso restante: inputs individualmente finitos que
+// producen OVERFLOW aritmético (multiplicaciones/sumas que exceden
+// Number.MAX_VALUE). Código genérico único para cualquier resultado
+// financiero no representable, sin importar en qué operación ocurrió.
+export const NUMERIC_ERRORS = Object.freeze({
+  NON_FINITE_FINANCIAL_RESULT: 'NON_FINITE_FINANCIAL_RESULT',
+});
+
 // ── Utilidades internas ──────────────────────────────────────────────────
 
 function assert(condition, message) {
@@ -109,10 +120,20 @@ function assert(condition, message) {
  * NaN/Infinity, para que el consumidor pueda distinguir "no calculable" de
  * un resultado numérico real. (LP-ENG-001 §8: manejar división entre cero de
  * manera determinista.)
+ *
+ * LP-ENG-002S: además, si numerador y denominador son ambos finitos pero el
+ * cociente matemático resulta no representable (overflow, ej. un numerador
+ * astronómico entre un denominador diminuto), también regresa `null` en vez
+ * de Infinity/-Infinity/NaN. `null` conserva su significado ya establecido
+ * ("indicador no calculable de forma representable") — no se introduce una
+ * conclusión financiera nueva, solo se cierra el caso de overflow bajo el
+ * mismo indicador que ya existía para división entre cero.
  */
 function safeDivide(numerator, denominator) {
   if (denominator === 0) return null;
-  return numerator / denominator;
+  const result = numerator / denominator;
+  if (!Number.isFinite(result)) return null;
+  return result;
 }
 
 // LP-ENG-002R — QA Control Tower: hardening de inputs no finitos. El motor
@@ -142,6 +163,22 @@ function assertFiniteQuantity(quantity, label) {
     `${label} debe ser un número finito cuando se declara (recibido: ${quantity}).`
   );
   return quantity;
+}
+
+// LP-ENG-002S — helper puro compartido para el cierre global de finitud.
+// A diferencia de assertValidTaxRate/assertFiniteQuantity (que validan
+// INPUTS antes de calcular), este valida un RESULTADO ya calculado — cierra
+// el caso donde cada input individual era finito pero la operación
+// (multiplicación, suma, división) produjo overflow. NO ajusta, NO clampa,
+// NO redondea: solo rechaza de forma determinista con un código genérico
+// único, reutilizable en cualquier punto del motor donde se produzca un
+// número que vaya a formar parte de un resultado público.
+function assertFiniteFinancialResult(value, label) {
+  assert(
+    typeof value === 'number' && Number.isFinite(value),
+    `${NUMERIC_ERRORS.NON_FINITE_FINANCIAL_RESULT}: ${label} resultó no finito (${value}) — overflow aritmético o configuración numéricamente no representable. El motor nunca produce NaN/Infinity/-Infinity en un resultado público.`
+  );
+  return value;
 }
 
 /**
@@ -275,6 +312,13 @@ export function computeCostItem(item, context = {}) {
   const net = unitNet * multiplier;
   const gross = unitGross * multiplier;
 
+  // LP-ENG-002S: cierra overflow de `amount * quantity`, `baseAmount * tax
+  // factor` y cualquier otra multiplicación de costo — inputs finitos que
+  // producen un resultado no representable se rechazan aquí, antes de
+  // retornar.
+  assertFiniteFinancialResult(net, 'CostItem.net');
+  assertFiniteFinancialResult(gross, 'CostItem.gross');
+
   return {
     net,
     gross,
@@ -301,19 +345,30 @@ export function computeCostItem(item, context = {}) {
 function applySaleTax(baseAmount, taxTreatment, taxRate) {
   assert(TAX_TREATMENTS.includes(taxTreatment), `pricing.taxTreatment inválido: ${taxTreatment}`);
   const rate = assertValidTaxRate(taxRate, 'pricing.taxRate');
+  let result;
   switch (taxTreatment) {
     case 'IVA_INCLUDED':
-      return { net: baseAmount / (1 + rate), gross: baseAmount, isUnknownTax: false };
+      result = { net: baseAmount / (1 + rate), gross: baseAmount, isUnknownTax: false };
+      break;
     case 'IVA_ADDITIONAL':
-      return { net: baseAmount, gross: baseAmount * (1 + rate), isUnknownTax: false };
+      result = { net: baseAmount, gross: baseAmount * (1 + rate), isUnknownTax: false };
+      break;
     case 'ZERO_RATE':
     case 'EXEMPT':
-      return { net: baseAmount, gross: baseAmount, isUnknownTax: false };
+      result = { net: baseAmount, gross: baseAmount, isUnknownTax: false };
+      break;
     case 'UNKNOWN':
-      return { net: baseAmount, gross: baseAmount, isUnknownTax: true };
+      result = { net: baseAmount, gross: baseAmount, isUnknownTax: true };
+      break;
     default:
       throw new Error(`[pricingEngine] taxTreatment no soportado: ${taxTreatment}`);
   }
+  // LP-ENG-002S: cierra overflow del tipo PRICE_DIRECT value=1e308 +
+  // IVA_ADDITIONAL taxRate=1 (ventaGross = 1e308*2) — sin cambiar la
+  // interpretación de IVA_INCLUDED/IVA_ADDITIONAL.
+  assertFiniteFinancialResult(result.net, 'pricing venta net');
+  assertFiniteFinancialResult(result.gross, 'pricing venta gross');
+  return result;
 }
 
 /**
@@ -554,10 +609,7 @@ function computeFinalAfterKnownCostsGroup({
   // LP-ENG-002R: defensa final — S ya es finita (garantizado arriba), pero
   // grossFromResolvedNet multiplica por (1+rate); se cierra aquí también
   // antes de producir el resultado económico del grupo.
-  assert(
-    Number.isFinite(ventaGross),
-    `${TARGET_PROFIT_BASIS_ERRORS.IMPOSSIBLE_TARGET_PROFIT_CONFIGURATION}: ventaGross resultó no finita a partir de una S finita — configuración numéricamente no representable.`
-  );
+  assertFiniteFinancialResult(ventaGross, 'FINAL_AFTER_KNOWN_COSTS ventaGross');
   const saleIsUnknownTax = taxTreatment === 'UNKNOWN';
 
   // Los knownSaleBasedCosts reales se calculan CONTRA la S/ventaGross ya
@@ -581,6 +633,12 @@ function computeFinalAfterKnownCostsGroup({
     .map((c, index) => ({ index, documentationStatus: c.documentationStatus, source: 'knownSaleBasedCosts' }))
     .filter((w) => w.documentationStatus !== 'DOCUMENTED');
 
+  // LP-ENG-002S §6: cierra el caso donde S/ventaGross son finitas pero un
+  // knownSaleBasedCost individual (ya validado como finito por
+  // computeCostItem) produce, al sumarse, un agregado no representable.
+  assertFiniteFinancialResult(knownCostNet, 'FINAL_AFTER_KNOWN_COSTS knownCostNet');
+  assertFiniteFinancialResult(knownCostGross, 'FINAL_AFTER_KNOWN_COSTS knownCostGross');
+
   // Costo final del grupo = costo base + knownSaleBasedCosts (LP-ENG-002 §4)
   // — estos costos SÍ forman parte del resultado económico del grupo, a
   // diferencia de los saleBasedCostItems de alcance-cotización clásicos.
@@ -590,6 +648,11 @@ function computeFinalAfterKnownCostsGroup({
   const documentationWarnings = [...documentationWarningsBase, ...knownCostDocumentationWarnings];
 
   const utilidad = ventaNet - costoNet;
+
+  assertFiniteFinancialResult(costoNet, 'FINAL_AFTER_KNOWN_COSTS costoNet');
+  assertFiniteFinancialResult(costoGross, 'FINAL_AFTER_KNOWN_COSTS costoGross');
+  assertFiniteFinancialResult(unknownCostAmount, 'FINAL_AFTER_KNOWN_COSTS unknownCostAmount');
+  assertFiniteFinancialResult(utilidad, 'FINAL_AFTER_KNOWN_COSTS utilidad');
 
   return {
     costoNet,
@@ -661,6 +724,12 @@ export function computePricingGroup(group) {
 
   if (group.pricing === null || group.pricing === undefined) {
     // Grupo de solo costo: no hay decisión de precio asociada.
+    // LP-ENG-002S §5: asegurar finitud antes de retornar (markup/margen ya
+    // pasan por safeDivide, que devuelve null en vez de no-finito).
+    assertFiniteFinancialResult(costoNet, 'costoNet');
+    assertFiniteFinancialResult(costoGross, 'costoGross');
+    assertFiniteFinancialResult(-costoNet, 'utilidad (grupo de solo costo)');
+    assertFiniteFinancialResult(unknownCostAmount, 'unknownCostAmount');
     return {
       costoNet,
       costoGross,
@@ -733,6 +802,19 @@ export function computePricingGroup(group) {
   // precio, NO bloquea, NO "corrige" la operación. Utilidad/markup/margen
   // negativos son resultados legítimos que el usuario debe poder ver.
   const utilidad = ventaNet - costoNet;
+  const unknownSaleAmount = sale.isUnknownTax ? ventaNet : 0;
+
+  // LP-ENG-002S §5: cierre global — costoNet/costoGross ya se validaron por
+  // CostItem (computeCostItem); ventaNet/ventaGross ya se validaron en
+  // applySaleTax. Aquí se cierra la combinación (utilidad = resta de dos
+  // valores finitos, siempre finita — se valida igual, sin asumirlo).
+  assertFiniteFinancialResult(costoNet, 'costoNet');
+  assertFiniteFinancialResult(costoGross, 'costoGross');
+  assertFiniteFinancialResult(ventaNet, 'ventaNet');
+  assertFiniteFinancialResult(ventaGross, 'ventaGross');
+  assertFiniteFinancialResult(utilidad, 'utilidad');
+  assertFiniteFinancialResult(unknownSaleAmount, 'unknownSaleAmount');
+  assertFiniteFinancialResult(unknownCostAmount, 'unknownCostAmount');
 
   return {
     costoNet,
@@ -742,7 +824,7 @@ export function computePricingGroup(group) {
     utilidad,
     markupSobreCosto: safeDivide(utilidad, costoNet),
     margenSobreVenta: safeDivide(utilidad, ventaNet),
-    unknownSaleAmount: sale.isUnknownTax ? ventaNet : 0,
+    unknownSaleAmount,
     unknownCostAmount,
     documentationWarnings,
     isCostOnlyGroup: false,
@@ -791,6 +873,20 @@ export function aggregateQuote(groupResults) {
   const ivaVentaIdentificado = ventaGross - ventaNet;
   const ivaCostoIdentificado = costoGross - costoNet;
   const ivaSobranteReferencial = ivaVentaIdentificado - ivaCostoIdentificado;
+
+  // LP-ENG-002S §7: sumar múltiples grupos individualmente finitos también
+  // puede hacer overflow. Se cierra ANTES de retornar — no se produce una
+  // cotización parcialmente válida con algún campo no finito.
+  assertFiniteFinancialResult(ventaNet, 'aggregateQuote ventaNet');
+  assertFiniteFinancialResult(ventaGross, 'aggregateQuote ventaGross');
+  assertFiniteFinancialResult(costoNet, 'aggregateQuote costoNet');
+  assertFiniteFinancialResult(costoGross, 'aggregateQuote costoGross');
+  assertFiniteFinancialResult(utilidadOperacional, 'aggregateQuote utilidadOperacional');
+  assertFiniteFinancialResult(unknownSaleAmount, 'aggregateQuote unknownSaleAmount');
+  assertFiniteFinancialResult(unknownCostAmount, 'aggregateQuote unknownCostAmount');
+  assertFiniteFinancialResult(ivaVentaIdentificado, 'aggregateQuote ivaVentaIdentificado');
+  assertFiniteFinancialResult(ivaCostoIdentificado, 'aggregateQuote ivaCostoIdentificado');
+  assertFiniteFinancialResult(ivaSobranteReferencial, 'aggregateQuote ivaSobranteReferencial');
 
   return {
     currency,
@@ -901,6 +997,15 @@ export function computeQuoteWithSaleBasedCosts({ groups, saleBasedCostItems = []
 
   const ventaNetReference = groupResults.reduce((sum, g) => sum + g.ventaNet, 0);
   const ventaGrossReference = groupResults.reduce((sum, g) => sum + g.ventaGross, 0);
+
+  // LP-ENG-002S §8: cada g.ventaNet/g.ventaGross ya es finito (garantizado
+  // por computePricingGroup), pero la SUMA de todos los grupos puede hacer
+  // overflow. Se cierra aquí, ANTES de usarlas como referencia para los
+  // costos derivados de venta — un overflow en la referencia nunca debe
+  // propagarse silenciosamente a PERCENT_OF_SALE_NET/GROSS.
+  assertFiniteFinancialResult(ventaNetReference, 'computeQuoteWithSaleBasedCosts ventaNetReference');
+  assertFiniteFinancialResult(ventaGrossReference, 'computeQuoteWithSaleBasedCosts ventaGrossReference');
+
   const context = { ventaNetReference, ventaGrossReference };
 
   const saleBasedResults = saleBasedCostItems.map((item, index) =>

@@ -13,6 +13,7 @@ import {
   computeQuoteCanonical,
   aggregateQuote,
   PROFIT_TARGET_BASIS,
+  NUMERIC_ERRORS,
 } from '../src/pricingEngine.js';
 import { assertClose } from '../test-support/testUtils.js';
 
@@ -666,4 +667,113 @@ test('F) valores válidos existentes conservan exactamente su resultado (regresi
       assert.ok(Number.isFinite(r[key]), `${key} debe ser finito`);
     }
   }
+});
+
+// ── LP-ENG-002S: cierre global — inputs individualmente finitos que ──────
+// producen overflow aritmético. El motor promete NUNCA NaN/Infinity/
+// -Infinity en un resultado público; estos tests cubren el caso que
+// LP-ENG-002R no cerraba (cada input por separado era finito y válido).
+
+test('G) CostItem amount=1e308, PER_UNIT quantity=2 → rechaza NON_FINITE_FINANCIAL_RESULT (overflow de amount*quantity)', () => {
+  assert.throws(
+    () => computePricingGroup({
+      costItems: [
+        { amount: 1e308, quantity: 2, quantityMode: 'PER_UNIT', taxTreatment: 'ZERO_RATE', documentationStatus: 'DOCUMENTED' },
+      ],
+      pricing: { mode: 'PRICE_DIRECT', amountBasis: 'TOTAL', value: 5e307, taxTreatment: 'ZERO_RATE' },
+    }),
+    new RegExp(NUMERIC_ERRORS.NON_FINITE_FINANCIAL_RESULT),
+    'amount=1e308 * quantity=2 excede Number.MAX_VALUE — debe rechazar, nunca devolver Infinity en CostItem.net'
+  );
+});
+
+test('H) PRICE_DIRECT value=1e308, IVA_ADDITIONAL taxRate=1 → rechaza NON_FINITE_FINANCIAL_RESULT (overflow de ventaGross=value*(1+taxRate))', () => {
+  assert.throws(
+    () => computePricingGroup({
+      costItems: [
+        { amount: 1000, quantityMode: 'FIXED_TOTAL', taxTreatment: 'ZERO_RATE', documentationStatus: 'DOCUMENTED' },
+      ],
+      pricing: { mode: 'PRICE_DIRECT', amountBasis: 'TOTAL', value: 1e308, taxTreatment: 'IVA_ADDITIONAL', taxRate: 1 },
+    }),
+    new RegExp(NUMERIC_ERRORS.NON_FINITE_FINANCIAL_RESULT),
+    'ventaGross = 1e308*(1+1) = 2e308 excede Number.MAX_VALUE — debe rechazar en applySaleTax, sin cambiar la interpretación de IVA_ADDITIONAL'
+  );
+});
+
+test('I) FINAL con knownSaleBasedCost cuyo net es finito pero gross hace overflow → rechaza NON_FINITE_FINANCIAL_RESULT', () => {
+  assert.throws(
+    () => computePricingGroup({
+      costItems: [
+        { amount: 100000, quantityMode: 'FIXED_TOTAL', taxTreatment: 'ZERO_RATE', documentationStatus: 'DOCUMENTED' },
+      ],
+      pricing: {
+        mode: 'TARGET_PROFIT_AMOUNT',
+        profitTargetBasis: 'FINAL_AFTER_KNOWN_COSTS',
+        amountBasis: 'TOTAL',
+        value: 20000,
+        taxTreatment: 'ZERO_RATE',
+      },
+      knownSaleBasedCosts: [
+        // net = F_i = 1e308 (finito); gross = F_i*(1+taxRate) = 2e308 (overflow).
+        { costCalculationMode: 'DIRECT_AMOUNT', amount: 1e308, quantityMode: 'FIXED_TOTAL', taxTreatment: 'IVA_ADDITIONAL', taxRate: 1, documentationStatus: 'DOCUMENTED' },
+      ],
+    }),
+    new RegExp(NUMERIC_ERRORS.NON_FINITE_FINANCIAL_RESULT),
+    'S y ventaGross del grupo son finitas, pero el knownSaleBasedCost individual produce gross no representable — debe rechazar antes de agregar al costo final del grupo'
+  );
+});
+
+test('J) aggregateQuote de dos grupos individualmente finitos cuya suma hace overflow → rechaza NON_FINITE_FINANCIAL_RESULT', () => {
+  const groupA = computePricingGroup({
+    costItems: [{ amount: 1000, quantityMode: 'FIXED_TOTAL', taxTreatment: 'ZERO_RATE', documentationStatus: 'DOCUMENTED' }],
+    pricing: { mode: 'PRICE_DIRECT', amountBasis: 'TOTAL', value: 1e308, taxTreatment: 'ZERO_RATE' },
+  });
+  const groupB = computePricingGroup({
+    costItems: [{ amount: 1000, quantityMode: 'FIXED_TOTAL', taxTreatment: 'ZERO_RATE', documentationStatus: 'DOCUMENTED' }],
+    pricing: { mode: 'PRICE_DIRECT', amountBasis: 'TOTAL', value: 1e308, taxTreatment: 'ZERO_RATE' },
+  });
+
+  // Cada grupo por separado es perfectamente finito (ventaNet=1e308 < Number.MAX_VALUE).
+  assert.ok(Number.isFinite(groupA.ventaNet) && Number.isFinite(groupB.ventaNet));
+
+  assert.throws(
+    () => aggregateQuote([groupA, groupB]),
+    new RegExp(NUMERIC_ERRORS.NON_FINITE_FINANCIAL_RESULT),
+    'la suma de ventaNet de ambos grupos (2e308) excede Number.MAX_VALUE — debe rechazar, no producir una cotización parcialmente válida'
+  );
+});
+
+test('K) ratio cuyo cociente haría overflow → safeDivide no expone Infinity, el indicador resulta null (sin rechazar el grupo)', () => {
+  const result = computePricingGroup({
+    costItems: [
+      { amount: 1e-300, quantityMode: 'FIXED_TOTAL', taxTreatment: 'ZERO_RATE', documentationStatus: 'DOCUMENTED' },
+    ],
+    pricing: { mode: 'PRICE_DIRECT', amountBasis: 'TOTAL', value: 1e300, taxTreatment: 'ZERO_RATE' },
+  });
+
+  // costoNet, ventaNet y utilidad son cada uno perfectamente finitos — el
+  // grupo se calcula sin rechazo. Solo el COCIENTE utilidad/costoNet
+  // (≈1e600) excede el rango representable.
+  assert.ok(Number.isFinite(result.costoNet));
+  assert.ok(Number.isFinite(result.ventaNet));
+  assert.ok(Number.isFinite(result.utilidad));
+  assert.equal(result.markupSobreCosto, null, 'el cociente no representable produce null, nunca Infinity');
+});
+
+test('L) valores normales siguen produciendo exactamente los mismos resultados (regresión post-LP-ENG-002S)', () => {
+  const result = computePricingGroup({
+    costItems: [
+      { amount: 116000, quantityMode: 'FIXED_TOTAL', taxTreatment: 'IVA_INCLUDED', taxRate: 0.16, documentationStatus: 'DOCUMENTED' },
+    ],
+    pricing: { mode: 'PRICE_DIRECT', amountBasis: 'TOTAL', value: 150000, taxTreatment: 'ZERO_RATE' },
+  });
+  assertClose(result.costoNet, 100000, 'costoNet sin cambio: 116,000/1.16');
+  assertClose(result.ventaNet, 150000, 'ventaNet sin cambio: PRICE_DIRECT declarado');
+  assertClose(result.utilidad, 50000, 'utilidad sin cambio');
+  assertClose(result.markupSobreCosto, 0.5, 'markup sin cambio');
+
+  const quote = computeQuote([
+    { costItems: [{ amount: 100000, quantityMode: 'FIXED_TOTAL', taxTreatment: 'ZERO_RATE', documentationStatus: 'DOCUMENTED' }], pricing: { mode: 'PRICE_DIRECT', amountBasis: 'TOTAL', value: 130000, taxTreatment: 'ZERO_RATE' } },
+  ]);
+  assertClose(quote.quote.operating.utilidadOperacional, 30000, 'aggregateQuote sin cambio para valores normales');
 });
