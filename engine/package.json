@@ -5,6 +5,6 @@
   "description": "Motor financiero puro de LicitaPro (LP-ENG-001). Aislado del legacy y de cualquier capa de UI/Supabase/PDF.",
   "type": "module",
   "scripts": {
-    "test": "node --test test/"
+    "test": "node --test"
   }
 }
