@@ -115,6 +115,35 @@ function safeDivide(numerator, denominator) {
   return numerator / denominator;
 }
 
+// LP-ENG-002R — QA Control Tower: hardening de inputs no finitos. El motor
+// promete NUNCA producir NaN/Infinity/-Infinity; esa promesa requiere que
+// ningún camino aritmético reciba un taxRate no finito o negativo sin
+// validar. Helper único y compartido — no se duplica la regla por ubicación.
+// Semántica: omitido (undefined/null) conserva el comportamiento actual → 0.
+// Si se declara, debe ser number finito y >= 0; si no, rechazo determinista.
+function assertValidTaxRate(taxRate, label) {
+  if (taxRate === undefined || taxRate === null) return 0;
+  assert(
+    typeof taxRate === 'number' && Number.isFinite(taxRate) && taxRate >= 0,
+    `${label} debe ser un número finito >= 0 cuando se declara (recibido: ${taxRate}).`
+  );
+  return taxRate;
+}
+
+// LP-ENG-002R — mismo principio para CostItem.quantity cuando
+// quantityMode=PER_UNIT (único caso donde `quantity` participa en la
+// aritmética del resultado — LP-ENG-001 §9 / golden G06). Omitido conserva
+// el default actual (1). No introduce reglas nuevas sobre cantidades
+// negativas — exclusivamente hardening de NaN/Infinity/-Infinity.
+function assertFiniteQuantity(quantity, label) {
+  if (quantity === undefined || quantity === null) return 1;
+  assert(
+    typeof quantity === 'number' && Number.isFinite(quantity),
+    `${label} debe ser un número finito cuando se declara (recibido: ${quantity}).`
+  );
+  return quantity;
+}
+
 /**
  * Valida que un conjunto de monedas (ya resueltas con su default aplicado)
  * sea uno solo. El motor v1 no hace FX (LP-ENG-001R §8): nunca suma, nunca
@@ -151,11 +180,15 @@ function resolveCostBase(item, context) {
   if (mode === 'DIRECT_AMOUNT') {
     assert(typeof item.amount === 'number' && Number.isFinite(item.amount), 'CostItem.amount debe ser un número cuando costCalculationMode=DIRECT_AMOUNT.');
     assert(QUANTITY_MODES.includes(item.quantityMode), `CostItem.quantityMode inválido: ${item.quantityMode}`);
-    const quantity = item.quantity ?? 1;
     // FIXED_TOTAL / PER_LOT: el monto ya es el total del concepto — no se
     // multiplica por `quantity` (LP-ENG-001 §9 / golden G06: "Monto fijo
-    // total" se aplica una sola vez, nunca por unidad).
-    const multiplier = item.quantityMode === 'PER_UNIT' ? quantity : 1;
+    // total" se aplica una sola vez, nunca por unidad); `quantity` no
+    // participa en la aritmética para estos modos, por lo que no se valida
+    // aquí (LP-ENG-002R: hardening exclusivo de PER_UNIT, sin cambiar la
+    // semántica de PER_LOT/FIXED_TOTAL).
+    const multiplier = item.quantityMode === 'PER_UNIT'
+      ? assertFiniteQuantity(item.quantity, 'CostItem.quantity (quantityMode=PER_UNIT)')
+      : 1;
     return { baseAmount: item.amount, multiplier };
   }
 
@@ -207,7 +240,7 @@ export function computeCostItem(item, context = {}) {
   assert(TAX_TREATMENTS.includes(item.taxTreatment), `CostItem.taxTreatment inválido: ${item.taxTreatment}`);
 
   const { baseAmount, multiplier } = resolveCostBase(item, context);
-  const rate = item.taxRate ?? 0;
+  const rate = assertValidTaxRate(item.taxRate, 'CostItem.taxRate');
   const isUnknownTax = item.taxTreatment === 'UNKNOWN';
 
   // Interpretación según taxTreatment. IVA_INCLUDED asume que `baseAmount`
@@ -267,7 +300,7 @@ export function computeCostItem(item, context = {}) {
  */
 function applySaleTax(baseAmount, taxTreatment, taxRate) {
   assert(TAX_TREATMENTS.includes(taxTreatment), `pricing.taxTreatment inválido: ${taxTreatment}`);
-  const rate = taxRate ?? 0;
+  const rate = assertValidTaxRate(taxRate, 'pricing.taxRate');
   switch (taxTreatment) {
     case 'IVA_INCLUDED':
       return { net: baseAmount / (1 + rate), gross: baseAmount, isUnknownTax: false };
@@ -357,7 +390,7 @@ function validatePricing(pricing) {
  */
 function grossFromResolvedNet(S, taxTreatment, taxRate) {
   assert(TAX_TREATMENTS.includes(taxTreatment), `pricing.taxTreatment inválido: ${taxTreatment}`);
-  const rate = taxRate ?? 0;
+  const rate = assertValidTaxRate(taxRate, 'pricing.taxRate (FINAL_AFTER_KNOWN_COSTS)');
   switch (taxTreatment) {
     case 'IVA_INCLUDED':
     case 'IVA_ADDITIONAL':
@@ -390,7 +423,7 @@ function deriveSaleBasedCostCoefficients(item, saleTaxTreatment, saleTaxRate) {
   const mode = item.costCalculationMode ?? 'DIRECT_AMOUNT';
   assert(COST_CALCULATION_MODES.includes(mode), `knownSaleBasedCosts[i].costCalculationMode inválido: ${mode}`);
   assert(TAX_TREATMENTS.includes(item.taxTreatment), `knownSaleBasedCosts[i].taxTreatment inválido: ${item.taxTreatment}`);
-  const r_i = item.taxRate ?? 0;
+  const r_i = assertValidTaxRate(item.taxRate, 'knownSaleBasedCosts[i].taxRate');
 
   if (mode === 'DIRECT_AMOUNT') {
     // F_i: mismo monto fijo que produciría computeCostItem para este item,
@@ -411,7 +444,7 @@ function deriveSaleBasedCostCoefficients(item, saleTaxTreatment, saleTaxRate) {
   } else {
     // PERCENT_OF_SALE_GROSS: la base es p_i · grossFromNet(S, T_sale, r_sale).
     const saleMultiplier = (saleTaxTreatment === 'IVA_INCLUDED' || saleTaxTreatment === 'IVA_ADDITIONAL')
-      ? (1 + (saleTaxRate ?? 0))
+      ? (1 + assertValidTaxRate(saleTaxRate, 'pricing.taxRate (venta, para PERCENT_OF_SALE_GROSS)'))
       : 1;
     k_i = p_i * saleMultiplier;
   }
@@ -437,6 +470,15 @@ function resolveFinalAfterKnownCostsVenta({ costoBaseNet, targetProfit, knownSal
   const sumB = coefficients.reduce((sum, c) => sum + c.b, 0);
   const denominator = 1 - sumA;
 
+  // LP-ENG-002R — QA Control Tower: defensa final antes de dividir. Un
+  // costItem/knownSaleBasedCost con taxRate/quantity ya validados no debería
+  // poder producir un coeficiente no finito, pero esta capa lo cierra de
+  // forma determinista en vez de asumirlo — cero confianza implícita.
+  assert(
+    Number.isFinite(sumA) && Number.isFinite(sumB) && Number.isFinite(denominator),
+    `${TARGET_PROFIT_BASIS_ERRORS.IMPOSSIBLE_TARGET_PROFIT_CONFIGURATION}: los coeficientes derivados de knownSaleBasedCosts no son finitos (Σa_i=${sumA}, Σb_i=${sumB}) — configuración numéricamente no representable. No se calculó S.`
+  );
+
   const warnings = [];
   if (Math.abs(denominator) <= 1e-12) {
     throw new Error(
@@ -448,6 +490,14 @@ function resolveFinalAfterKnownCostsVenta({ costoBaseNet, targetProfit, knownSal
   }
 
   const S = (costoBaseNet + sumB + targetProfit) / denominator;
+
+  // Overflow/config numéricamente no representable: nunca se devuelve un S
+  // no finito, aunque sumA/sumB/denominator individualmente sí lo fueran.
+  assert(
+    Number.isFinite(S),
+    `${TARGET_PROFIT_BASIS_ERRORS.IMPOSSIBLE_TARGET_PROFIT_CONFIGURATION}: S resultó no finito (overflow o configuración numéricamente no representable). No se produce un resultado no finito.`
+  );
+
   return { S, sumA, sumB, warnings };
 }
 
@@ -501,6 +551,13 @@ function computeFinalAfterKnownCostsGroup({
 
   const ventaNet = S;
   const ventaGross = grossFromResolvedNet(S, taxTreatment, taxRate);
+  // LP-ENG-002R: defensa final — S ya es finita (garantizado arriba), pero
+  // grossFromResolvedNet multiplica por (1+rate); se cierra aquí también
+  // antes de producir el resultado económico del grupo.
+  assert(
+    Number.isFinite(ventaGross),
+    `${TARGET_PROFIT_BASIS_ERRORS.IMPOSSIBLE_TARGET_PROFIT_CONFIGURATION}: ventaGross resultó no finita a partir de una S finita — configuración numéricamente no representable.`
+  );
   const saleIsUnknownTax = taxTreatment === 'UNKNOWN';
 
   // Los knownSaleBasedCosts reales se calculan CONTRA la S/ventaGross ya

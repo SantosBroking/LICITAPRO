@@ -499,3 +499,171 @@ test('profitTargetBasis fuera de TARGET_PROFIT_AMOUNT rechaza explícitamente', 
     /profitTargetBasis solo puede declararse cuando pricing\.mode = TARGET_PROFIT_AMOUNT/
   );
 });
+
+// ── LP-ENG-002R: QA Control Tower — hardening de inputs no finitos ──────
+// El motor promete NUNCA NaN/Infinity/-Infinity. Estos tests cierran las
+// dos brechas detectadas: taxRate no finito/negativo, y CostItem.quantity
+// no finito bajo quantityMode=PER_UNIT.
+
+test('A) knownSaleBasedCost IVA_INCLUDED con taxRate=-1 → rechaza explícitamente, nunca Infinity/NaN', () => {
+  assert.throws(
+    () => computePricingGroup({
+      costItems: [
+        { amount: 100000, quantityMode: 'FIXED_TOTAL', taxTreatment: 'ZERO_RATE', documentationStatus: 'DOCUMENTED' },
+      ],
+      pricing: {
+        mode: 'TARGET_PROFIT_AMOUNT',
+        profitTargetBasis: 'FINAL_AFTER_KNOWN_COSTS',
+        amountBasis: 'TOTAL',
+        value: 20000,
+        taxTreatment: 'ZERO_RATE',
+      },
+      knownSaleBasedCosts: [
+        { costCalculationMode: 'PERCENT_OF_SALE_NET', rate: 0.05, taxTreatment: 'IVA_INCLUDED', taxRate: -1, documentationStatus: 'DOCUMENTED' },
+      ],
+    }),
+    /knownSaleBasedCosts\[i\]\.taxRate debe ser un número finito >= 0/,
+    'debe rechazar antes de dividir entre (1+taxRate)=0, nunca producir Infinity'
+  );
+});
+
+test('B) pricing.taxRate=-1 en FINAL (venta IVA_INCLUDED) → rechaza explícitamente', () => {
+  assert.throws(
+    () => computePricingGroup({
+      costItems: [
+        { amount: 100000, quantityMode: 'FIXED_TOTAL', taxTreatment: 'ZERO_RATE', documentationStatus: 'DOCUMENTED' },
+      ],
+      pricing: {
+        mode: 'TARGET_PROFIT_AMOUNT',
+        profitTargetBasis: 'FINAL_AFTER_KNOWN_COSTS',
+        amountBasis: 'TOTAL',
+        value: 20000,
+        taxTreatment: 'IVA_INCLUDED',
+        taxRate: -1,
+      },
+      knownSaleBasedCosts: [],
+    }),
+    /pricing\.taxRate \(FINAL_AFTER_KNOWN_COSTS\) debe ser un número finito >= 0/,
+    'debe rechazar antes de calcular ventaGross = S*(1+taxRate)'
+  );
+});
+
+test('C) taxRate NaN / Infinity / -Infinity → rechaza en cada punto de uso, nunca produce NaN/Infinity', () => {
+  const makeGroupWithTaxRate = (taxRate) => computePricingGroup({
+    costItems: [
+      { amount: 100000, quantityMode: 'FIXED_TOTAL', taxTreatment: 'IVA_INCLUDED', taxRate, documentationStatus: 'DOCUMENTED' },
+    ],
+    pricing: { mode: 'PRICE_DIRECT', amountBasis: 'TOTAL', value: 130000, taxTreatment: 'ZERO_RATE' },
+  });
+
+  for (const invalid of [NaN, Infinity, -Infinity]) {
+    assert.throws(
+      () => makeGroupWithTaxRate(invalid),
+      /CostItem\.taxRate debe ser un número finito >= 0/,
+      `CostItem.taxRate=${invalid} debe rechazar`
+    );
+  }
+
+  const makeSaleWithTaxRate = (taxRate) => computePricingGroup({
+    costItems: [
+      { amount: 100000, quantityMode: 'FIXED_TOTAL', taxTreatment: 'ZERO_RATE', documentationStatus: 'DOCUMENTED' },
+    ],
+    pricing: { mode: 'PRICE_DIRECT', amountBasis: 'TOTAL', value: 130000, taxTreatment: 'IVA_ADDITIONAL', taxRate },
+  });
+
+  for (const invalid of [NaN, Infinity, -Infinity]) {
+    assert.throws(
+      () => makeSaleWithTaxRate(invalid),
+      /pricing\.taxRate debe ser un número finito >= 0/,
+      `pricing.taxRate=${invalid} debe rechazar`
+    );
+  }
+});
+
+test('D) CostItem PER_UNIT quantity=Infinity → rechaza explícitamente', () => {
+  assert.throws(
+    () => computePricingGroup({
+      costItems: [
+        { amount: 1000, quantity: Infinity, quantityMode: 'PER_UNIT', taxTreatment: 'ZERO_RATE', documentationStatus: 'DOCUMENTED' },
+      ],
+      pricing: { mode: 'PRICE_DIRECT', amountBasis: 'TOTAL', value: 130000, taxTreatment: 'ZERO_RATE' },
+    }),
+    /CostItem\.quantity \(quantityMode=PER_UNIT\) debe ser un número finito/,
+    'quantity=Infinity bajo PER_UNIT debe rechazar antes de multiplicar'
+  );
+});
+
+test('E) CostItem PER_UNIT quantity=NaN → rechaza explícitamente', () => {
+  assert.throws(
+    () => computePricingGroup({
+      costItems: [
+        { amount: 1000, quantity: NaN, quantityMode: 'PER_UNIT', taxTreatment: 'ZERO_RATE', documentationStatus: 'DOCUMENTED' },
+      ],
+      pricing: { mode: 'PRICE_DIRECT', amountBasis: 'TOTAL', value: 130000, taxTreatment: 'ZERO_RATE' },
+    }),
+    /CostItem\.quantity \(quantityMode=PER_UNIT\) debe ser un número finito/,
+    'quantity=NaN bajo PER_UNIT debe rechazar'
+  );
+});
+
+test('quantity=Infinity/NaN bajo PER_LOT/FIXED_TOTAL no afecta el resultado (no participa en la aritmética, sin cambio de semántica)', () => {
+  // PER_LOT/FIXED_TOTAL: multiplier siempre 1, quantity nunca se usa —
+  // LP-ENG-002R no introduce una validación nueva ahí (fuera de alcance).
+  const perLot = computePricingGroup({
+    costItems: [
+      { amount: 1000, quantity: Infinity, quantityMode: 'PER_LOT', taxTreatment: 'ZERO_RATE', documentationStatus: 'DOCUMENTED' },
+    ],
+    pricing: { mode: 'PRICE_DIRECT', amountBasis: 'TOTAL', value: 5000, taxTreatment: 'ZERO_RATE' },
+  });
+  assertClose(perLot.costoNet, 1000, 'PER_LOT ignora quantity (multiplier=1 siempre) — sin cambio de semántica');
+});
+
+test('F) valores válidos existentes conservan exactamente su resultado (regresión explícita post-hardening)', () => {
+  // CostItem PER_UNIT con quantity finito válido — debe seguir multiplicando
+  // exactamente igual que antes del hardening.
+  const costItemResult = computePricingGroup({
+    costItems: [
+      { amount: 500, quantity: 3, quantityMode: 'PER_UNIT', taxTreatment: 'IVA_INCLUDED', taxRate: 0.16, documentationStatus: 'DOCUMENTED' },
+    ],
+    pricing: { mode: 'PRICE_DIRECT', amountBasis: 'TOTAL', value: 2000, taxTreatment: 'ZERO_RATE' },
+  });
+  // costoNet = (500/1.16)*3 = 1293.103448275862...
+  assertClose(costItemResult.costoNet, (500 / 1.16) * 3, 'quantity=3 válido: mismo resultado que antes del hardening');
+
+  // taxRate=0 explícito (frontera válida: >=0) debe seguir funcionando
+  // exactamente igual que taxRate omitido.
+  const explicitZero = computePricingGroup({
+    costItems: [
+      { amount: 100000, quantityMode: 'FIXED_TOTAL', taxTreatment: 'IVA_ADDITIONAL', taxRate: 0, documentationStatus: 'DOCUMENTED' },
+    ],
+    pricing: { mode: 'PRICE_DIRECT', amountBasis: 'TOTAL', value: 130000, taxTreatment: 'ZERO_RATE' },
+  });
+  assertClose(explicitZero.costoNet, 100000, 'taxRate=0 explícito: idéntico a taxRate omitido');
+
+  // FINAL_AFTER_KNOWN_COSTS con taxRate/quantity válidos — debe seguir
+  // resolviendo S exactamente igual que en N13.
+  const finalResult = computePricingGroup({
+    costItems: [
+      { amount: 100000, quantityMode: 'FIXED_TOTAL', taxTreatment: 'ZERO_RATE', documentationStatus: 'DOCUMENTED' },
+    ],
+    pricing: {
+      mode: 'TARGET_PROFIT_AMOUNT',
+      profitTargetBasis: 'FINAL_AFTER_KNOWN_COSTS',
+      amountBasis: 'TOTAL',
+      value: 20000,
+      taxTreatment: 'ZERO_RATE',
+    },
+    knownSaleBasedCosts: [
+      { costCalculationMode: 'PERCENT_OF_SALE_NET', rate: 0.05, taxTreatment: 'ZERO_RATE', taxRate: 0, documentationStatus: 'DOCUMENTED' },
+    ],
+  });
+  const expectedS = (100000 + 0 + 20000) / (1 - 0.05);
+  assertClose(finalResult.ventaNet, expectedS, 'FINAL con taxRate=0 explícito: mismo resultado que N13');
+
+  // Ninguno de los tres debe producir NaN/Infinity/-Infinity.
+  for (const r of [costItemResult, explicitZero, finalResult]) {
+    for (const key of ['costoNet', 'ventaNet', 'utilidad']) {
+      assert.ok(Number.isFinite(r[key]), `${key} debe ser finito`);
+    }
+  }
+});
