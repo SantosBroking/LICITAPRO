@@ -38,6 +38,15 @@ export const TAX_TREATMENTS = Object.freeze([
 
 export const QUANTITY_MODES = Object.freeze(['PER_UNIT', 'PER_LOT', 'FIXED_TOTAL']);
 
+// LP-ARCH-003 v1.2 / LP-ENG-002: solo aplica dentro de
+// pricing.mode = TARGET_PROFIT_AMOUNT. Default del motor cuando se omite:
+// BASE_COST_BEFORE_SALE_BASED_COSTS (comportamiento idéntico al existente,
+// byte-semántico — ver LP-ARCH-003 v1.2 §1/§5).
+export const PROFIT_TARGET_BASIS = Object.freeze([
+  'BASE_COST_BEFORE_SALE_BASED_COSTS',
+  'FINAL_AFTER_KNOWN_COSTS',
+]);
+
 export const COST_ROLES = Object.freeze(['LINE_BACKING', 'INTERNAL_ONLY']);
 
 export const DOCUMENTATION_STATUSES = Object.freeze([
@@ -74,6 +83,19 @@ export const DEFAULT_CURRENCY = 'MXN';
 export const ZERO_DENOMINATOR_WARNINGS = Object.freeze({
   ZERO_COST: 'UNDEFINED_ZERO_COST',
   ZERO_SALE: 'UNDEFINED_ZERO_SALE',
+});
+
+// LP-ARCH-003 v1.2 §2.4/§4/§9 — LP-ENG-002: nombres deterministas para los
+// rechazos/advertencias de `profitTargetBasis=FINAL_AFTER_KNOWN_COSTS`. Nunca
+// NaN/Infinity/-Infinity — ver `resolveFinalAfterKnownCostsVenta` y
+// `computeQuoteCanonical`.
+export const TARGET_PROFIT_BASIS_ERRORS = Object.freeze({
+  IMPOSSIBLE_TARGET_PROFIT_CONFIGURATION: 'IMPOSSIBLE_TARGET_PROFIT_CONFIGURATION',
+  FINAL_TARGET_WITH_UNALLOCATED_QUOTE_LEVEL_COSTS: 'FINAL_TARGET_WITH_UNALLOCATED_QUOTE_LEVEL_COSTS',
+});
+
+export const TARGET_PROFIT_BASIS_WARNINGS = Object.freeze({
+  DEGENERATE_SALE_COST_COEFFICIENT_SUM_EXCEEDS_ONE: 'DEGENERATE_SALE_COST_COEFFICIENT_SUM_EXCEEDS_ONE',
 });
 
 // ── Utilidades internas ──────────────────────────────────────────────────
@@ -306,6 +328,229 @@ function validatePricing(pricing) {
   }
 
   assert(typeof pricing.value === 'number' && Number.isFinite(pricing.value), 'pricing.value debe ser un número.');
+
+  // LP-ARCH-003 v1.2 §1 / LP-ENG-002: profitTargetBasis solo existe dentro de
+  // TARGET_PROFIT_AMOUNT. Si se omite, el motor asume
+  // BASE_COST_BEFORE_SALE_BASED_COSTS (comportamiento actual, sin cambio) —
+  // ver la resolución del default en `computePricingGroup`, no aquí.
+  if (pricing.profitTargetBasis !== undefined) {
+    assert(
+      pricing.mode === 'TARGET_PROFIT_AMOUNT',
+      'pricing.profitTargetBasis solo puede declararse cuando pricing.mode = TARGET_PROFIT_AMOUNT.'
+    );
+    assert(
+      PROFIT_TARGET_BASIS.includes(pricing.profitTargetBasis),
+      `pricing.profitTargetBasis inválido: ${pricing.profitTargetBasis}`
+    );
+  }
+}
+
+// ── FINAL_AFTER_KNOWN_COSTS (LP-ARCH-003 v1.2 / LP-ENG-002) ─────────────
+
+/**
+ * Dado un neto S ya resuelto algebraicamente (no un monto declarado por un
+ * humano), calcula el bruto correspondiente. Deliberadamente DISTINTO de
+ * `applySaleTax`: `applySaleTax` recibe un monto declarado y decide, según
+ * taxTreatment, si ESE monto es el neto o el bruto (IVA_INCLUDED divide para
+ * extraer el neto). Aquí S ya ES el neto — nunca se vuelve a dividir entre
+ * (1+rate) (LP-ARCH-003 v1.2 §3 "CUIDADO CRÍTICO — SALE TAX").
+ */
+function grossFromResolvedNet(S, taxTreatment, taxRate) {
+  assert(TAX_TREATMENTS.includes(taxTreatment), `pricing.taxTreatment inválido: ${taxTreatment}`);
+  const rate = taxRate ?? 0;
+  switch (taxTreatment) {
+    case 'IVA_INCLUDED':
+    case 'IVA_ADDITIONAL':
+      return S * (1 + rate);
+    case 'ZERO_RATE':
+    case 'EXEMPT':
+    case 'UNKNOWN':
+      // UNKNOWN preserva incertidumbre fiscal vía `isUnknownTax`/
+      // `unknownSaleAmount` en el llamador — aquí solo se define neto=bruto,
+      // sin inventar una tasa (LP_ARCH_002 §5).
+      return S;
+    default:
+      throw new Error(`[pricingEngine] taxTreatment no soportado: ${taxTreatment}`);
+  }
+}
+
+/**
+ * Deriva (a_i, b_i) de un `knownSaleBasedCosts[i]` tal que
+ * `cost_i_net = a_i·S + b_i` (LP-ARCH-003 v1.2 §3.2). Reutiliza
+ * `resolveCostBase` para DIRECT_AMOUNT (mismo cómputo que un CostItem normal,
+ * sin depender de S) — sin duplicar esa lógica.
+ *
+ * @param {object} item - mismo vocabulario que CostItem (costCalculationMode,
+ *   rate|amount, taxTreatment, taxRate, quantity, quantityMode...).
+ * @param {string} saleTaxTreatment - taxTreatment de VENTA del grupo (T_sale).
+ * @param {number} saleTaxRate - tasa de venta del grupo (r_sale).
+ */
+function deriveSaleBasedCostCoefficients(item, saleTaxTreatment, saleTaxRate) {
+  assert(typeof item === 'object' && item !== null, 'knownSaleBasedCosts[i] debe ser un objeto.');
+  const mode = item.costCalculationMode ?? 'DIRECT_AMOUNT';
+  assert(COST_CALCULATION_MODES.includes(mode), `knownSaleBasedCosts[i].costCalculationMode inválido: ${mode}`);
+  assert(TAX_TREATMENTS.includes(item.taxTreatment), `knownSaleBasedCosts[i].taxTreatment inválido: ${item.taxTreatment}`);
+  const r_i = item.taxRate ?? 0;
+
+  if (mode === 'DIRECT_AMOUNT') {
+    // F_i: mismo monto fijo que produciría computeCostItem para este item,
+    // ya resuelto por quantityMode/quantity (LP-ARCH-003 v1.2 §3.2, caso
+    // DIRECT_AMOUNT) — no depende de S, por eso no participa en a_i.
+    const { baseAmount, multiplier } = resolveCostBase(item, {});
+    const F_i = baseAmount * multiplier;
+    if (item.taxTreatment === 'IVA_INCLUDED') return { a: 0, b: F_i / (1 + r_i) };
+    return { a: 0, b: F_i };
+  }
+
+  assert(typeof item.rate === 'number' && Number.isFinite(item.rate), `knownSaleBasedCosts[i].rate debe ser un número cuando costCalculationMode=${mode}.`);
+  const p_i = item.rate;
+
+  let k_i;
+  if (mode === 'PERCENT_OF_SALE_NET') {
+    k_i = p_i;
+  } else {
+    // PERCENT_OF_SALE_GROSS: la base es p_i · grossFromNet(S, T_sale, r_sale).
+    const saleMultiplier = (saleTaxTreatment === 'IVA_INCLUDED' || saleTaxTreatment === 'IVA_ADDITIONAL')
+      ? (1 + (saleTaxRate ?? 0))
+      : 1;
+    k_i = p_i * saleMultiplier;
+  }
+
+  if (item.taxTreatment === 'IVA_INCLUDED') return { a: k_i / (1 + r_i), b: 0 };
+  return { a: k_i, b: 0 };
+}
+
+/**
+ * Resuelve algebraicamente S (venta neta) para
+ * `profitTargetBasis=FINAL_AFTER_KNOWN_COSTS` (LP-ARCH-003 v1.2 §3.3):
+ *
+ *   S = (C_base + Σb_i + TargetProfit) / (1 − Σa_i)
+ *
+ * Nunca regresa NaN/Infinity/-Infinity: si el denominador es ~0, rechaza
+ * explícitamente (`IMPOSSIBLE_TARGET_PROFIT_CONFIGURATION`); si es negativo,
+ * SÍ calcula pero adjunta `DEGENERATE_SALE_COST_COEFFICIENT_SUM_EXCEEDS_ONE`.
+ * No redondea internamente (LP-ENG-002 §2).
+ */
+function resolveFinalAfterKnownCostsVenta({ costoBaseNet, targetProfit, knownSaleBasedCosts, saleTaxTreatment, saleTaxRate }) {
+  const coefficients = knownSaleBasedCosts.map((item) => deriveSaleBasedCostCoefficients(item, saleTaxTreatment, saleTaxRate));
+  const sumA = coefficients.reduce((sum, c) => sum + c.a, 0);
+  const sumB = coefficients.reduce((sum, c) => sum + c.b, 0);
+  const denominator = 1 - sumA;
+
+  const warnings = [];
+  if (Math.abs(denominator) <= 1e-12) {
+    throw new Error(
+      `[pricingEngine] ${TARGET_PROFIT_BASIS_ERRORS.IMPOSSIBLE_TARGET_PROFIT_CONFIGURATION}: Σa_i=${sumA} hace que (1-Σa_i)≈0 — no existe una venta única que resuelva la ecuación. No se calculó S.`
+    );
+  }
+  if (denominator < 0) {
+    warnings.push(TARGET_PROFIT_BASIS_WARNINGS.DEGENERATE_SALE_COST_COEFFICIENT_SUM_EXCEEDS_ONE);
+  }
+
+  const S = (costoBaseNet + sumB + targetProfit) / denominator;
+  return { S, sumA, sumB, warnings };
+}
+
+/**
+ * Calcula un grupo de pricing completo cuando
+ * `pricing.mode=TARGET_PROFIT_AMOUNT` y
+ * `pricing.profitTargetBasis=FINAL_AFTER_KNOWN_COSTS` (LP-ARCH-003 v1.2).
+ * Reemplaza el flujo común baseAmount→applySaleTax→utilidad de
+ * `computePricingGroup` para este caso específico, porque aquí S se resuelve
+ * primero y los `knownSaleBasedCosts` deben integrarse al costo/venta final
+ * del grupo (LP-ENG-002 §4) — nunca quedan fuera del resultado económico.
+ *
+ * @param {object} params
+ * @param {object} params.group - el group original (para leer
+ *   `knownSaleBasedCosts` y `quantity`).
+ * @param {number} params.costoNetBase - costo neto de `group.costItems`
+ *   (idéntico a lo que ya calcula `computePricingGroup`, sin cambio).
+ * @param {number} params.costoGrossBase
+ * @param {number} params.unknownCostAmountBase
+ * @param {object[]} params.documentationWarningsBase
+ * @param {string} params.currencyBase - moneda ya validada de costItems+pricing.
+ * @param {string} params.taxTreatment - taxTreatment de VENTA del grupo.
+ * @param {number} [params.taxRate]
+ * @param {string} params.amountBasis
+ * @param {number} params.value - la ganancia objetivo declarada (antes de amountBasis).
+ */
+function computeFinalAfterKnownCostsGroup({
+  group,
+  costoNetBase,
+  costoGrossBase,
+  unknownCostAmountBase,
+  documentationWarningsBase,
+  currencyBase,
+  taxTreatment,
+  taxRate,
+  amountBasis,
+  value,
+}) {
+  const knownSaleBasedCosts = group.knownSaleBasedCosts ?? [];
+  assert(Array.isArray(knownSaleBasedCosts), 'group.knownSaleBasedCosts debe ser un arreglo.');
+
+  const targetProfit = resolveAmountByBasis(value, amountBasis, group.quantity);
+
+  const { S, warnings: denominatorWarnings } = resolveFinalAfterKnownCostsVenta({
+    costoBaseNet: costoNetBase,
+    targetProfit,
+    knownSaleBasedCosts,
+    saleTaxTreatment: taxTreatment,
+    saleTaxRate: taxRate ?? 0,
+  });
+
+  const ventaNet = S;
+  const ventaGross = grossFromResolvedNet(S, taxTreatment, taxRate);
+  const saleIsUnknownTax = taxTreatment === 'UNKNOWN';
+
+  // Los knownSaleBasedCosts reales se calculan CONTRA la S/ventaGross ya
+  // resueltas (LP-ENG-002 §4) — se reutiliza `computeCostItem` tal cual
+  // (mismo helper que ya resuelve PERCENT_OF_SALE_NET/GROSS/DIRECT_AMOUNT),
+  // sin duplicar la lógica fiscal.
+  const context = { ventaNetReference: ventaNet, ventaGrossReference: ventaGross };
+  const knownCostResults = knownSaleBasedCosts.map((item) => computeCostItem(item, context));
+
+  const currency = assertSingleCurrency(
+    [currencyBase, ...knownCostResults.map((c) => c.currency)],
+    'un grupo FINAL_AFTER_KNOWN_COSTS (costItems base + knownSaleBasedCosts, misma moneda)'
+  );
+
+  const knownCostNet = knownCostResults.reduce((sum, c) => sum + c.net, 0);
+  const knownCostGross = knownCostResults.reduce((sum, c) => sum + c.gross, 0);
+  const knownCostUnknown = knownCostResults
+    .filter((c) => c.isUnknownTax)
+    .reduce((sum, c) => sum + c.net, 0);
+  const knownCostDocumentationWarnings = knownCostResults
+    .map((c, index) => ({ index, documentationStatus: c.documentationStatus, source: 'knownSaleBasedCosts' }))
+    .filter((w) => w.documentationStatus !== 'DOCUMENTED');
+
+  // Costo final del grupo = costo base + knownSaleBasedCosts (LP-ENG-002 §4)
+  // — estos costos SÍ forman parte del resultado económico del grupo, a
+  // diferencia de los saleBasedCostItems de alcance-cotización clásicos.
+  const costoNet = costoNetBase + knownCostNet;
+  const costoGross = costoGrossBase + knownCostGross;
+  const unknownCostAmount = unknownCostAmountBase + knownCostUnknown;
+  const documentationWarnings = [...documentationWarningsBase, ...knownCostDocumentationWarnings];
+
+  const utilidad = ventaNet - costoNet;
+
+  return {
+    costoNet,
+    costoGross,
+    ventaNet,
+    ventaGross,
+    utilidad,
+    markupSobreCosto: safeDivide(utilidad, costoNet),
+    margenSobreVenta: safeDivide(utilidad, ventaNet),
+    unknownSaleAmount: saleIsUnknownTax ? ventaNet : 0,
+    unknownCostAmount,
+    documentationWarnings,
+    isCostOnlyGroup: false,
+    currency,
+    warnings: [...zeroDenominatorWarnings(costoNet, ventaNet), ...denominatorWarnings],
+    profitTargetBasis: 'FINAL_AFTER_KNOWN_COSTS',
+    targetProfitRequested: targetProfit,
+  };
 }
 
 // ── Grupo de pricing (unidad mínima del motor) ──────────────────────────
@@ -377,7 +622,27 @@ export function computePricingGroup(group) {
   }
 
   validatePricing(group.pricing);
-  const { mode, amountBasis, value, taxTreatment, taxRate } = group.pricing;
+  const { mode, amountBasis, value, taxTreatment, taxRate, profitTargetBasis } = group.pricing;
+
+  // LP-ARCH-003 v1.2 / LP-ENG-002: profitTargetBasis solo existe dentro de
+  // TARGET_PROFIT_AMOUNT; default del motor cuando se omite:
+  // BASE_COST_BEFORE_SALE_BASED_COSTS (preserva byte-semánticamente el
+  // comportamiento actual para todo input existente — nunca entra a esta
+  // rama si el campo se omite o es explícitamente BASE_COST_BEFORE_SALE_BASED_COSTS).
+  if (mode === 'TARGET_PROFIT_AMOUNT' && (profitTargetBasis ?? 'BASE_COST_BEFORE_SALE_BASED_COSTS') === 'FINAL_AFTER_KNOWN_COSTS') {
+    return computeFinalAfterKnownCostsGroup({
+      group,
+      costoNetBase: costoNet,
+      costoGrossBase: costoGross,
+      unknownCostAmountBase: unknownCostAmount,
+      documentationWarningsBase: documentationWarnings,
+      currencyBase: currency,
+      taxTreatment,
+      taxRate,
+      amountBasis,
+      value,
+    });
+  }
 
   let baseAmount;
   switch (mode) {
@@ -389,6 +654,10 @@ export function computePricingGroup(group) {
       baseAmount = resolveAmountByBasis(value, amountBasis, group.quantity);
       break;
     case 'TARGET_PROFIT_AMOUNT': {
+      // Rama BASE_COST_BEFORE_SALE_BASED_COSTS (default u omitido) — sin
+      // cambio respecto a LP-ENG-001/001R: venta = costo base + ganancia
+      // objetivo; los costos derivados de venta se calculan aparte, después
+      // (computeQuoteWithSaleBasedCosts), y pueden erosionar esta utilidad.
       const profit = resolveAmountByBasis(value, amountBasis, group.quantity);
       baseAmount = costoNet + profit;
       break;
@@ -588,4 +857,70 @@ export function computeQuoteWithSaleBasedCosts({ groups, saleBasedCostItems = []
     saleBasedCosts: saleBasedResults,
     quote: aggregateQuote(allGroupResults),
   };
+}
+
+// ── Orquestador canónico de nivel cotización (LP-ARCH-003 v1.2 §2.5/§9, LP-ENG-002) ──
+
+/**
+ * Único entry point puro de nivel cotización que decide, sin heurísticas ni
+ * matching de dominio, cuál de los mecanismos existentes usar — y que
+ * ejecuta el guard de ownership de costos derivados de venta (LP-ARCH-003
+ * v1.2 §2.4/§2.5) en el único lugar donde es posible hacerlo: aquí, donde
+ * `groups` y `saleBasedCostItems` son visibles simultáneamente.
+ * `computePricingGroup` NO puede ejecutar este guard por sí solo — no
+ * conoce `saleBasedCostItems` externos al grupo.
+ *
+ * v1 (LP-ENG-002 §5, aclaración vinculante de Control Tower): NO se intenta
+ * matching heurístico entre `knownSaleBasedCosts` de un grupo y
+ * `saleBasedCostItems` de la cotización (sin comparar amount/rate para
+ * "descubrir" si representan el mismo costo económico, sin IDs de dominio,
+ * sin prorrateo). La regla es deliberadamente amplia: si CUALQUIER grupo usa
+ * `FINAL_AFTER_KNOWN_COSTS` y la cotización declara CUALQUIER
+ * `saleBasedCostItems` de alcance-cotización, se rechaza — cubre tanto el
+ * caso de un costo quote-level no absorbido como el de un posible doble
+ * ownership, sin necesidad de inferir cuál es cuál.
+ *
+ * Contrato (no modifica `computeQuote` ni `computeQuoteWithSaleBasedCosts`):
+ *   A) existe group FINAL_AFTER_KNOWN_COSTS Y saleBasedCostItems.length>0
+ *      → throw FINAL_TARGET_WITH_UNALLOCATED_QUOTE_LEVEL_COSTS
+ *   B) existe group FINAL_AFTER_KNOWN_COSTS Y NO hay saleBasedCostItems
+ *      → computeQuote(groups)
+ *   C) NO existe group FINAL_AFTER_KNOWN_COSTS Y hay saleBasedCostItems
+ *      → computeQuoteWithSaleBasedCosts({ groups, saleBasedCostItems })
+ *   D) NO existe group FINAL_AFTER_KNOWN_COSTS Y NO hay saleBasedCostItems
+ *      → computeQuote(groups)
+ *
+ * @param {object} input
+ * @param {object[]} input.groups - insumos de `computePricingGroup` (algunos
+ *   pueden declarar `pricing.profitTargetBasis='FINAL_AFTER_KNOWN_COSTS'` +
+ *   `knownSaleBasedCosts`).
+ * @param {object[]} [input.saleBasedCostItems] - costos de alcance-cotización
+ *   clásicos (retornos/fianzas), mismo insumo que
+ *   `computeQuoteWithSaleBasedCosts`.
+ */
+export function computeQuoteCanonical({ groups, saleBasedCostItems = [] }) {
+  assert(Array.isArray(groups) && groups.length > 0, 'computeQuoteCanonical requiere al menos un group.');
+  assert(Array.isArray(saleBasedCostItems), 'saleBasedCostItems debe ser un arreglo.');
+
+  const hasFinalGroup = groups.some((g) => {
+    if (!g || !g.pricing || g.pricing.mode !== 'TARGET_PROFIT_AMOUNT') return false;
+    const basis = g.pricing.profitTargetBasis ?? 'BASE_COST_BEFORE_SALE_BASED_COSTS';
+    return basis === 'FINAL_AFTER_KNOWN_COSTS';
+  });
+
+  if (hasFinalGroup && saleBasedCostItems.length > 0) {
+    throw new Error(
+      `[pricingEngine] ${TARGET_PROFIT_BASIS_ERRORS.FINAL_TARGET_WITH_UNALLOCATED_QUOTE_LEVEL_COSTS}: existe al menos un grupo con profitTargetBasis=FINAL_AFTER_KNOWN_COSTS y, además, esta cotización declara saleBasedCostItems de alcance-cotización. v1 no infiere ni prorratea (LP-ARCH-003 v1.2 §2.4/LP-ENG-002 §5): declara el costo como knownSaleBasedCosts del grupo (ownership GROUP_FINAL) y retíralo de saleBasedCostItems, o mantenlo en saleBasedCostItems (ownership QUOTE_LEVEL) y cambia ese grupo a profitTargetBasis=BASE_COST_BEFORE_SALE_BASED_COSTS.`
+    );
+  }
+
+  if (saleBasedCostItems.length > 0) {
+    // hasFinalGroup === false aquí (el caso true ya lanzó arriba) → caso C.
+    return computeQuoteWithSaleBasedCosts({ groups, saleBasedCostItems });
+  }
+
+  // Casos B y D: sin saleBasedCostItems de alcance-cotización, con o sin
+  // grupo FINAL — computeQuote ya invoca computePricingGroup por grupo, que
+  // internamente resuelve FINAL_AFTER_KNOWN_COSTS cuando corresponda.
+  return computeQuote(groups);
 }
