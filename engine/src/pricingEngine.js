@@ -888,6 +888,15 @@ export function aggregateQuote(groupResults) {
   assertFiniteFinancialResult(ivaCostoIdentificado, 'aggregateQuote ivaCostoIdentificado');
   assertFiniteFinancialResult(ivaSobranteReferencial, 'aggregateQuote ivaSobranteReferencial');
 
+  // LP-ENG-002T — QA final Control Tower: unknownSaleAmount y
+  // unknownCostAmount ya se validaron finitos arriba, pero su SUMA
+  // (unknownTaxAmounts.total) es un campo público derivado propio que no se
+  // validaba — la misma clase de fuga que §7 ya cierra para el resto de
+  // agregados. Se calcula explícitamente y se valida antes de usarse, en
+  // vez de inlinearla directo en el objeto de retorno.
+  const unknownTaxTotal = unknownSaleAmount + unknownCostAmount;
+  assertFiniteFinancialResult(unknownTaxTotal, 'aggregateQuote unknownTaxAmounts.total');
+
   return {
     currency,
     operating: {
@@ -914,7 +923,7 @@ export function aggregateQuote(groupResults) {
       unknownTaxAmounts: {
         sale: unknownSaleAmount,
         cost: unknownCostAmount,
-        total: unknownSaleAmount + unknownCostAmount,
+        total: unknownTaxTotal,
       },
       documentationWarnings,
     },

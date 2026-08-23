@@ -777,3 +777,109 @@ test('L) valores normales siguen produciendo exactamente los mismos resultados (
   ]);
   assertClose(quote.quote.operating.utilidadOperacional, 30000, 'aggregateQuote sin cambio para valores normales');
 });
+
+// ── LP-ENG-002T: última fuga — aggregateQuote.taxReference.unknownTaxAmounts.total ──
+// unknownSaleAmount y unknownCostAmount ya se validaban finitos por
+// separado (LP-ENG-002S §7), pero su SUMA (un campo público derivado
+// propio) no se validaba — el mismo patrón de fuga que el resto de
+// agregados ya cierra.
+
+test('M) overflow de unknownTaxAmounts.total (unknownSaleAmount y unknownCostAmount finitos, la suma no) → rechaza NON_FINITE_FINANCIAL_RESULT', () => {
+  // Grupo 1: venta con taxTreatment=UNKNOWN → unknownSaleAmount = ventaNet = 1e308.
+  const groupSaleUnknown = {
+    costItems: [{ amount: 1000, quantityMode: 'FIXED_TOTAL', taxTreatment: 'ZERO_RATE', documentationStatus: 'DOCUMENTED' }],
+    pricing: { mode: 'PRICE_DIRECT', amountBasis: 'TOTAL', value: 1e308, taxTreatment: 'UNKNOWN' },
+  };
+  // Grupo 2: costo con taxTreatment=UNKNOWN → unknownCostAmount = costoNet = 1e308.
+  const groupCostUnknown = {
+    costItems: [{ amount: 1e308, quantityMode: 'FIXED_TOTAL', taxTreatment: 'UNKNOWN', documentationStatus: 'DOCUMENTED' }],
+    pricing: { mode: 'PRICE_DIRECT', amountBasis: 'TOTAL', value: 2000, taxTreatment: 'ZERO_RATE' },
+  };
+
+  const resultSaleUnknown = computePricingGroup(groupSaleUnknown);
+  const resultCostUnknown = computePricingGroup(groupCostUnknown);
+
+  // Cada grupo, y cada campo agregado individual (ventaNet, costoNet, etc.),
+  // sigue siendo perfectamente finito — la fuga es específica de la SUMA
+  // unknownSaleAmount + unknownCostAmount (2e308).
+  assert.ok(Number.isFinite(resultSaleUnknown.ventaNet) && Number.isFinite(resultSaleUnknown.unknownSaleAmount));
+  assert.ok(Number.isFinite(resultCostUnknown.costoNet) && Number.isFinite(resultCostUnknown.unknownCostAmount));
+  assertClose(resultSaleUnknown.unknownSaleAmount, 1e308, 'unknownSaleAmount individual finito');
+  assertClose(resultCostUnknown.unknownCostAmount, 1e308, 'unknownCostAmount individual finito');
+
+  assert.throws(
+    () => aggregateQuote([resultSaleUnknown, resultCostUnknown]),
+    new RegExp(NUMERIC_ERRORS.NON_FINITE_FINANCIAL_RESULT),
+    'unknownSaleAmount(1e308) + unknownCostAmount(1e308) = 2e308 excede Number.MAX_VALUE — debe rechazar, no exponer Infinity en taxReference.unknownTaxAmounts.total'
+  );
+});
+
+test('N) control normal — unknownTaxAmounts.total suma correctamente cuando no hay overflow', () => {
+  const groupSaleUnknown = computePricingGroup({
+    costItems: [{ amount: 500, quantityMode: 'FIXED_TOTAL', taxTreatment: 'ZERO_RATE', documentationStatus: 'DOCUMENTED' }],
+    pricing: { mode: 'PRICE_DIRECT', amountBasis: 'TOTAL', value: 100, taxTreatment: 'UNKNOWN' },
+  });
+  const groupCostUnknown = computePricingGroup({
+    costItems: [{ amount: 200, quantityMode: 'FIXED_TOTAL', taxTreatment: 'UNKNOWN', documentationStatus: 'DOCUMENTED' }],
+    pricing: { mode: 'PRICE_DIRECT', amountBasis: 'TOTAL', value: 1000, taxTreatment: 'ZERO_RATE' },
+  });
+
+  const quote = aggregateQuote([groupSaleUnknown, groupCostUnknown]);
+  assertClose(quote.taxReference.unknownTaxAmounts.sale, 100, 'sale sin cambio');
+  assertClose(quote.taxReference.unknownTaxAmounts.cost, 200, 'cost sin cambio');
+  assertClose(quote.taxReference.unknownTaxAmounts.total, 300, 'total = sale + cost, sin overflow');
+});
+
+test('O) invariant recursivo de salida — todo number en un resultado público válido es finito (null permitido donde el contrato ya lo usa)', () => {
+  function assertNoNonFiniteNumbers(value, path) {
+    if (value === null || value === undefined) return; // null: indicador no calculable, permitido por contrato.
+    if (typeof value === 'number') {
+      assert.ok(Number.isFinite(value), `valor no finito en ${path}: ${value}`);
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item, i) => assertNoNonFiniteNumbers(item, `${path}[${i}]`));
+      return;
+    }
+    if (typeof value === 'object') {
+      for (const [key, v] of Object.entries(value)) {
+        assertNoNonFiniteNumbers(v, `${path}.${key}`);
+      }
+    }
+  }
+
+  // Cotización representativa: mezcla PRICE_DIRECT, FINAL_AFTER_KNOWN_COSTS,
+  // costos UNKNOWN/NOT_DOCUMENTED y warnings de división entre cero — cubre
+  // la mayoría de campos públicos del motor en una sola pasada.
+  const quote = computeQuoteCanonical({
+    groups: [
+      {
+        costItems: [
+          { amount: 116000, quantityMode: 'FIXED_TOTAL', taxTreatment: 'IVA_INCLUDED', taxRate: 0.16, documentationStatus: 'DOCUMENTED' },
+        ],
+        pricing: { mode: 'PRICE_DIRECT', amountBasis: 'TOTAL', value: 150000, taxTreatment: 'IVA_ADDITIONAL', taxRate: 0.16 },
+      },
+      {
+        costItems: [
+          { amount: 50000, quantityMode: 'FIXED_TOTAL', taxTreatment: 'UNKNOWN', documentationStatus: 'NOT_DOCUMENTED' },
+        ],
+        pricing: {
+          mode: 'TARGET_PROFIT_AMOUNT',
+          profitTargetBasis: 'FINAL_AFTER_KNOWN_COSTS',
+          amountBasis: 'TOTAL',
+          value: 10000,
+          taxTreatment: 'ZERO_RATE',
+        },
+        knownSaleBasedCosts: [
+          { costCalculationMode: 'PERCENT_OF_SALE_NET', rate: 0.05, taxTreatment: 'ZERO_RATE', documentationStatus: 'DOCUMENTED' },
+        ],
+      },
+      {
+        costItems: [],
+        pricing: { mode: 'PRICE_DIRECT', amountBasis: 'TOTAL', value: 0, taxTreatment: 'ZERO_RATE' }, // fuerza warnings de división entre cero
+      },
+    ],
+  });
+
+  assertNoNonFiniteNumbers(quote, 'quote');
+});
