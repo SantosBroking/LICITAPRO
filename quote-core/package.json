@@ -1,0 +1,10 @@
+{
+  "name": "@licitapro/quote-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "LP-ORCH-001 — adapter puro entre filas PostgreSQL-shaped (snake_case) y el motor financiero canónico (engine/src/pricingEngine.js). No conoce DB, Supabase, UI ni API.",
+  "scripts": {
+    "test": "node --test"
+  }
+}
