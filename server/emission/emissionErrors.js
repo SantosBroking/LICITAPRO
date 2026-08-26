@@ -75,19 +75,29 @@ class SupplementalCommercialInconsistencyError extends Error {
 
 class PersistenceTransactionFailureError extends Error {
   /**
-   * @param {{ cause: Error, commitOutcome?: 'UNKNOWN', rollbackError?: Error }} opts
+   * @param {{ cause: Error, commitOutcome?: 'UNKNOWN', rollbackError?: Error,
+   *   releaseError?: Error, reconciliationQuoteVersionId?: string|null }} opts
    *   `commitOutcome` is set to 'UNKNOWN' ONLY when this wraps a
    *   transactionCoordinator EmissionCommitOutcomeUnknownError
    *   (LP-EMIT-001C §9.2A) — otherwise omitted entirely (a pre-COMMIT
    *   infrastructure failure has an unambiguous outcome: not committed).
+   *   `reconciliationQuoteVersionId` (LP-EMIT-004R corrección 1) is the
+   *   `quote_version.id` captured by emitQuote.js's INSERT, BEFORE COMMIT was
+   *   attempted — present ONLY alongside `commitOutcome: 'UNKNOWN'`, since
+   *   only then is there a real ambiguity worth reconciling against. Never
+   *   invented; `null`/omitted whenever the INSERT never happened.
    */
-  constructor({ cause, commitOutcome, rollbackError } = {}) {
+  constructor({ cause, commitOutcome, rollbackError, releaseError, reconciliationQuoteVersionId } = {}) {
     super(`PERSISTENCE_TRANSACTION_FAILURE${commitOutcome ? ` (commit_outcome=${commitOutcome})` : ''}: ${cause && cause.message}`);
     this.name = 'PersistenceTransactionFailureError';
     this.code = 'PERSISTENCE_TRANSACTION_FAILURE';
     this.cause = cause;
     if (commitOutcome !== undefined) this.commitOutcome = commitOutcome;
     if (rollbackError !== undefined) this.rollbackError = rollbackError;
+    if (releaseError !== undefined) this.releaseError = releaseError;
+    if (reconciliationQuoteVersionId !== undefined && reconciliationQuoteVersionId !== null) {
+      this.reconciliationQuoteVersionId = reconciliationQuoteVersionId;
+    }
   }
 }
 

@@ -93,8 +93,25 @@ function selectMaterialSupplemental(pricingGroups, lines, supplementalCalculatio
       continue;
     }
 
+    // LP-EMIT-004R corrección 5 — a priced group WITH a valid commercial
+    // anchor is, by construction, a group quote-core's
+    // calculateSupplementalGroups() should always have computed (it returns
+    // ALL ACTIVE OPTIONAL/REFERENCE_ONLY groups, unfiltered). Silently
+    // treating a missing entry as "not material" would hide a real engine/
+    // adapter defect behind an innocuous-looking empty snapshot — that is
+    // exactly the kind of invented "success" §26 (no-invención) forbids.
     const supplemental = supplementalByGroupId.get(pg.id);
-    if (supplemental) material.set(pg.id, supplemental);
+    if (!supplemental) {
+      throw new EmissionInternalInvariantFailureError(
+        `pricing_group ${pg.id} has a valid commercial anchor but quote-core did not return a supplementalCalculations entry for it`,
+      );
+    }
+    if (!supplemental.engine_output || !supplemental.engine_output.groups || !supplemental.engine_output.groups[0]) {
+      throw new EmissionInternalInvariantFailureError(
+        `pricing_group ${pg.id}: material supplemental calculation is missing engine_output.groups[0]`,
+      );
+    }
+    material.set(pg.id, supplemental);
   }
 
   return material;
@@ -195,10 +212,30 @@ function derivePresentedPrice(line, { pricingGroupsById, includedPricingGroupIds
  * Builds `commercial_lines_snapshot` (§4.4) — one entry per ACTIVE
  * `quote_line`, grouped by its section.
  */
+/**
+ * LP-EMIT-004R corrección 6 — `display_order` is only unique WITHIN a
+ * section (LP-SCHEMA-002), so the caller's raw `ORDER BY display_order`
+ * (global, ignoring the section) is not a reliable presentation order across
+ * sections. This snapshot is instead sorted deterministically by
+ * `quote_section.display_order`, then `quote_line.display_order` within that
+ * section — never trusting the input array's own order.
+ */
+function sortLinesBySectionThenLine(lines, sectionsById) {
+  return [...lines].sort((a, b) => {
+    const sectionA = sectionsById.get(a.quote_section_id);
+    const sectionB = sectionsById.get(b.quote_section_id);
+    const sectionOrderA = sectionA ? sectionA.display_order : Number.POSITIVE_INFINITY;
+    const sectionOrderB = sectionB ? sectionB.display_order : Number.POSITIVE_INFINITY;
+    if (sectionOrderA !== sectionOrderB) return sectionOrderA - sectionOrderB;
+    return a.display_order - b.display_order;
+  });
+}
+
 function buildCommercialLinesSnapshot(lines, sections, { pricingGroupsById, includedPricingGroupIdsInEngineOrder, mainEngineOutputGroups, materialSupplementalByGroupId, catalogItemsById }) {
   const sectionsById = new Map(sections.map((s) => [s.id, s]));
+  const orderedLines = sortLinesBySectionThenLine(lines, sectionsById);
 
-  return lines.map((line) => {
+  return orderedLines.map((line) => {
     const section = sectionsById.get(line.quote_section_id);
     if (!section) throw new CommercialSnapshotIncompleteError(`commercial_lines_snapshot: quote_section ${line.quote_section_id} missing for line ${line.id}`);
 

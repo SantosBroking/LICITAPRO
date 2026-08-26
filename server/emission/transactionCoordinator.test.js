@@ -27,11 +27,12 @@ const {
 // failure at any specific SQL statement (by matching a prefix) or on
 // `release()`.
 class FakeClient {
-  constructor({ failOn = {} } = {}) {
+  constructor({ failOn = {}, releaseError = null } = {}) {
     this.calls = [];
     this.released = false;
     this.releaseCallCount = 0;
     this._failOn = failOn; // { [sqlPrefixOrExact]: Error }
+    this._releaseError = releaseError;
   }
 
   async query(sql, params) {
@@ -44,6 +45,7 @@ class FakeClient {
   async release() {
     this.releaseCallCount += 1;
     this.released = true;
+    if (this._releaseError) throw this._releaseError;
   }
 
   _matchFailure(sql) {
@@ -374,4 +376,64 @@ test('the public API accepts no isolationLevel option — a caller-supplied valu
   const isolationCalls = client.calls.filter((c) => c.sql.startsWith('SET TRANSACTION ISOLATION LEVEL'));
   assert.equal(isolationCalls.length, 1);
   assert.equal(isolationCalls[0].sql, 'SET TRANSACTION ISOLATION LEVEL REPEATABLE READ', 'a caller-supplied isolationLevel must never reach the SQL sent to the client');
+});
+
+// ── R1/R2/R3 (LP-EMIT-004R corrección 2) — release() cannot rewrite the
+// already-decided outcome ────────────────────────────────────────────────
+
+test('R1 COMMIT OK + release throws: operation still resolves as success', async () => {
+  const releaseErr = new Error('pool: could not release client (connection already closed)');
+  const client = new FakeClient({ releaseError: releaseErr });
+  const db = makeFakeDb(client);
+
+  const result = await runEmissionTransaction(db, { lock: LOCK, run: async () => 'ok' });
+
+  assert.equal(result, 'ok', 'a release() failure after a successful COMMIT must never turn the emission into a failure');
+  assert.equal(client.releaseCallCount, 1, 'release is still attempted exactly once');
+  const sqlSeq = client.calls.map((c) => c.sql);
+  assert.deepEqual(sqlSeq, ['BEGIN', ISOLATION_LEVEL_SQL, LOCK.sql, 'COMMIT']);
+});
+
+test('R2 COMMIT UNKNOWN + release throws: EMISSION_COMMIT_OUTCOME_UNKNOWN still prevails, commitOutcome stays UNKNOWN, releaseError attached', async () => {
+  const commitErr = new Error('connection lost while awaiting COMMIT response');
+  const releaseErr = new Error('pool: could not release client');
+  const client = new FakeClient({ failOn: { COMMIT: commitErr }, releaseError: releaseErr });
+  const db = makeFakeDb(client);
+
+  await assert.rejects(
+    runEmissionTransaction(db, { lock: LOCK, run: async () => 'ok' }),
+    (err) => {
+      assert.ok(err instanceof EmissionCommitOutcomeUnknownError, 'a release() failure must never replace EMISSION_COMMIT_OUTCOME_UNKNOWN');
+      assert.equal(err.code, 'EMISSION_COMMIT_OUTCOME_UNKNOWN');
+      assert.equal(err.commitOutcome, 'UNKNOWN');
+      assert.equal(err.cause, commitErr);
+      assert.equal(err.releaseError, releaseErr, 'releaseError attached as diagnostic, never replacing the error itself');
+      return true;
+    },
+  );
+  assert.equal(client.releaseCallCount, 1, 'release is still attempted exactly once, never retried');
+});
+
+test('R3 pre-COMMIT failure + release throws: original error prevails, releaseError attached', async () => {
+  const boom = new Error('calculateQuoteDraft rejected: MAIN_INCLUDED_GROUP_REQUIRED');
+  const releaseErr = new Error('pool: could not release client');
+  const client = new FakeClient({ releaseError: releaseErr });
+  const db = makeFakeDb(client);
+
+  await assert.rejects(
+    runEmissionTransaction(db, {
+      lock: LOCK,
+      run: async () => {
+        throw boom;
+      },
+    }),
+    (err) => {
+      assert.equal(err, boom, 'a release() failure must never replace the original pre-COMMIT error');
+      assert.equal(err.releaseError, releaseErr, 'releaseError attached as diagnostic');
+      return true;
+    },
+  );
+  const sqlSeq = client.calls.map((c) => c.sql);
+  assert.deepEqual(sqlSeq, ['BEGIN', ISOLATION_LEVEL_SQL, LOCK.sql, 'ROLLBACK']);
+  assert.equal(client.releaseCallCount, 1, 'release is still attempted exactly once, never retried');
 });

@@ -16,6 +16,7 @@ const {
   buildIncludedPricingGroupIdsInEngineOrder,
   assertMainMappingCardinality,
   selectMaterialSupplemental,
+  buildCommercialLinesSnapshot,
 } = require('./buildCommercialSnapshots.js');
 const { EmissionInternalInvariantFailureError, SupplementalCommercialInconsistencyError } = require('./emissionErrors.js');
 
@@ -442,6 +443,90 @@ test('O. COMMIT throws: PERSISTENCE_TRANSACTION_FAILURE with commit_outcome=UNKN
     return true;
   });
   assert.equal(callCount, 1, 'no automatic retry — acquireClient/the whole operation runs exactly once');
+});
+
+// ── Q. reconciliationQuoteVersionId sobrevive un COMMIT UNKNOWN (LP-EMIT-004R corrección 1) ──
+
+test('Q. COMMIT throws: PersistenceTransactionFailureError carries reconciliationQuoteVersionId captured right after the INSERT', async () => {
+  const handlers = happyPathHandlers({ newVersionId: 'qv-reconcile-77' });
+  const commitErr = new Error('connection lost awaiting COMMIT');
+  handlers.push({ match: 'COMMIT', respond: commitErr });
+  const client = new FakeClient(handlers);
+  const db = makeDb(client);
+
+  await assert.rejects(emitQuote({ db, quoteId: QUOTE_ID }), (err) => {
+    assert.equal(err.code, 'PERSISTENCE_TRANSACTION_FAILURE');
+    assert.equal(err.commitOutcome, 'UNKNOWN');
+    assert.equal(err.reconciliationQuoteVersionId, 'qv-reconcile-77', 'the new_version_id captured before COMMIT must survive into the external error, as a reconciliation anchor');
+    return true;
+  });
+});
+
+test('Q2. pre-COMMIT failure (before INSERT quote_version runs): no reconciliationQuoteVersionId is ever invented', async () => {
+  const handlers = happyPathHandlers();
+  const validateHandler = handlers.find((h) => h.match.test && h.match.test('SELECT * FROM validate_quote_for_emission($1)'));
+  validateHandler.respond = { rows: [{ check_name: 'issuer_present', passed: false, detail: 'x' }, ...allPassedChecks().slice(1)] };
+  const client = new FakeClient(handlers);
+  const db = makeDb(client);
+
+  await assert.rejects(emitQuote({ db, quoteId: QUOTE_ID }), (err) => {
+    assert.equal(err.code, 'QUOTE_NOT_EMITTABLE');
+    assert.equal(err.reconciliationQuoteVersionId, undefined);
+    return true;
+  });
+});
+
+// ── R4. supplemental material sin entrada calculada -> invariant failure (LP-EMIT-004R corrección 5) ──
+
+test('R4. selectMaterialSupplemental: anchored group with pricing_mode set but NO matching supplementalCalculations entry -> EMISSION_INTERNAL_INVARIANT_FAILURE', () => {
+  const anchoredOptional = { id: 'pg-opt', quote_total_role: 'OPTIONAL', pricing_mode: 'PRICE_DIRECT' };
+  const lines = [{ pricing_group_id: 'pg-opt', line_status: 'OPTIONAL' }];
+  assert.throws(
+    () => selectMaterialSupplemental([anchoredOptional], lines, []), // no supplementalCalculations at all
+    (err) => err instanceof EmissionInternalInvariantFailureError && err.code === 'EMISSION_INTERNAL_INVARIANT_FAILURE',
+  );
+});
+
+test('R5. selectMaterialSupplemental: material supplemental with missing engine_output.groups[0] -> EMISSION_INTERNAL_INVARIANT_FAILURE', () => {
+  const anchoredOptional = { id: 'pg-opt', quote_total_role: 'OPTIONAL', pricing_mode: 'PRICE_DIRECT' };
+  const lines = [{ pricing_group_id: 'pg-opt', line_status: 'OPTIONAL' }];
+  const supplementalCalculations = [{ pricing_group_id: 'pg-opt', quote_total_role: 'OPTIONAL', engine_input: {}, engine_output: { groups: [] } }];
+  assert.throws(
+    () => selectMaterialSupplemental([anchoredOptional], lines, supplementalCalculations),
+    (err) => err instanceof EmissionInternalInvariantFailureError && err.code === 'EMISSION_INTERNAL_INVARIANT_FAILURE',
+  );
+});
+
+// ── S. orden comercial sección -> línea (LP-EMIT-004R corrección 6) ──────
+
+test('S. buildCommercialLinesSnapshot orders by section.display_order then line.display_order, ignoring input order and global display_order collisions', () => {
+  const sections = [
+    { id: 'sec-B', display_order: 2, label: 'Sección B' },
+    { id: 'sec-A', display_order: 1, label: 'Sección A' },
+  ];
+  // display_order is only unique WITHIN a section: both sections have a
+  // line with display_order=1 and a line with display_order=2. Input array
+  // is deliberately interleaved and out of any useful order.
+  const lines = [
+    { id: 'l-B2', quote_section_id: 'sec-B', display_order: 2, pricing_group_id: null, origin_kind: 'SERVICE', catalog_item_id: null, commercial_description: 'B2', technical_description: null, quantity: '1', unit_label: null, line_status: 'INFORMATIONAL' },
+    { id: 'l-A1', quote_section_id: 'sec-A', display_order: 1, pricing_group_id: null, origin_kind: 'SERVICE', catalog_item_id: null, commercial_description: 'A1', technical_description: null, quantity: '1', unit_label: null, line_status: 'INFORMATIONAL' },
+    { id: 'l-B1', quote_section_id: 'sec-B', display_order: 1, pricing_group_id: null, origin_kind: 'SERVICE', catalog_item_id: null, commercial_description: 'B1', technical_description: null, quantity: '1', unit_label: null, line_status: 'INFORMATIONAL' },
+    { id: 'l-A2', quote_section_id: 'sec-A', display_order: 2, pricing_group_id: null, origin_kind: 'SERVICE', catalog_item_id: null, commercial_description: 'A2', technical_description: null, quantity: '1', unit_label: null, line_status: 'INFORMATIONAL' },
+  ];
+
+  const snapshot = buildCommercialLinesSnapshot(lines, sections, {
+    pricingGroupsById: new Map(),
+    includedPricingGroupIdsInEngineOrder: [],
+    mainEngineOutputGroups: [],
+    materialSupplementalByGroupId: new Map(),
+    catalogItemsById: new Map(),
+  });
+
+  assert.deepEqual(
+    snapshot.map((s) => s.line.quote_line_id),
+    ['l-A1', 'l-A2', 'l-B1', 'l-B2'],
+    'must be ordered by section.display_order (A before B) then line.display_order within each section — never by raw input order or a global display_order sort',
+  );
 });
 
 // ── P. endpoint no devuelve internal calculation ─────────────────────────

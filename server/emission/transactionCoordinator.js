@@ -153,6 +153,24 @@ function isLockNotAvailable(err) {
  *   - more than one client acquired for a single call,
  *   - automatic retry of COMMIT.
  *
+ * LP-EMIT-004R corrección 2 — release() cannot rewrite the outcome:
+ *   A `client.release()` call that itself throws must NEVER change what this
+ *   function resolves/rejects with. Concretely:
+ *     - a successful COMMIT (`result` already computed) stays a success even
+ *       if the subsequent `release()` throws — the release failure is not
+ *       surfaced as a rejection at all (there is no error object to attach
+ *       it to without inventing a fake failure for an operation that, from
+ *       PostgreSQL's point of view, genuinely succeeded);
+ *     - an `EmissionCommitOutcomeUnknownError` (COMMIT itself threw) is never
+ *       replaced by a release failure — `commitOutcome` stays `'UNKNOWN'`,
+ *       and the release failure is attached as `.releaseError` on that same
+ *       error object;
+ *     - any pre-COMMIT error (lock conflict, run() throwing, etc.) is never
+ *       replaced by a release failure either — it is attached as
+ *       `.releaseError` on that same original error object;
+ *   `release()` is still attempted exactly once in every case, and is never
+ *   retried.
+ *
  * @param {{ acquireClient: () => Promise<any> }} db
  * @param {{
  *   lock: { sql: string, params?: any[] },
@@ -174,6 +192,14 @@ async function runEmissionTransaction(db, opts) {
   const client = await db.acquireClient();
 
   let began = false;
+  // Final outcome is decided entirely inside this try/catch, BEFORE
+  // release() is ever attempted (LP-EMIT-004R corrección 2) — release() runs
+  // afterwards, exactly once, and can only annotate that already-decided
+  // outcome with a diagnostic `.releaseError`, never replace it.
+  let succeeded = false;
+  let successValue;
+  let errorToThrow = null;
+
   try {
     // Step 2: BEGIN
     await client.query('BEGIN');
@@ -201,6 +227,8 @@ async function runEmissionTransaction(db, opts) {
     // pre-commit failure path above.
     try {
       await client.query('COMMIT');
+      succeeded = true;
+      successValue = result;
     } catch (commitErr) {
       const outcomeErr = new EmissionCommitOutcomeUnknownError(commitErr);
       // Best-effort ROLLBACK — see class doc: never changes commitOutcome,
@@ -210,17 +238,9 @@ async function runEmissionTransaction(db, opts) {
       } catch (rollbackErr) {
         outcomeErr.rollbackError = rollbackErr;
       }
-      throw outcomeErr;
+      errorToThrow = outcomeErr;
     }
-
-    return result;
   } catch (err) {
-    if (err instanceof EmissionCommitOutcomeUnknownError) {
-      // Already fully handled (best-effort ROLLBACK already attempted)
-      // inside the COMMIT try/catch above — do not attempt a second
-      // ROLLBACK here, and do not reinterpret/replace this error.
-      throw err;
-    }
     if (began) {
       try {
         await client.query('ROLLBACK');
@@ -231,13 +251,24 @@ async function runEmissionTransaction(db, opts) {
         err.rollbackError = rollbackErr;
       }
     }
-    throw err;
-  } finally {
-    // Step 8/9: always release, exactly once, only after commit/rollback has
-    // settled (this `finally` only runs once the try/catch body above,
-    // including any awaited ROLLBACK, has fully resolved).
-    await client.release();
+    errorToThrow = err;
   }
+
+  // Step 8/9: always release, exactly once, only after commit/rollback has
+  // settled. Its own failure is ONLY ever recorded as a diagnostic
+  // `.releaseError` on whatever error is already about to be thrown — it
+  // never converts a success into a failure, and never replaces the error
+  // already decided above (LP-EMIT-004R corrección 2 / R1-R3).
+  try {
+    await client.release();
+  } catch (releaseErr) {
+    if (errorToThrow) errorToThrow.releaseError = releaseErr;
+    // else: succeeded === true — a release failure after a successful
+    // COMMIT does not change the outcome; nothing to attach it to.
+  }
+
+  if (succeeded) return successValue;
+  throw errorToThrow;
 }
 
 module.exports = {

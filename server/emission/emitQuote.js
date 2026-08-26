@@ -57,6 +57,14 @@ async function emitQuote({ db, quoteId, actorId = null }) {
 
   const { calculateQuoteDraft, QUOTE_ENGINE_METADATA } = await loadQuoteCore();
 
+  // LP-EMIT-004R corrección 1 — kept OUTSIDE run(client)'s closure scope on
+  // purpose: if transactionCoordinator's COMMIT throws, `run(client)` has
+  // already returned and its own local variables are gone, but this
+  // function-scoped variable survives so the caller can still recover the
+  // `quote_version.id` that was inserted (LP-EMIT-001C's reconciliation
+  // anchor) even when the commit outcome is indeterminate.
+  let reconciliationQuoteVersionId = null;
+
   try {
     return await runEmissionTransaction(db, {
       lock: { sql: 'SELECT id, status FROM quote WHERE id = $1 FOR UPDATE NOWAIT', params: [quoteId] },
@@ -158,6 +166,10 @@ async function emitQuote({ db, quoteId, actorId = null }) {
           ],
         );
 
+        // LP-EMIT-004R corrección 1 — captured the instant the INSERT
+        // returns, BEFORE anything else (including COMMIT) can fail.
+        reconciliationQuoteVersionId = newVersionId;
+
         // ── Paso 11: INSERT quote_version_calculation, 1:1, misma transacción ──
         await client.query(
           `INSERT INTO quote_version_calculation
@@ -214,10 +226,18 @@ async function emitQuote({ db, quoteId, actorId = null }) {
       // EMISSION_COMMIT_OUTCOME_UNKNOWN to the single external canonical
       // code PERSISTENCE_TRANSACTION_FAILURE, preserving commit_outcome,
       // cause, and rollbackError. No retry, no re-emission, ever.
+      // LP-EMIT-004R corrección 1 — also carries reconciliationQuoteVersionId
+      // (the quote_version.id captured before COMMIT was attempted) so a
+      // future reconciliation step has an anchor to query against.
+      // LP-EMIT-004R corrección 2 — also carries releaseError, if the
+      // coordinator's own client.release() failed on top of the indeterminate
+      // COMMIT (diagnostic only — never surfaced over HTTP).
       throw new PersistenceTransactionFailureError({
         cause: err.cause,
         commitOutcome: err.commitOutcome,
         rollbackError: err.rollbackError,
+        releaseError: err.releaseError,
+        reconciliationQuoteVersionId,
       });
     }
     // EmissionConcurrencyConflictError, QuoteNotEmittableError,
@@ -237,7 +257,7 @@ async function emitQuote({ db, quoteId, actorId = null }) {
       'SUPPLEMENTAL_COMMERCIAL_INCONSISTENCY',
     ]);
     if (err && KNOWN_CODES.has(err.code)) throw err;
-    throw new PersistenceTransactionFailureError({ cause: err });
+    throw new PersistenceTransactionFailureError({ cause: err, releaseError: err && err.releaseError });
   }
 }
 
