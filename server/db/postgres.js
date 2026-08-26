@@ -55,17 +55,7 @@ function createPostgresDb(config) {
       // eslint-disable-next-line global-require
       const { Client } = require('pg');
       const client = new Client({ connectionString: config.connectionString });
-      try {
-        await client.connect();
-      } catch (connectErr) {
-        // LP-EMIT-DIAG-001 — TEMPORARY: tag the stage so a caller's
-        // diagnostic log can distinguish "never connected" from a failure
-        // inside the transaction itself, without reading/logging the error's
-        // own message (which for a `pg` connect failure can embed the
-        // connection string). Does not change what is thrown.
-        if (connectErr && !connectErr.stage) connectErr.stage = 'DB_ACQUIRE';
-        throw connectErr;
-      }
+      await client.connect();
       return {
         query: (sql, params) => client.query(sql, params),
         release: () => client.end(),
