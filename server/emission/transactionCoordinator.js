@@ -200,15 +200,26 @@ async function runEmissionTransaction(db, opts) {
   let successValue;
   let errorToThrow = null;
 
+  // LP-EMIT-DIAG-001 — TEMPORARY: coarse-grained stage tracking for this
+  // coordinator's own steps only (it has no visibility into what run()
+  // does internally — the caller, e.g. emitQuote.js, is responsible for
+  // tagging its own finer-grained stages on any error it throws BEFORE it
+  // reaches this function; `stage` here is only ever used as a fallback via
+  // `if (!err.stage) err.stage = stage`, so a finer tag already present is
+  // never overwritten). Does not change what is thrown or returned.
+  let stage = 'BEGIN';
+
   try {
     // Step 2: BEGIN
     await client.query('BEGIN');
     began = true;
 
     // Step 3: SET TRANSACTION ISOLATION LEVEL REPEATABLE READ (fixed literal)
+    stage = 'ISOLATION';
     await client.query(ISOLATION_LEVEL_SQL);
 
     // Step 4: fail-fast lock (equivalent to SELECT ... FOR UPDATE NOWAIT)
+    stage = 'LOCK';
     try {
       await client.query(opts.lock.sql, opts.lock.params);
     } catch (lockErr) {
@@ -220,17 +231,20 @@ async function runEmissionTransaction(db, opts) {
 
     // Step 5/6: caller-defined reads, pure JS calculation, and writes — all
     // executed against this same `client`, while the transaction stays open.
+    stage = 'RUN';
     const result = await opts.run(client);
 
     // Step 7: COMMIT — isolated in its own try/catch so a COMMIT failure can
     // be given its own (indeterminate-outcome) handling, distinct from every
     // pre-commit failure path above.
+    stage = 'COMMIT';
     try {
       await client.query('COMMIT');
       succeeded = true;
       successValue = result;
     } catch (commitErr) {
       const outcomeErr = new EmissionCommitOutcomeUnknownError(commitErr);
+      outcomeErr.stage = 'COMMIT';
       // Best-effort ROLLBACK — see class doc: never changes commitOutcome,
       // never replaces outcomeErr, never retried.
       try {
@@ -241,6 +255,7 @@ async function runEmissionTransaction(db, opts) {
       errorToThrow = outcomeErr;
     }
   } catch (err) {
+    if (err && !err.stage) err.stage = stage;
     if (began) {
       try {
         await client.query('ROLLBACK');
