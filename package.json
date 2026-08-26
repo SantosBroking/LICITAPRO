@@ -2,5 +2,8 @@
   "name": "licitapro",
   "version": "1.0.0",
   "private": true,
-  "engines": { "node": "22.x" }
+  "engines": { "node": "22.x" },
+  "dependencies": {
+    "pg": "^8.11.0"
+  }
 }
