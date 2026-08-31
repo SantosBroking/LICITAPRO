@@ -10,6 +10,13 @@ import { STATUSES, FINAL_STATUS, KANBAN_COLS, TIPOS_PROCEDIMIENTO, DEPENDENCIAS_
 import { fmt, daysUntil, alertLevel, TODAY, NOW, uid, normalizeProjectName, generarFolioProyecto, generarFolioOC, generarFolioCotizacion } from '../lib/utils.js';
 import { Badge, AlertChip, Inp, EmptyState, ConfirmAction, NumInput, DeleteConfirmModal } from '../ui/primitives.js';
 import { getPermissions, canProjectTab, getAllowedSubTabs } from '../lib/permissions.js'; // Fase 1C + fix navegación + Fase 2A6 (sub-nav de Operación)
+// GO-LIVE-02 -- fallback puro y de solo lectura: cuando el rol es admin,
+// App.js pasa el `project` RAW (sin pasar por sanitizeProjectForRole), así
+// que documentHealth nunca viene adjunto ahí -- se calcula aquí mismo en
+// ese caso. Para 'empleado', project.documentHealth ya viene calculado por
+// sanitizeProjectForRole (ver data_sanitize.js) y se usa tal cual, nunca se
+// recalcula dos veces.
+import { computeDocumentHealth } from '../lib/document_health.js';
 import { sb, createInboxItem, listInboxItems } from '../lib/supabase.js'; // Fase 1C — directorio de usuarios activos; Fase 3D-B1 — creación de firma_documento; Fase 3D-B1.1 — reconocer firmas de OC en Inbox
 import CotizacionTab from './Cotizacion.js';
 import CotizacionOperativa from './CotizacionOperativa.js'; // Fase 2A4
@@ -284,7 +291,7 @@ export function ProjectsList({ projects, vehicles, onNav, onUpdate, user }) {
 
 export function ProjectForm({ project, companies, config, onSave, onCancel, user, onSaveConfig, projects }) {
   const isE = !!project;
-  const [p, sP] = useState(project || { id:uid('proj'), name:'', dependencia:'', nivelGobierno:'', municipio:'', company:'', numLicitacion:'', status:'prospecto', tipoProcedimiento:'', productType:'Patrullas y vehículos', responsable:'', montoEstimado:0, probability:50, description:'', observaciones:'', fechaPublicacion:'', fechaAclaraciones:'', fechaPropuesta:'', fechaFallo:'', fechaContrato:'', clienteEmpresaId:'', clienteRfc:'', clienteDomicilio:'', clienteCorreo:'', clienteTelefono:'', notes:[], activity:[], preguntas:[], docs:[], preparation:{}, cotizacion:{}, folioProyecto:'', tipoOperacion:'Licitación pública' });
+  const [p, sP] = useState(project || { id:uid('proj'), name:'', dependencia:'', nivelGobierno:'', municipio:'', company:'', empresaLicitante:'', numLicitacion:'', status:'prospecto', tipoProcedimiento:'', productType:'Patrullas y vehículos', responsable:'', montoEstimado:0, probability:50, description:'', observaciones:'', fechaPublicacion:'', fechaAclaraciones:'', fechaPropuesta:'', fechaFallo:'', fechaContrato:'', clienteEmpresaId:'', clienteRfc:'', clienteDomicilio:'', clienteCorreo:'', clienteTelefono:'', notes:[], activity:[], preguntas:[], docs:[], preparation:{}, cotizacion:{}, folioProyecto:'', tipoOperacion:'Licitación pública' });
   const set = (k,v) => sP(prev=>({...prev,[k]:v}));
   const [basesMsg, setBasesMsg] = useState('');
   // ── Fase 1C: directorio de usuarios activos (user_profiles), reemplaza config.equipo ──
@@ -446,7 +453,20 @@ export function ProjectForm({ project, companies, config, onSave, onCancel, user
         h(Inp, { label:'Nivel de gobierno', value:p.nivelGobierno, onChange:v=>set('nivelGobierno',v), options:[...DEPENDENCIAS_COMUNES,...(config?.customStatuses||[])] }),
         h(Inp, { label:'Dependencia (nombre)', value:p.dependencia, onChange:v=>set('dependencia',v), placeholder:'Dirección de Desarrollo Urbano…' }),
         h(Inp, { label:'Municipio / Ciudad', value:p.municipio||'', onChange:v=>set('municipio',v), placeholder:'Tultitlán, Tlalnepantla…' }),
-        h(Inp, { label:'Empresa licitante', value:p.company, onChange:v=>set('company',v), options:companies.map(c=>c.name) }),
+        // GO-LIVE-01 (corrección v2 -- CORRECCIÓN 2) -- 'company' =
+        // EMPRESA OPERADORA interna del proyecto (quién opera/factura
+        // internamente). 'empresaLicitante' = sociedad que formalmente
+        // presentó/participó en la licitación, CUANDO SE CONOCE -- es un
+        // concepto independiente, no un alias condicional de 'company'.
+        // Puede coincidir con la operadora (en cuyo caso se captura
+        // igual, con el mismo nombre -- NO se infiere ni se autocompleta
+        // desde 'company' en ningún caso) o puede ser una sociedad
+        // distinta (ver caso real Chimalhuacán: operadora=BROKING AND
+        // BRANDS GROUP, licitante=SATHRI S.A.P.I. DE C.V.). Vacío
+        // significa exclusivamente "todavía no definida/conocida" o
+        // "no aplica" -- nunca "es igual a la operadora".
+        h(Inp, { label:'Empresa operadora', value:p.company, onChange:v=>set('company',v), options:companies.map(c=>c.name) }),
+        h(Inp, { label:'Empresa licitante', value:p.empresaLicitante||'', onChange:v=>set('empresaLicitante',v), placeholder:'Sociedad que presentó la licitación (puede ser la misma que la operadora) — dejar vacío si aún no se conoce o no aplica' }),
         h(Inp, { label:'Núm. de licitación', value:p.numLicitacion, onChange:v=>set('numLicitacion',v), placeholder:'LA-019GYN999-E1-2025' }),
         (() => {
           if (usuariosActivos.length === 0) return h(Inp, { label:'Responsable', value:p.responsable, onChange:v=>set('responsable',v), placeholder:'Sin usuarios activos disponibles' });
@@ -876,6 +896,37 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
         ccPendientes.map((p,i)=>h('li', { key:i, style:{ fontSize:12, color:'#78350f', lineHeight:1.7 } }, p.t)),
       ),
     ),
+    // GO-LIVE-02 -- Salud documental: X/Y + checklist de 8 renglones,
+    // calculado por document_health.js (sin IA) desde project.documentHealth
+    // (ya viene adjunto por sanitizeProjectForRole/sanitizeProjectsForRole en
+    // App.js — visible para admin Y empleado, sin excepción; nunca expone
+    // el documento/monto en sí, solo el ✓/⚠ derivado). Estado OPERATIVO
+    // (project.status, ej. COBRADO) y estado DOCUMENTAL (este bloque) se
+    // muestran por separado a propósito -- uno nunca cambia al otro.
+    (() => {
+      const dh = project.documentHealth || computeDocumentHealth(project);
+      const iconoSeveridad = { CRITICO:'🔴', PENDIENTE:'🟡', INFO:'⚪' };
+      const renglonesVisibles = dh.items.filter(i => i.aplica);
+      return h('div', { className:'card', style:{ marginBottom:16 } },
+        h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4, flexWrap:'wrap', gap:8 } },
+          h('div', { style:{ fontSize:14, fontWeight:500 } }, 'Salud documental'),
+          h('div', { style:{ fontSize:13, fontWeight:600, color: dh.resumen.CRITICO>0?'var(--red)':dh.resumen.PENDIENTE>0?'var(--amber)':'var(--green)' } }, dh.completos+'/'+dh.total),
+        ),
+        h('div', { style:{ fontSize:11, color:'var(--t2)', marginBottom:12 } }, 'Completitud de expediente para la etapa actual del proyecto — no cambia el estatus operativo.'),
+        renglonesVisibles.length === 0
+          ? h('div', { style:{ fontSize:12, color:'var(--t2)' } }, 'Sin documentación aplicable todavía para esta etapa.')
+          : h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(180px,1fr))', gap:8 } },
+              renglonesVisibles.map(item => h('div', {
+                key:item.key,
+                onClick: item.presente ? undefined : () => setTab('docs'),
+                style:{ display:'flex', alignItems:'center', gap:6, fontSize:12, padding:'6px 8px', borderRadius:'var(--r)', cursor: item.presente?'default':'pointer', background: item.presente?'transparent':'var(--bg2)' },
+              },
+                h('span', null, item.presente ? '✓' : iconoSeveridad[item.severidad]||'⚪'),
+                h('span', { style:{ color: item.presente?'var(--t2)':'var(--t1)', fontWeight: item.presente?400:500 } }, item.label),
+              )),
+            ),
+      );
+    })(),
     h('div', { className:'acciones-row', style:{ display:'flex', gap:8, marginBottom:20, flexWrap:'wrap' } },
       h('button', { onClick:()=>setTab('cotizacion') }, 'Ir a Cotización'),
       h('button', { onClick:()=>setTab('operacion') }, 'Ir a Operación'),
@@ -907,7 +958,7 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
       h('div', { className:'grid-2 mob-1col', style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 } },
       h('div', { className:'card' },
         h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:14 } }, 'Datos del proyecto'),
-        [['Nivel de gobierno',project.nivelGobierno],['Municipio',project.municipio],['Dependencia',project.dependencia],['Tipo procedimiento',project.tipoProcedimiento],['Tipo producto',project.productType],['Empresa',project.company],['Responsable',project.responsable]].map(([l,v],i)=>
+        [['Nivel de gobierno',project.nivelGobierno],['Municipio',project.municipio],['Dependencia',project.dependencia],['Tipo procedimiento',project.tipoProcedimiento],['Tipo producto',project.productType],['Empresa operadora',project.company],['Empresa licitante',project.empresaLicitante],['Responsable',project.responsable]].map(([l,v],i)=>
           h('div', { key:i, style:{ display:'flex', justifyContent:'space-between', padding:'9px 0', borderBottom:'.5px solid var(--b3)', fontSize:13 } },
             h('span', { style:{ color:'var(--t2)' } }, l), h('span', { style:{ fontWeight:500 } }, v||'—'),
           )

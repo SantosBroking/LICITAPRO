@@ -3,6 +3,10 @@ import { h, useMemo } from '../lib/core.js';
 import { STATUSES, FINAL_STATUS, esProyectoPerdido, categoriaProyecto, CATEGORIA_PROYECTO_LABELS } from '../lib/constants.js';
 import { fmt, fmtNum, daysUntil, alertLevel } from '../lib/utils.js';
 import { Metric, Badge, AlertChip, EmptyState } from '../ui/primitives.js';
+// GO-LIVE-02 -- mismo fallback que Projects.js: admin recibe `projects` RAW
+// desde App.js (sin sanitizeProjectForRole), así que documentHealth no
+// viene adjunto ahí -- se calcula aquí. Para 'empleado' ya viene calculado.
+import { computeDocumentHealth } from '../lib/document_health.js';
 
 export default function Dashboard({ projects, vehicles, companies, onNav, onUpdate }) {
   const ac   = projects.filter(p => !FINAL_STATUS.includes(p.status));
@@ -48,6 +52,27 @@ export default function Dashboard({ projects, vehicles, companies, onNav, onUpda
     return true;
   }).sort((a, b) => a.days - b.days);  // más urgente/vencido primero
 
+  // GO-LIVE-02 (corrección v2 -- CORRECCIÓN 4) -- "Documentación
+  // pendiente": compacto, prioriza CRITICO > PENDIENTE, oculta INFO aquí a
+  // propósito (INFO ya se ve en el detalle del proyecto -- este resumen es
+  // para no generar ruido excesivo en el panel principal). El filtro usado
+  // es `esProyectoPerdido` (perdida/cancelada), NO `FINAL_STATUS` --
+  // es intencional que 'cobrado' NO se excluya aquí: un proyecto cobrado
+  // sin evidencia de cobro/factura/entrega/etc. sigue siendo un pendiente
+  // documental real que el usuario debe poder ver y resolver, y
+  // document_health.js ya solo topa en INFO a perdida/cancelada (nunca a
+  // cobrado). Confundir esto con FINAL_STATUS (que sí agrupa cobrado junto
+  // con perdida/cancelada para otras métricas del Dashboard) sería un
+  // error -- de ahí este comentario explícito.
+  const docsPendientesDash = [];
+  projects.filter(p => !esProyectoPerdido(p.status)).forEach(p => {
+    const dh = p.documentHealth || computeDocumentHealth(p);
+    dh.pendientes.filter(i => i.severidad === 'CRITICO' || i.severidad === 'PENDIENTE')
+      .forEach(item => docsPendientesDash.push({ project:p, item }));
+  });
+  const ordenSev = { CRITICO:0, PENDIENTE:1 };
+  docsPendientesDash.sort((a,b) => ordenSev[a.item.severidad]-ordenSev[b.item.severidad]);
+
   if (projects.length === 0)
     return h('div', null,
       h('div', { className:'page-title', style:{ marginBottom:20 } }, 'Panel de control'),
@@ -80,6 +105,19 @@ export default function Dashboard({ projects, vehicles, companies, onNav, onUpda
             ),
           )
         )
+      ),
+    ),
+    docsPendientesDash.length > 0 && h('div', { className:'card', style:{ marginBottom:20 } },
+      h('div', { style:{ fontSize:14, fontWeight:500, marginBottom:12 } }, '📄 Documentación pendiente'),
+      h('div', { style:{ display:'flex', flexDirection:'column', gap:6 } },
+        docsPendientesDash.slice(0,8).map((d,i) =>
+          h('div', { key:i, onClick:()=>onNav('project_detail',d.project.id),
+            style:{ padding:'8px 12px', borderRadius:'var(--r)', fontSize:12, cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, background: d.item.severidad==='CRITICO'?'var(--red-bg,rgba(226,75,74,.08))':'var(--amber-bg,rgba(239,159,39,.08))' } },
+            h('div', { style:{ flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, h('strong', null, d.project.name), ' — falta ', d.item.label),
+            h('div', { style:{ fontWeight:600, fontSize:11, padding:'2px 8px', borderRadius:8, whiteSpace:'nowrap', color: d.item.severidad==='CRITICO'?'var(--red)':'var(--amber)' } }, d.item.severidad),
+          )
+        ),
+        docsPendientesDash.length > 8 && h('div', { style:{ fontSize:11, color:'var(--t2)', marginTop:2 } }, '+ '+(docsPendientesDash.length-8)+' pendiente(s) más — ver cada proyecto para el detalle.'),
       ),
     ),
     h('div', { className:'card' },
