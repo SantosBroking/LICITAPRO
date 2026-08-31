@@ -1,0 +1,66 @@
+name: Control Tower GO-LIVE bootstrap
+on:
+  push:
+    branches:
+      - feat/go-live-empresa-licitante-salud-documental
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[ct-bootstrap-done]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Reconstruct verified files
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .control-tower/zip.part* > /tmp/files.b64
+          base64 -d /tmp/files.b64 > /tmp/files.zip
+          echo "2ce0c53048eb6fd77a897ae1a56f9394269fd1b07f109798f3fff422261f3fb5  /tmp/files.zip" | sha256sum -c -
+          rm -rf /tmp/final
+          mkdir -p /tmp/final
+          unzip -q /tmp/files.zip -d /tmp/final
+          for f in src/lib/constants.js src/lib/data_sanitize.js src/lib/document_health.js src/lib/document_health.test.js src/package.json src/views/Dashboard.js src/views/Projects.js; do
+            test -f "/tmp/final/$f"
+            mkdir -p "$(dirname "$f")"
+            cp "/tmp/final/$f" "$f"
+          done
+
+      - name: Tests and scope checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test src/lib/document_health.test.js
+          node --check src/lib/constants.js
+          node --check src/lib/data_sanitize.js
+          node --check src/lib/document_health.js
+          node --check src/lib/document_health.test.js
+          node --check src/views/Dashboard.js
+          node --check src/views/Projects.js
+          test -z "$(git diff --name-only -- api server)"
+
+      - name: Commit clean feature state
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .control-tower
+          rm -f .github/workflows/control-tower-apply-golive.yml
+          expected="$(printf '%s\n' src/lib/constants.js src/lib/data_sanitize.js src/lib/document_health.js src/lib/document_health.test.js src/package.json src/views/Dashboard.js src/views/Projects.js | sort)"
+          actual="$(git diff --name-only origin/main...HEAD; git diff --name-only)"
+          actual="$(printf '%s\n' "$actual" | grep -v '^\.control-tower/' | grep -v '^\.github/workflows/control-tower-apply-golive.yml$' | sort -u)"
+          test "$actual" = "$expected"
+          git config user.name "SATHIA Control Tower"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(go-live): empresa licitante y salud documental [ct-bootstrap-done]"
+          git push origin HEAD:${GITHUB_REF_NAME}
