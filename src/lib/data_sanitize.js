@@ -18,6 +18,12 @@
 // explícita — nunca se hace spread completo de lo que manda el empleado.
 
 import { getPermissions } from './permissions.js';
+// GO-LIVE-02 -- motor determinístico de salud documental (sin IA). Se
+// importa aquí (no al revés) por el mismo principio que getPermissions:
+// data_sanitize.js conoce la FORMA de un project y decide qué expone según
+// rol; document_health.js solo calcula, a partir del project COMPLETO
+// (sin sanear), qué documentos se esperan y cuáles faltan.
+import { computeDocumentHealth } from './document_health.js';
 
 // ════════════════════════════════════════════════════════════════════
 // LECTURA
@@ -205,10 +211,24 @@ export function sanitizeFirmasForRole(firmas, user) {
 }
 
 export function sanitizeProjectForRole(project, user) {
-  if (getPermissions(user).verCostosInternos) return project; // admin: sin cambios
   if (!project) return project;
+  // GO-LIVE-02 -- documentHealth se calcula SIEMPRE a partir del `project`
+  // COMPLETO, ANTES de cualquier sanitización de rol (docs/cotizacion/OC).
+  // Es intencional: el resumen derivado (✓/⚠ por renglón, conteos) nunca
+  // expone el contenido de un documento restringido (nombre de archivo,
+  // categoría financiera, monto) -- solo si "existe evidencia" de esa
+  // categoría o no. Esto es lo que permite que Eduardo/Mauricio (empleado)
+  // vean sus pendientes documentales reales sin abrir ninguna brecha en
+  // el gate ya existente de margen/utilidad/retornos/costos estratégicos
+  // (ver COTIZACION_CAMPOS_ESTRATEGICOS / DOC_CATEGORIAS_ESTRATEGICAS
+  // arriba) -- documentHealth NUNCA debe convertirse en un bypass de esos
+  // permisos, por eso nunca incluye el doc/monto original, solo el
+  // checklist derivado (key/label/aplica/presente/severidad).
+  const documentHealth = computeDocumentHealth(project);
+  if (getPermissions(user).verCostosInternos) return { ...project, documentHealth }; // admin: sin cambios de datos, solo se agrega el resumen derivado
   const limpio = {
     ...project,
+    documentHealth,
     cotizacion: sanitizeCotizacionForRole(project.cotizacion, user),
     docs: sanitizeDocsForRole(project.docs, user),
     // Fase 2E1 (Commit 2) -- hallazgo cerrado aquí: antes esta función NO
@@ -446,6 +466,21 @@ export function removeSensitiveKeysDeep(obj, user, exceptions = EXCEPCIONES_DEFA
 
 const PROJECT_OPERATIONAL_UPDATE_FIELDS = [
   'id', 'name', 'dependencia', 'nivelGobierno', 'municipio', 'company', 'numLicitacion',
+  // GO-LIVE-01 (corrección v2 -- CORRECCIÓN 2): 'empresaLicitante' es un
+  // campo NUEVO, texto libre, opcional, INDEPENDIENTE de 'company'.
+  // 'company' = empresa operadora interna (quién opera/factura
+  // internamente). 'empresaLicitante' = sociedad que formalmente
+  // presentó/participó en la licitación, cuando se conoce -- puede
+  // coincidir con la operadora (se captura igual, mismo nombre) o ser una
+  // sociedad distinta; nunca se infiere/autocompleta desde 'company'.
+  // Vacío significa exclusivamente "todavía no definida/conocida" o
+  // "no aplica" -- nunca "es igual a la operadora". No es financiero ni
+  // estratégico -- cualquier rol puede leerlo/escribirlo, igual que
+  // 'company'. IMPORTANTE: ni 'company' ni 'empresaLicitante' deben
+  // asumirse como facturador/contratante/identidad jurídica participante
+  // per se -- esos conceptos pueden diferir y requieren evidencia propia
+  // (ver FRONTERA JURÍDICA del governance).
+  'empresaLicitante',
   'status', 'tipoProcedimiento', 'productType', 'responsable', 'montoEstimado', 'probability',
   'description', 'observaciones',
   // Fase 3C-1: folioProyecto es el folio interno maestro (distinto de

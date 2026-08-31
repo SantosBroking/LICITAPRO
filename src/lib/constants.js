@@ -81,7 +81,15 @@ export const DOC_CATEGORIES = [
   'Convocatoria','Bases','Junta de aclaraciones','Anexo técnico','Anexos administrativos','Anexos legales',
   'Propuesta técnica','Propuesta económica','Acta de apertura','Fallo','Contrato',
   'Cartas','Membretado','Poderes','Constancias fiscales','Opiniones de cumplimiento','Fichas técnicas',
-  'Facturas','Facturas proveedor/origen','Órdenes de compra','Fotografías','Comprobantes de entrega','Garantías','Fianzas','Otro',
+  'Facturas','Facturas proveedor/origen','Órdenes de compra','Fotografías','Comprobantes de entrega','Garantías','Fianzas',
+  // GO-LIVE-02 -- 'Comprobante de cobro' es NUEVA, para tener una categoría
+  // explícita de evidencia de pago/cobro (hoy no existía ninguna -- se
+  // confundía implícitamente con 'Facturas'). Se AGREGA al final antes de
+  // 'Otro', igual que 'Facturas proveedor/origen' en Fase 2F2 -- ninguna
+  // categoría vieja se renombra ni se elimina. Usada por document_health.js
+  // como señal de evidencia de cobro; no es un campo financiero en sí (solo
+  // la categoría de un documento), no requiere gate nuevo en data_sanitize.js.
+  'Comprobante de cobro','Otro',
 ];
 
 export const EMPRESA_BASE_DOCS = [
