@@ -55,9 +55,16 @@ jobs:
           set -euo pipefail
           rm -rf .control-tower
           rm -f .github/workflows/control-tower-apply-golive.yml
-          expected="$(printf '%s\n' src/lib/constants.js src/lib/data_sanitize.js src/lib/document_health.js src/lib/document_health.test.js src/package.json src/views/Dashboard.js src/views/Projects.js | sort)"
-          actual="$(git diff --name-only origin/main...HEAD; git diff --name-only)"
-          actual="$(printf '%s\n' "$actual" | grep -v '^\.control-tower/' | grep -v '^\.github/workflows/control-tower-apply-golive.yml$' | sort -u)"
+          expected="$(printf '%s\n' \
+            src/lib/constants.js \
+            src/lib/data_sanitize.js \
+            src/lib/document_health.js \
+            src/lib/document_health.test.js \
+            src/package.json \
+            src/views/Dashboard.js \
+            src/views/Projects.js | sort)"
+          actual="$(git diff --name-only origin/main | sort)"
+          printf 'Expected:\n%s\nActual:\n%s\n' "$expected" "$actual"
           test "$actual" = "$expected"
           git config user.name "SATHIA Control Tower"
           git config user.email "actions@users.noreply.github.com"
