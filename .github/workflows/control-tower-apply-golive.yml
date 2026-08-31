@@ -63,11 +63,11 @@ jobs:
             src/package.json \
             src/views/Dashboard.js \
             src/views/Projects.js | sort)"
-          actual="$(git diff --name-only origin/main | sort)"
+          git add -A
+          actual="$(git diff --cached --name-only origin/main | sort)"
           printf 'Expected:\n%s\nActual:\n%s\n' "$expected" "$actual"
           test "$actual" = "$expected"
           git config user.name "SATHIA Control Tower"
           git config user.email "actions@users.noreply.github.com"
-          git add -A
           git commit -m "feat(go-live): empresa licitante y salud documental [ct-bootstrap-done]"
           git push origin HEAD:${GITHUB_REF_NAME}
