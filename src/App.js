@@ -119,6 +119,13 @@ export default function App() {
   // (hoy solo 'cotizacion': partidas/equipo/extras/corrida/unitario/agente).
   const [subTabs,   setSubTabsRaw] = useState({});
   const setSubTab = useCallback((scope, val) => setSubTabsRaw(prev => ({ ...prev, [scope]: val })), []);
+  // LP-AUTH-FOCUS-001 -- id del usuario cuya sesión YA fue resuelta
+  // (resolveSession completado). Supabase puede emitir un SIGNED_IN
+  // redundante al volver de otra pestaña del navegador (re-confirmación de
+  // token, no un login nuevo) -- este ref permite al listener de
+  // onAuthStateChange (efecto de una sola vez, [] como deps) comparar
+  // contra el usuario YA cargado sin depender de un closure obsoleto.
+  const _authUserId = useRef(null);
   // ── Fix Persistencia + Seguridad de Navegación ──
   const _lastUserKey          = useRef(null);   // último userKey visto (sync, detecta cambio de usuario de inmediato)
   const _navRestoreAttempted  = useRef(false);  // ¿ya se intentó restaurar para el usuario actual?
@@ -212,7 +219,12 @@ export default function App() {
     // bloquea si está inactivo o no existe, y arma el objeto "user" que usa
     // el resto de la app (name, role, workspaceId).
     const resolveSession = async (session) => {
-      if (!session?.user) { setUser(null); setLoading(false); return; }
+      if (!session?.user) { _authUserId.current = null; setUser(null); setLoading(false); return; }
+      // Se registra ANTES de esperar buildAppUser/loadData -- así un
+      // SIGNED_IN redundante que llegue mientras esta resolución todavía
+      // está en vuelo ya encuentra el id actual y no dispara una segunda
+      // carga completa en paralelo.
+      _authUserId.current = session.user.id;
       setAuthError('');
       try {
         const appUser = await buildAppUser(session.user);
@@ -223,6 +235,7 @@ export default function App() {
       } catch (e) {
         console.error('Perfil inválido o inactivo:', e.message);
         setAuthError(e.message);
+        _authUserId.current = null;
         setUser(null);
         try { await signOut(); } catch(_e) {}
       } finally {
@@ -231,9 +244,21 @@ export default function App() {
     };
 
     const { data: { subscription } } = authSb.onAuthStateChange((event, session) => {
-      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+      if (event === 'INITIAL_SESSION') {
         resolveSession(session);
+      } else if (event === 'SIGNED_IN') {
+        // LP-AUTH-FOCUS-001 -- Supabase puede emitir SIGNED_IN aunque la
+        // sesión sea la misma que ya está cargada (ej. al volver de otra
+        // pestaña del navegador, simple re-confirmación de token, no un
+        // login nuevo). Si ya hay un usuario resuelto y es el mismo, NO se
+        // vuelve a llamar resolveSession (evitaría loadData completo +
+        // desmontaje visual + pérdida de scroll). Si de verdad cambió el
+        // usuario (o no había ninguno cargado todavía), sí se resuelve.
+        if (!_authUserId.current || session?.user?.id !== _authUserId.current) {
+          resolveSession(session);
+        }
       } else if (event === 'SIGNED_OUT') {
+        _authUserId.current = null;
         setUser(null);
         setProjects([]); setVehicles([]); setCompanies([]); setAudit([]);
         // Fix Persistencia + Seguridad de Navegación — limpiar toda la
@@ -247,6 +272,9 @@ export default function App() {
         setNavReadyUserKey(null);
         setLoading(false);
       }
+      // TOKEN_REFRESHED, USER_UPDATED, MFA_CHALLENGE_VERIFIED y demás
+      // eventos no contemplados aquí no disparan ninguna acción -- no
+      // provocan recarga visual, sin necesidad de un guard adicional.
     });
 
     return () => subscription?.unsubscribe();
