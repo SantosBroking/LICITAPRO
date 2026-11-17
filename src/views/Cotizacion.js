@@ -77,14 +77,62 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
     const calcN=calcCotizacion(newCot);
     onUpdate({...project, cotizacion:newCot, montoEstimado:Math.round(calcN.ventaTotal)||project.montoEstimado});
   };
-  const updPartida = (id,k,v) => updCot({...cot,partidas:cot.partidas.map(p=>p.id===id?{...p,[k]:v}:p)});
-  const selectVehiculo = (pid, veh) => updCot({...cot,partidas:cot.partidas.map(p=>p.id!==pid?p:{...p,
-    vehiculoId:veh?veh.id:null, foto:veh?veh.photo||'':'',
-    tipo:veh?veh.v_tipo||p.tipo:'', marca:veh?veh.v_marca||'':'',
-    modelo:veh?veh.v_modelo||'':'', version:veh?veh.v_version||'':'', ano:veh?Number(veh.v_ano)||p.ano:p.ano,
-    // Jala el precio base del catálogo como precio de lista (solo si la partida no tiene uno ya)
-    precioLista: veh ? (p.precioLista>0 ? p.precioLista : (veh.price||0)) : p.precioLista,
-  })});
+  const syncCommercialPriceForPart = (baseCot, partId, pricePesos) => {
+    const cfg = baseCot.desgloseComercial || { version:1, enabled:false, vehiclePricesByPartCents:{}, allocation:null };
+    let cents = 0;
+    try { cents = moneyToCentsNumber(pricePesos || 0); } catch(_e) { cents = 0; }
+    return {
+      ...baseCot,
+      desgloseComercial:{
+        ...cfg,
+        version:1,
+        vehiclePricesByPartCents:{ ...(cfg.vehiclePricesByPartCents||{}), [partId]:cents },
+        // Cambiar partida/precio invalida siempre el reparto anterior.
+        allocation:null,
+      },
+    };
+  };
+
+  const updPartida = (id,k,v) => {
+    const current = cot.partidas.find(p=>p.id===id);
+    let nextCot = { ...cot, partidas:cot.partidas.map(p=>p.id===id?{...p,[k]:v}:p) };
+
+    // Al activar una partida, su precio comercial arranca desde SU P.U. lista,
+    // nunca desde el valor guardado por una partida anterior.
+    if (k==='activo') {
+      nextCot = {
+        ...nextCot,
+        desgloseComercial:{
+          ...(nextCot.desgloseComercial||{version:1,enabled:false,vehiclePricesByPartCents:{}}),
+          allocation:null,
+        },
+      };
+      if (v===true && current) nextCot = syncCommercialPriceForPart(nextCot, id, current.precioLista||0);
+    }
+
+    // Si cambia el P.U. lista de una partida activa, sincronizar también el
+    // precio comercial base. Después el usuario puede volver a editarlo manualmente.
+    if (k==='precioLista' && current?.activo) {
+      nextCot = syncCommercialPriceForPart(nextCot, id, v);
+    }
+
+    updCot(nextCot);
+  };
+
+  const selectVehiculo = (pid, veh) => {
+    const current = cot.partidas.find(p=>p.id===pid);
+    let nextPrice = current?.precioLista || 0;
+    if (veh && !(nextPrice>0)) nextPrice = veh.price || 0;
+    let nextCot = {...cot,partidas:cot.partidas.map(p=>p.id!==pid?p:{...p,
+      vehiculoId:veh?veh.id:null, foto:veh?veh.photo||'':'',
+      tipo:veh?veh.v_tipo||p.tipo:'', marca:veh?veh.v_marca||'':'',
+      modelo:veh?veh.v_modelo||'':'', version:veh?veh.v_version||'':'', ano:veh?Number(veh.v_ano)||p.ano:p.ano,
+      // Jala el precio base del catálogo como precio de lista (solo si la partida no tiene uno ya)
+      precioLista: nextPrice,
+    })};
+    if (current?.activo) nextCot = syncCommercialPriceForPart(nextCot, pid, nextPrice);
+    updCot(nextCot);
+  };
   const catalogVehiculos = [...CATALOG_PRODUCTS, ...(window._lpConfig?.customProducts||[])].filter(x=>x.esVehiculo);
   const updEquipo  = (eid,k,v) => updCot({...cot,equipo:cot.equipo.map(e=>e.id===eid?{...e,[k]:v}:e)});
   const updCnts = (eid,pi,v) => updCot({...cot,equipo:cot.equipo.map(e=>{ if(e.id!==eid)return e; const cnts=[...(e.cnts||new Array(cot.partidas.length).fill(0))];cnts[pi]=Number(v)||0;return{...e,cnts}; })});
