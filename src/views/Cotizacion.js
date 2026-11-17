@@ -2,6 +2,8 @@
 import { h, useState, useEffect, useMemo, useCallback } from '../lib/core.js';
 import { CATALOG_PRODUCTS } from '../lib/catalog.js';
 import { calcCotizacion } from '../lib/calc.js';
+import { buildCommercialBreakdown, getMissingCommercialCosts, moneyToCentsNumber, validateCommercialBreakdown } from '../lib/commercial_breakdown.js';
+import { getPermissions } from '../lib/permissions.js';
 import { fmt, pctS, daysOld, TODAY, uid } from '../lib/utils.js';
 import { NumInput, StorageImg } from '../ui/primitives.js';
 import { sb } from '../lib/supabase.js';
@@ -33,7 +35,7 @@ const BASES_RETORNO = ['% sobre venta c/IVA','% sobre venta s/IVA','Monto fijo t
 const BASES_FIANZA  = ['% sobre venta c/IVA','% sobre venta s/IVA','Monto fijo total','Monto fijo por unidad'];
 const IVA = 0.16;
 
-export default function CotizacionTab({ project, onUpdate, activeTab, setActiveTab, config, onSaveConfig }) {
+export default function CotizacionTab({ project, onUpdate, activeTab, setActiveTab, config, onSaveConfig, user }) {
   const [_localTab, _setLocalTab] = useState(activeTab||'partidas');
   useEffect(()=>{ if(activeTab&&activeTab!==_localTab)_setLocalTab(activeTab); },[activeTab]);
   const tab    = activeTab||_localTab;
@@ -62,6 +64,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
       modoEquipo:c.modoEquipo||'margen',
       margenEquipo:c.margenEquipo!=null?c.margenEquipo:0.30,
       montoGanar:c.montoGanar!=null?c.montoGanar:0,
+      desgloseComercial:c.desgloseComercial||{version:1,enabled:false,vehiclePricesByPartCents:{},allocation:null},
       partidas:c.partidas||[makeP('P1',true),makeP('P2',false),makeP('P3',false),makeP('P4',false),makeP('P5',false)],
       equipo:c.equipo||[], servicios:c.servicios||[], retornos:c.retornos||[], fianzas:c.fianzas||[],
     };
@@ -176,6 +179,58 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
   ];
 
   const activeParts = cot.partidas.filter(p=>p.activo&&p.cantidad>0);
+
+  // Desglose comercial: configuración por cotización. Los importes guardados
+  // son exclusivamente COMERCIALES; la base de costos nunca se persiste aquí.
+  const commercialCfg = cot.desgloseComercial || { version:1, enabled:false, vehiclePricesByPartCents:{}, allocation:null };
+  const canEditCommercial = getPermissions(user).editarDesgloseComercial;
+  const missingCommercialCosts = useMemo(()=>getMissingCommercialCosts(cot), [cot]);
+  const commercialDraft = useMemo(
+    ()=>buildCommercialBreakdown(cot, calc.ventaTotal, commercialCfg.vehiclePricesByPartCents || {}),
+    [cot, calc.ventaTotal, commercialCfg.vehiclePricesByPartCents]
+  );
+  const commercialValidation = useMemo(
+    ()=>validateCommercialBreakdown(cot, calc.ventaTotal),
+    [cot, calc.ventaTotal]
+  );
+
+  const setCommercialEnabled = enabled => {
+    if (!canEditCommercial) return;
+    updCot({ ...cot, desgloseComercial:{ ...commercialCfg, version:1, enabled:!!enabled } });
+  };
+  const setVehicleCommercialPrice = (partId, pesos) => {
+    if (!canEditCommercial) return;
+    let cents = 0;
+    try { cents = pesos==='' ? 0 : moneyToCentsNumber(pesos); }
+    catch(e) { return; }
+    updCot({
+      ...cot,
+      desgloseComercial:{
+        ...commercialCfg,
+        version:1,
+        vehiclePricesByPartCents:{ ...(commercialCfg.vehiclePricesByPartCents||{}), [partId]:cents },
+        allocation:null, // cualquier cambio de precio exige recalcular explícitamente
+      },
+    });
+  };
+  const recalcCommercialBreakdown = () => {
+    if (!canEditCommercial) return;
+    const r = buildCommercialBreakdown(cot, calc.ventaTotal, commercialCfg.vehiclePricesByPartCents || {});
+    if (!r.ok) {
+      alert('No se puede calcular el desglose comercial:\n\n' + r.errors.join('\n'));
+      return;
+    }
+    updCot({
+      ...cot,
+      desgloseComercial:{
+        version:1,
+        enabled:commercialCfg.enabled===true,
+        vehiclePricesByPartCents:{ ...(commercialCfg.vehiclePricesByPartCents||{}) },
+        allocation:r.allocation,
+      },
+    });
+  };
+  const moneyFromCents = cents => fmt((Number(cents)||0)/100);
 
   return h('div', null,
     // KPIs
@@ -694,6 +749,120 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
 
     // ══ 4. FINANZAS (Corrida financiera) ══
     tab==='finanzas' && h('div', null,
+      // ── Configuración de desglose comercial ──
+      h('div', { className:'card', style:{ marginBottom:14, borderLeft:'3px solid var(--blue)' } },
+        h('div', { style:{ display:'flex', justifyContent:'space-between', gap:12, alignItems:'flex-start', marginBottom:12, flexWrap:'wrap' } },
+          h('div', null,
+            h('div', { style:{ fontSize:14, fontWeight:600 } }, 'Configuración de desglose comercial'),
+            h('div', { style:{ fontSize:11, color:'var(--t2)', marginTop:3, maxWidth:720 } },
+              'Permite mostrar precios comerciales individuales al cliente. Los costos internos y márgenes nunca se copian al desglose ni al PDF.'
+            ),
+          ),
+          h('label', { style:{ display:'flex', alignItems:'center', gap:8, fontSize:12, fontWeight:600, cursor:canEditCommercial?'pointer':'default' } },
+            h('input', { type:'checkbox', checked:commercialCfg.enabled===true, disabled:!canEditCommercial, onChange:e=>setCommercialEnabled(e.target.checked), style:{ width:16, height:16 } }),
+            'Mostrar precios individuales al cliente',
+          ),
+        ),
+
+        activeParts.length===0
+          ? h('div', { style:{ padding:10, background:'var(--amber-bg)', color:'var(--amber)', borderRadius:'var(--r)', fontSize:12 } }, 'El desglose con vehículo requiere al menos una partida activa.')
+          : h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:10, marginBottom:12 } },
+              ...activeParts.map(p=>h('div', { key:p.id },
+                h('div', { style:{ fontSize:10, color:'var(--t2)', marginBottom:4 } }, 'Precio comercial del vehículo c/IVA · ',p.id),
+                h('input', {
+                  type:'number', min:'0', step:'0.01',
+                  disabled:!canEditCommercial,
+                  value:(commercialCfg.vehiclePricesByPartCents?.[p.id]||0) ? (commercialCfg.vehiclePricesByPartCents[p.id]/100) : '',
+                  onChange:e=>setVehicleCommercialPrice(p.id,e.target.value),
+                  placeholder:'0.00',
+                  style:{ fontSize:13 },
+                }),
+                h('div', { style:{ fontSize:10, color:'var(--t3)', marginTop:3 } }, [p.marca,p.modelo,p.version].filter(Boolean).join(' '),' · ',p.cantidad||0,' unidad(es)'),
+              )),
+            ),
+
+        h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(3,minmax(160px,1fr))', gap:8, marginBottom:12 } },
+          h('div', { className:'metric' },
+            h('div', { style:{ fontSize:10, color:'var(--t2)' } }, 'Total cotización c/IVA'),
+            h('div', { style:{ fontSize:14, fontWeight:600 } }, commercialDraft.totals ? moneyFromCents(commercialDraft.totals.totalWithTaxCents) : fmt(calc.ventaTotal)),
+          ),
+          h('div', { className:'metric' },
+            h('div', { style:{ fontSize:10, color:'var(--t2)' } }, 'Vehículo(s) comercial c/IVA'),
+            h('div', { style:{ fontSize:14, fontWeight:600 } }, commercialDraft.totals ? moneyFromCents(commercialDraft.totals.vehicleWithTaxCents) : '—'),
+          ),
+          h('div', { className:'metric' },
+            h('div', { style:{ fontSize:10, color:'var(--t2)' } }, 'Equipamiento comercial c/IVA'),
+            h('div', { style:{ fontSize:14, fontWeight:600, color:'var(--blue)' } }, commercialDraft.totals ? moneyFromCents(commercialDraft.totals.equipmentWithTaxCents) : '—'),
+          ),
+        ),
+
+        missingCommercialCosts.length>0 && h('div', { style:{ padding:10, background:'var(--red-bg)', color:'var(--red)', border:'1px solid var(--red-border)', borderRadius:'var(--r)', fontSize:11, marginBottom:10 } },
+          h('strong', null, 'Desglose bloqueado: '), missingCommercialCosts.length,' concepto(s) visibles tienen costo faltante o igual a cero.',
+          h('div', { style:{ marginTop:5, color:'var(--t2)' } },
+            missingCommercialCosts.slice(0,8).map(x=>x.name).join(' · '),
+            missingCommercialCosts.length>8?' · …':''
+          ),
+        ),
+
+        commercialCfg.enabled && !commercialValidation.ok && h('div', { style:{ padding:10, background:'var(--amber-bg)', color:'var(--amber)', borderRadius:'var(--r)', fontSize:11, marginBottom:10 } },
+          h('strong', null, 'Antes de emitir PDF desglosado: '), commercialValidation.errors.join(' · ')
+        ),
+
+        h('div', { style:{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', marginBottom:commercialCfg.allocation?12:0 } },
+          h('button', {
+            className:'bp',
+            disabled:!canEditCommercial || !commercialDraft.ok,
+            onClick:recalcCommercialBreakdown,
+          }, 'Distribuir proporcionalmente'),
+          h('span', { style:{ fontSize:10, color:'var(--t3)' } },
+            commercialDraft.ok
+              ? 'La distribución usa centavos enteros y corrige el redondeo de forma determinística.'
+              : 'Completa precios comerciales y costos reales antes de distribuir.'
+          ),
+        ),
+
+        commercialCfg.allocation && h('div', null,
+          h('div', { style:{ fontSize:11, fontWeight:600, marginBottom:6 } }, 'Vista previa del desglose'),
+          h('div', { className:'tbl-scroll', style:{ overflowX:'auto' } },
+            h('table', { style:{ fontSize:11 } },
+              h('thead', null, h('tr', null,
+                h('th', null, 'Concepto'), h('th', { style:{ textAlign:'center' } }, 'Cant.'),
+                h('th', { style:{ textAlign:'right' } }, 'P.Unit s/IVA'),
+                h('th', { style:{ textAlign:'right' } }, 'Subtotal s/IVA'),
+                h('th', { style:{ textAlign:'right' } }, 'IVA'),
+                h('th', { style:{ textAlign:'right' } }, 'Total c/IVA'),
+              )),
+              h('tbody', null,
+                ...(commercialCfg.allocation.vehicles||[]).map(v=>h('tr', { key:'veh-'+v.partId },
+                  h('td', null, h('strong', null, v.name||v.partId)),
+                  h('td', { style:{ textAlign:'center' } }, v.quantity),
+                  h('td', { style:{ textAlign:'right' } }, moneyFromCents(v.unitNetCents)),
+                  h('td', { style:{ textAlign:'right' } }, moneyFromCents(v.netCents)),
+                  h('td', { style:{ textAlign:'right' } }, moneyFromCents(v.taxCents)),
+                  h('td', { style:{ textAlign:'right', fontWeight:600 } }, moneyFromCents(v.grossCents)),
+                )),
+                ...(commercialCfg.allocation.lines||[]).map(l=>h('tr', { key:l.key },
+                  h('td', null, l.name),
+                  h('td', { style:{ textAlign:'center' } }, l.quantity),
+                  h('td', { style:{ textAlign:'right' } }, moneyFromCents(l.unitNetCents)),
+                  h('td', { style:{ textAlign:'right' } }, moneyFromCents(l.netCents)),
+                  h('td', { style:{ textAlign:'right' } }, moneyFromCents(l.taxCents)),
+                  h('td', { style:{ textAlign:'right', fontWeight:600 } }, moneyFromCents(l.grossCents)),
+                )),
+              ),
+              h('tfoot', null,
+                h('tr', { className:'total-row' },
+                  h('td', { colSpan:3 }, h('strong', null, 'TOTAL')),
+                  h('td', { style:{ textAlign:'right' } }, moneyFromCents(commercialCfg.allocation.subtotalCents)),
+                  h('td', { style:{ textAlign:'right' } }, moneyFromCents(commercialCfg.allocation.taxCents)),
+                  h('td', { style:{ textAlign:'right', fontWeight:700, color:'var(--blue)' } }, moneyFromCents(commercialCfg.allocation.totalWithTaxCents)),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+
       // ── Pre-cálculo por partida (evita re-calcular en cada celda) ──
       (() => {
         const pdata = activeParts.map(p => {

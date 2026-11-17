@@ -41,6 +41,9 @@ const COTIZACION_CAMPOS_ESTRATEGICOS = [
   'pctIvaSat', 'pctIvaUtil', 'ivaSelectivo', 'soloEquipo', 'modoEquipo', 'margenEquipo',
   'montoGanar', 'retornos', 'fianzas',
 ];
+// Configuración comercial apta para lectura interna/cliente (no contiene costos ni márgenes),
+// pero SOLO admin puede modificarla. En escritura de empleado se preserva siempre del original.
+const COTIZACION_ADMIN_PUBLIC_FIELDS = ['desgloseComercial'];
 // Partida — shape real Cotizacion.js:46 (makeP).
 // COSTO_PROVEEDOR: costo de origen (lo que paga MSMS) -- ahora visible/
 // editable para 'empleado' operativo (Fase 2F1A). precioLista se incluye
@@ -660,6 +663,7 @@ export function sanitizeProjectUpdateForRole(originalProject, incomingProject, u
     const nuevaCot = copiarSoloPermitidos(cotEntrante, COTIZACION_OPERATIONAL_FIELDS, copiarSoloPermitidos(cotOriginal, COTIZACION_OPERATIONAL_FIELDS));
     // Estratégicos de nivel cotización: siempre del original, nunca aceptados del empleado.
     COTIZACION_CAMPOS_ESTRATEGICOS.forEach(campo => { nuevaCot[campo] = cotOriginal[campo]; });
+    COTIZACION_ADMIN_PUBLIC_FIELDS.forEach(campo => { nuevaCot[campo] = cotOriginal[campo]; });
 
     const idsPartidasEntrantes = new Set((cotEntrante.partidas || []).map(p => p.id));
     const partidasPreservadas = (cotOriginal.partidas || []).filter(p => !idsPartidasEntrantes.has(p.id));

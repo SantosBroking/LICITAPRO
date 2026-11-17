@@ -47,6 +47,11 @@ export function getPermissions(user) {
     aprobarCotizacion: isAdmin,          // reservado — no hay flujo de aprobación de cotización hoy
     guardarFinancieros: isAdmin,         // ya era el comportamiento real de maybeSaveFinancials, se nombra aquí
 
+    // Desglose comercial: valores comerciales aprobados pueden ser visibles a usuarios internos,
+    // pero su configuración/reparto es una decisión comercial admin-only.
+    verDesgloseComercial: !!role,
+    editarDesgloseComercial: isAdmin,
+
     usarIAOperativa: !!role,             // futuro chat sin datos financieros — sin efecto hasta 2A4/2C
     usarIAFinanciera: isAdmin,           // chat actual de CotizacionTab, sin cambios
 

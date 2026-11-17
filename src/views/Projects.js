@@ -1062,7 +1062,7 @@ export function ProjectDetail({ project, vehicles, companies, config, projects, 
         h('button', { onClick:()=>{ const c=project.cotizacion||{}; const cc=calcCotizacion(c); printResumenInterno({project,cot:c,calc:cc,companyObj:company}); }, style:{ fontSize:11, padding:'5px 12px', border:'.5px solid var(--t3)44', color:'var(--t2)' } }, '🔒 Corrida financiera interna'),
         h('button', { onClick:()=>setShowOC(true), style:{ fontSize:11, padding:'5px 12px', border:'.5px solid #1D9E7544', color:'#1D9E75', background:'#1D9E7508' } }, '🛒 Orden de compra'),
       ),
-      h(CotizacionTab, { project, onUpdate:(updated)=>{ cotRef.current=updated.cotizacion||{}; updProject(updated); }, activeTab:cotSubTab, setActiveTab:setCotSubTab, config, onSaveConfig }),
+      h(CotizacionTab, { project, onUpdate:(updated)=>{ cotRef.current=updated.cotizacion||{}; updProject(updated); }, activeTab:cotSubTab, setActiveTab:setCotSubTab, config, onSaveConfig, user }),
     ),
     // Cotización Operativa — empleado. Sin botones de PDF/OC/IA financiera;
     // ninguno de esos vive dentro de CotizacionOperativa.js en absoluto.
