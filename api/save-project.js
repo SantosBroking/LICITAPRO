@@ -102,7 +102,28 @@ async function handleSaveProject(res, appUser, serviceKey, incomingProject) {
     return res.status(502).json({ ok:false, error:'No se pudo leer el proyecto actual' });
   }
 
-  const nuevoProject = sanitizeProjectUpdateForRole(originalProject, incomingProject, appUser);
+  let nuevoProject = sanitizeProjectUpdateForRole(originalProject, incomingProject, appUser);
+
+  // Desglose comercial: defensa backend adicional. Aunque la UI solo permite
+  // editarlo a admin y data_sanitize preserva el valor original para empleado,
+  // aquí se aplica una allowlist de storage para impedir que se persistan por
+  // accidente costos internos, márgenes, factores u otras llaves no públicas.
+  if (nuevoProject?.cotizacion && Object.prototype.hasOwnProperty.call(nuevoProject.cotizacion, 'desgloseComercial')) {
+    try {
+      const mod = await import('../src/lib/commercial_breakdown.js');
+      if (typeof mod.sanitizeCommercialBreakdownForStorage !== 'function') throw new Error('Export esperado no encontrado');
+      nuevoProject = {
+        ...nuevoProject,
+        cotizacion: {
+          ...nuevoProject.cotizacion,
+          desgloseComercial: mod.sanitizeCommercialBreakdownForStorage(nuevoProject.cotizacion.desgloseComercial),
+        },
+      };
+    } catch (e) {
+      console.error('[save-project] No se pudo sanear desglose comercial:', e.message);
+      return res.status(500).json({ ok:false, error:'No se pudo procesar el desglose comercial' });
+    }
+  }
 
   try {
     const r = await fetch(`${SUPA_URL}/rest/v1/projects?on_conflict=id`, {
