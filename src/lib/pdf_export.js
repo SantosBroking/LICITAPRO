@@ -5,6 +5,7 @@ import { calcCotizacion } from './calc.js';
 import { buildResumenInternoData } from './resumen_interno.js';
 import { CATALOG_IMAGES } from './catalog_images.js';
 import { CATALOG_PRODUCTS, KIT_MAP } from './catalog.js';
+import { buildCatalogOrderMap, sortEquipmentByCatalog } from './catalog_order.js';
 import { getCompanyLogo } from './company_logos.js';
 import { signedUrl } from './supabase.js';
 import { validateCommercialBreakdown } from './commercial_breakdown.js';
@@ -216,7 +217,11 @@ export async function printCotizacionCliente({ project, cot, calc, config, compa
   } : cfgEmp;
   // Catálogo en vivo: productos base + personalizados del config
   const liveCatMap = {};
-  [...CATALOG_PRODUCTS, ...(config?.customProducts || [])].forEach(p => { liveCatMap[p.id] = p; });
+  const customCatalogProducts = config?.customProducts || [];
+  [...CATALOG_PRODUCTS, ...customCatalogProducts].forEach(p => { liveCatMap[p.id] = p; });
+  const catalogOrderMap = buildCatalogOrderMap(CATALOG_PRODUCTS, customCatalogProducts);
+  const orderedEquipment = sortEquipmentByCatalog(cot.equipo || [], catalogOrderMap);
+  const equipmentDisplayIndex = new Map(orderedEquipment.map((e,i)=>[e.id,i]));
 
   // Pre-cargar fotos URL a base64 para que html2pdf pueda embebedlas
   const imgCache = {};
@@ -330,7 +335,10 @@ export async function printCotizacionCliente({ project, cot, calc, config, compa
     const subtotal = pvUnit * qty;
 
     // Equipo visible para el cliente
-    const eqItems = (cot.equipo||[]).map(liveEq).filter(e => e.usar && e.vis && (e.cnts&&e.cnts[pi]>0)).sort((a,b)=>(a.cat||'').localeCompare(b.cat||'','es',{numeric:true}));
+    const eqItems = sortEquipmentByCatalog(
+      (cot.equipo||[]).map(liveEq).filter(e => e.usar && e.vis && (e.cnts&&e.cnts[pi]>0)),
+      catalogOrderMap
+    );
 
     return { p, qty, pvUnit, subtotal, eqItems, pi };
   });
@@ -346,7 +354,10 @@ export async function printCotizacionCliente({ project, cot, calc, config, compa
   // activos, este bloque produce un arreglo vacío y no afecta nada --
   // comportamiento idéntico al de siempre.
   const equipoSinVehiculo = activeParts.length === 0
-    ? (cot.equipo || []).map(liveEq).filter(e => e.usar && e.vis && Number(e.cantidadGlobal||0) > 0)
+    ? sortEquipmentByCatalog(
+        (cot.equipo || []).map(liveEq).filter(e => e.usar && e.vis && Number(e.cantidadGlobal||0) > 0),
+        catalogOrderMap
+      )
     : [];
   let totalUnidadesEquipoSinVeh = 0;
   equipoSinVehiculo.forEach(e => { totalUnidadesEquipoSinVeh += Number(e.cantidadGlobal||0); });
@@ -401,7 +412,15 @@ export async function printCotizacionCliente({ project, cot, calc, config, compa
         unitNet:v.unitNetCents, net:v.netCents, gross:v.grossCents,
       });
     });
-    (commercialAlloc.lines||[]).forEach(l => {
+    const orderedDetailLines = [...(commercialAlloc.lines||[])].sort((a,b)=>{
+      if (a.sourceType !== b.sourceType) return a.sourceType === 'equipment' ? -1 : 1;
+      if (a.sourceType === 'equipment') {
+        return (equipmentDisplayIndex.get(a.sourceId) ?? Number.MAX_SAFE_INTEGER)
+          - (equipmentDisplayIndex.get(b.sourceId) ?? Number.MAX_SAFE_INTEGER);
+      }
+      return String(a.name||'').localeCompare(String(b.name||''),'es',{numeric:true,sensitivity:'base'});
+    });
+    orderedDetailLines.forEach(l => {
       if (l.sourceType==='equipment') {
         const raw=(cot.equipo||[]).find(e=>e.id===l.sourceId);
         if (!raw) return;

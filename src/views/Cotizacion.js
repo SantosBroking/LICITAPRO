@@ -1,6 +1,7 @@
 // Cotizacion.js — Tab de cotización (5 sub-tabs, sin htm)
 import { h, useState, useEffect, useMemo, useCallback } from '../lib/core.js';
 import { CATALOG_PRODUCTS } from '../lib/catalog.js';
+import { buildCatalogOrderMap, sortEquipmentByCatalog } from '../lib/catalog_order.js';
 import { calcCotizacion } from '../lib/calc.js';
 import { buildCommercialBreakdown, getMissingCommercialCosts, moneyToCentsNumber, validateCommercialBreakdown } from '../lib/commercial_breakdown.js';
 import { getPermissions } from '../lib/permissions.js';
@@ -157,6 +158,20 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
     ...CATALOG_PRODUCTS.filter(p=>!hiddenProds.includes(p.id)).map(p=>overrides[p.id]||p),
     ...customProds.filter(p=>!CATALOG_PRODUCTS.find(x=>x.id===p.id) && !p.esVehiculo),
   ];
+  // Orden canónico: posición exacta en catalog.js; productos personalizados
+  // nuevos continúan después en el orden del catálogo personalizado.
+  // No se modifica el arreglo guardado en la cotización: solo presentación.
+  const catalogOrderMap = buildCatalogOrderMap(CATALOG_PRODUCTS, customProds);
+  const orderedEquipment = sortEquipmentByCatalog(cot.equipo, catalogOrderMap);
+  const equipmentDisplayIndex = new Map(orderedEquipment.map((e,i)=>[e.id,i]));
+  const orderedCommercialLines = [...(cot.desgloseComercial?.allocation?.lines||[])].sort((a,b)=>{
+    if (a.sourceType !== b.sourceType) return a.sourceType === 'equipment' ? -1 : 1;
+    if (a.sourceType === 'equipment') {
+      return (equipmentDisplayIndex.get(a.sourceId) ?? Number.MAX_SAFE_INTEGER)
+        - (equipmentDisplayIndex.get(b.sourceId) ?? Number.MAX_SAFE_INTEGER);
+    }
+    return String(a.name||'').localeCompare(String(b.name||''),'es',{numeric:true,sensitivity:'base'});
+  });
   const cats   = [...new Set(allCatalog.map(p=>p.cat))];
   const tabIdx = TABS.indexOf(tab);
   const goNext = ()=>{ if(tabIdx<TABS.length-1)setTab(TABS[tabIdx+1]); };
@@ -490,7 +505,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
       // tabla de escritorio -- updEquipo/updCnts/setAllCnts/removeEquipo/
       // liveEquipo -- así que no hay lógica ni cálculo duplicado.
       cot.equipo.length>0 && h('div', { className:'mobile-only mobile-feed' },
-        [...cot.equipo].sort((a,b)=>(a.cat||'').localeCompare(b.cat||'','es',{numeric:true})).map(eRaw=>{
+        orderedEquipment.map(eRaw=>{
           const e = liveEquipo(eRaw);
           const activas = cot.partidas.filter(p=>p.activo);
           return h('div', { key:e.id, className:'mobile-partida-card', style:{ opacity:e.usar?1:.5 } },
@@ -555,7 +570,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
             h('td', { style:{ padding:'6px 4px', color:'var(--t2)', fontSize:10, width:115 } }, 'Estatus'),
             h('td', { style:{ padding:'6px 4px', width:24 } }),
           )),
-          h('tbody', null, [...cot.equipo].sort((a,b)=>(a.cat||'').localeCompare(b.cat||'','es',{numeric:true})).map(eRaw=>{ const e=liveEquipo(eRaw);
+          h('tbody', null, orderedEquipment.map(eRaw=>{ const e=liveEquipo(eRaw);
             const days=daysOld(e.fechaCosto), ageC=days===null?'':days>120?'var(--red)':days>60?'var(--amber)':'';
             const estBg=e.est==='Confirmado'?'#E1F5EE':e.est==='Vencido'?'#FCEBEB':'#FAEEDA';
             const estTx=e.est==='Confirmado'?'#085041':e.est==='Vencido'?'#791F1F':'#633806';
@@ -841,7 +856,7 @@ export default function CotizacionTab({ project, onUpdate, activeTab, setActiveT
                   h('td', { style:{ textAlign:'right' } }, moneyFromCents(v.taxCents)),
                   h('td', { style:{ textAlign:'right', fontWeight:600 } }, moneyFromCents(v.grossCents)),
                 )),
-                ...(commercialCfg.allocation.lines||[]).map(l=>h('tr', { key:l.key },
+                ...orderedCommercialLines.map(l=>h('tr', { key:l.key },
                   h('td', null, l.name),
                   h('td', { style:{ textAlign:'center' } }, l.quantity),
                   h('td', { style:{ textAlign:'right' } }, moneyFromCents(l.unitNetCents)),
