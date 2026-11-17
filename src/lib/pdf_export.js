@@ -7,6 +7,7 @@ import { CATALOG_IMAGES } from './catalog_images.js';
 import { CATALOG_PRODUCTS, KIT_MAP } from './catalog.js';
 import { getCompanyLogo } from './company_logos.js';
 import { signedUrl } from './supabase.js';
+import { validateCommercialBreakdown } from './commercial_breakdown.js';
 
 // Convierte una URL de imagen (incluida storage privado) a base64 para incrustarla en el PDF.
 // Si ya es base64 (data:), la devuelve tal cual. Si falla, devuelve cadena vacía.
@@ -274,6 +275,23 @@ export async function printCotizacionCliente({ project, cot, calc, config, compa
   });
   const activeParts = (cot.partidas || []).filter(p => p.activo && p.cantidad > 0);
 
+  // Desglose comercial: cuando está activado, el PDF SOLO usa los importes
+  // comerciales guardados. Antes de renderizar se revalida contra total,
+  // cantidades, costos y tratamiento fiscal actuales. Si algo cambió, se
+  // bloquea la emisión detallada hasta recalcular; nunca se hace fallback
+  // silencioso ni se exponen costos internos.
+  const detailedMode = cot.desgloseComercial?.enabled === true;
+  let commercialAlloc = null;
+  if (detailedMode) {
+    const v = validateCommercialBreakdown(cot, calc.ventaTotal);
+    if (!v.ok || !v.allocation) {
+      alert('No se puede emitir la cotización desglosada:\n\n' + (v.errors||[]).join('\n'));
+      return;
+    }
+    commercialAlloc = v.allocation;
+  }
+  const centsMoney = cents => (Number(cents)||0)/100;
+
   const soloEq = cot.soloEquipo === true;
   const modoEq = cot.modoEquipo || 'margen';
   const margenGeneral = cot.margenEquipo != null ? cot.margenEquipo : 0.30;
@@ -367,6 +385,73 @@ export async function printCotizacionCliente({ project, cot, calc, config, compa
   });
   const subtotalServicios = serviciosRows.reduce((s,r) => s + r.subtotal, 0);
 
+  const commercialDetailHtml = detailedMode ? (() => {
+    const rows = [];
+    const vehicleByPart = new Map((commercialAlloc.vehicles||[]).map(v=>[v.partId,v]));
+    activeParts.forEach((p,idx) => {
+      const v = vehicleByPart.get(p.id);
+      if (!v) return;
+      const foto=liveCatMap[p.vehiculoId]?.photo||p.foto||'';
+      rows.push({
+        key:'veh-'+p.id,
+        img:resolveImg(foto),
+        name:'Vehículo base',
+        desc:[p.tipo,p.marca,p.modelo,p.version,p.ano].filter(Boolean).join(' '),
+        marca:p.marca||'', modelo:p.modelo||'', qty:v.quantity, unit:'pz',
+        unitNet:v.unitNetCents, net:v.netCents, gross:v.grossCents,
+      });
+    });
+    (commercialAlloc.lines||[]).forEach(l => {
+      if (l.sourceType==='equipment') {
+        const raw=(cot.equipo||[]).find(e=>e.id===l.sourceId);
+        if (!raw) return;
+        const e=liveEq(raw);
+        const liveProd=liveCatMap[e.productoId];
+        const img=(liveProd?.photo)||CATALOG_IMAGES[e.productoId]||'';
+        rows.push({
+          key:l.key,img:resolveImg(img),name:liveProd?.nom||e.nombre||l.name,
+          desc:liveProd?.desc||e.descripcion||'',marca:e.marca||liveProd?.marca||'',modelo:e.modelo||liveProd?.modelo||'',
+          qty:l.quantity,unit:e.unidad||'pz',unitNet:l.unitNetCents,net:l.netCents,gross:l.grossCents,
+        });
+      } else if (l.sourceType==='service') {
+        const srv=(cot.servicios||[]).find(x=>x.id===l.sourceId);
+        if (!srv) return;
+        rows.push({
+          key:l.key,img:'',name:srv.nombre||l.name,desc:srv.descripcion||'',
+          marca:'',modelo:'',qty:l.quantity,unit:srv.unidad||'servicio',
+          unitNet:l.unitNetCents,net:l.netCents,gross:l.grossCents,
+        });
+      }
+    });
+    return `
+<div class="section">
+  <div class="partida-header">DESGLOSE COMERCIAL AUTORIZADO</div>
+  <table>
+    <colgroup>
+      <col class="c-num"/><col class="c-img"/><col class="c-nom"/><col class="c-desc"/>
+      <col style="width:9%"/><col style="width:9%"/><col class="c-cant"/><col style="width:5%"/><col class="c-pu"/><col class="c-sub"/>
+    </colgroup>
+    <thead><tr>
+      <th>#</th><th></th><th>Concepto</th><th>Descripción</th><th>Modelo</th><th>Marca</th>
+      <th style="text-align:center">Cant.</th><th style="text-align:center">Unidad</th>
+      <th style="text-align:right">P.Unit s/IVA</th><th style="text-align:right">Subtotal s/IVA</th>
+    </tr></thead>
+    <tbody>
+      ${rows.map((r,i)=>`<tr>
+        <td style="text-align:center;color:#6b6862;font-size:10px">${i+1}</td>
+        <td style="text-align:center;padding:4px">${r.img?`<img src="${r.img}" style="width:58px;height:58px;object-fit:contain;border-radius:3px;" />`:''}</td>
+        <td style="font-weight:600;font-size:10px">${r.name||''}</td>
+        <td class="desc-cell">${r.desc||''}</td>
+        <td class="mm-cell">${r.modelo||''}</td><td class="mm-cell">${r.marca||''}</td>
+        <td style="text-align:center">${r.qty}</td><td style="text-align:center;font-size:9.5px">${r.unit}</td>
+        <td style="text-align:right">${fmt(centsMoney(r.unitNet))}</td>
+        <td style="text-align:right">${fmt(centsMoney(r.net))}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>
+</div>`;
+  })() : '';
+
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <title>Cotización ${cot.folio||''}</title>
 <style>${BASE_CSS}
@@ -423,7 +508,7 @@ export async function printCotizacionCliente({ project, cot, calc, config, compa
   ${cot.condicionesComerciales?`<div style="grid-column:1/-1"><div class="label">Condiciones</div><div class="value">${cot.condicionesComerciales}</div></div>`:''}
 </div>
 
-${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
+${detailedMode ? commercialDetailHtml : (partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
 <div class="section">
   <div class="partida-header">${soloEq ? `EQUIPAMIENTO${(p.marca||p.modelo)?` — para ${p.marca||''} ${p.modelo||''} ${p.version||''}`:''}` : `PARTIDA ${p.id}: ${p.marca} ${p.modelo} ${p.version||''}`} &nbsp;•&nbsp; ${qty} unidad(es)</div>
   <table>
@@ -497,9 +582,9 @@ ${partRows.map(({p, qty, pvUnit, subtotal, eqItems, pi}) => `
     </tfoot>
   </table>
 </div>
-`).join('')}
+`).join(''))}
 
-${equipoSinVehiculoRows.length > 0 ? `
+${!detailedMode && equipoSinVehiculoRows.length > 0 ? `
 <div class="section">
   <div class="partida-header">PRODUCTOS / EQUIPO SOLICITADO &nbsp;•&nbsp; ${totalUnidadesEquipoSinVeh} unidad(es)</div>
   <table>
@@ -535,7 +620,7 @@ ${equipoSinVehiculoRows.length > 0 ? `
   </table>
 </div>` : ''}
 
-${serviciosRows.length > 0 ? `
+${!detailedMode && serviciosRows.length > 0 ? `
 <div class="section">
   <div class="partida-header">SERVICIOS SOLICITADOS</div>
   <table>
@@ -573,9 +658,9 @@ ${serviciosRows.length > 0 ? `
 <div class="total-section">
   <div class="total-box" style="overflow:hidden;border-radius:8px;border:1px solid #e0ddd8">
     <table style="width:100%;border-collapse:collapse">
-      <tr style="background:#f6f6f4"><td style="padding:8px 14px;font-size:11px;color:#3a3835">Subtotal s/IVA:</td><td class="right" style="padding:8px 14px;font-weight:600">${fmt(calc.ventaSIVA)}</td></tr>
-      <tr style="background:#f6f6f4"><td style="padding:8px 14px;font-size:11px;color:#3a3835">IVA (16%):</td><td class="right" style="padding:8px 14px;font-weight:600">${fmt(calc.ivaVenta)}</td></tr>
-      <tr style="background:#1a1917;color:#fff"><td style="padding:11px 14px;font-size:13px;font-weight:700">TOTAL c/IVA:</td><td class="right" style="padding:11px 14px;font-size:15px;font-weight:700;color:#fff">${fmt(calc.ventaTotal)}</td></tr>
+      <tr style="background:#f6f6f4"><td style="padding:8px 14px;font-size:11px;color:#3a3835">Subtotal s/IVA:</td><td class="right" style="padding:8px 14px;font-weight:600">${fmt(detailedMode ? centsMoney(commercialAlloc.subtotalCents) : calc.ventaSIVA)}</td></tr>
+      <tr style="background:#f6f6f4"><td style="padding:8px 14px;font-size:11px;color:#3a3835">IVA (16%):</td><td class="right" style="padding:8px 14px;font-weight:600">${fmt(detailedMode ? centsMoney(commercialAlloc.taxCents) : calc.ivaVenta)}</td></tr>
+      <tr style="background:#1a1917;color:#fff"><td style="padding:11px 14px;font-size:13px;font-weight:700">TOTAL c/IVA:</td><td class="right" style="padding:11px 14px;font-size:15px;font-weight:700;color:#fff">${fmt(detailedMode ? centsMoney(commercialAlloc.totalWithTaxCents) : calc.ventaTotal)}</td></tr>
     </table>
   </div>
 </div>
